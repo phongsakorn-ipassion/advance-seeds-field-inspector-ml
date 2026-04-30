@@ -22,6 +22,22 @@ PoC run:
 python3 scripts/train_yolo26n_seg.py
 ```
 
+Local machine training launcher:
+
+```bash
+scripts/train_local_banana.sh
+```
+
+The launcher creates `.venv` if needed, installs `.[train]` dependencies if
+Ultralytics is missing, validates the banana dataset, writes a timestamped log
+under `runs/logs/`, and starts the full configured PoC training run.
+
+CLI overrides are forwarded to `scripts/train_yolo26n_seg.py`, for example:
+
+```bash
+scripts/train_local_banana.sh --epochs 3 --name banana-v1-smoke
+```
+
 ## Defaults
 
 | Parameter | Value | Rationale |
