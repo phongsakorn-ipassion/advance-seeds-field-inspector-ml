@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Train and evaluate an instance segmentation model that produces per-seed masks
+Train and evaluate an instance segmentation model that produces per-object masks
 for downstream measurement and grading.
 
 ## Requirements
@@ -20,6 +20,10 @@ segmentation datasets.
 - **GIVEN** the model source has not been overridden by a documented OpenSpec change
 - **WHEN** training is configured
 - **THEN** the source weights are `yolo26n-seg.pt`
+
+#### Scenario: PoC training uses five produce classes
+- **WHEN** PoC training is configured
+- **THEN** the class list is `apple`, `banana`, `broccoli`, `carrot`, `orange`
 
 ### Requirement: Segmentation metrics are reported
 Training validation SHALL report box mAP and mask mAP separately.

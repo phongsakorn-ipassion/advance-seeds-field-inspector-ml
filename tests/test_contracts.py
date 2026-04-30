@@ -8,6 +8,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from advance_seeds_ml.contracts import ModelMetadata, load_metadata, write_metadata
 
+POC_CLASSES = ["apple", "banana", "broccoli", "carrot", "orange"]
+
 
 class ContractTests(unittest.TestCase):
     def test_metadata_roundtrip(self):
@@ -16,7 +18,7 @@ class ContractTests(unittest.TestCase):
             model_version="0.1.0",
             task="instance-segmentation",
             input_size=640,
-            class_names=["seed", "damaged_seed"],
+            class_names=POC_CLASSES,
             output_kind="end2end_nms_free",
             output_shape=[1, 300, 6],
             score_threshold=0.5,
@@ -28,7 +30,7 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(loaded.model_name, "yolo26n-seg")
         self.assertEqual(loaded.source_weights, "yolo26n-seg.pt")
         self.assertEqual(loaded.mobile_tflite_filename, "yolo11n-seeds.tflite")
-        self.assertEqual(loaded.class_names, ["seed", "damaged_seed"])
+        self.assertEqual(loaded.class_names, POC_CLASSES)
         self.assertEqual(loaded.calibration.default_marker_mm, 50.0)
 
     def test_metadata_rejects_empty_classes(self):
@@ -52,7 +54,7 @@ class ContractTests(unittest.TestCase):
             model_version="0.1.0",
             task="instance-segmentation",
             input_size=640,
-            class_names=["seed"],
+            class_names=POC_CLASSES,
             output_kind="end2end_nms_free",
             output_shape=[1, 300, 6],
             score_threshold=0.5,
@@ -61,6 +63,7 @@ class ContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = write_metadata(metadata, Path(tmp) / "model-metadata.json")
             data = json.loads(path.read_text())
+        self.assertEqual(data["class_names"], POC_CLASSES)
         self.assertEqual(data["calibration"]["supported_sources"], ["aruco", "lidar", "manual"])
         self.assertEqual(data["acceptance_targets"]["measurement_error_mm"], 0.5)
 

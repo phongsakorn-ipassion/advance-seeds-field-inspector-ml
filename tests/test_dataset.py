@@ -7,19 +7,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from advance_seeds_ml.dataset import validate_yolo_seg_dataset, validate_yolo_seg_line
 
+POC_CLASS_NAMES = {0: "apple", 1: "banana", 2: "broccoli", 3: "carrot", 4: "orange"}
+
 
 class DatasetTests(unittest.TestCase):
     def test_valid_yolo_seg_line(self):
         issue = validate_yolo_seg_line(
             "0 0.10 0.10 0.20 0.10 0.20 0.20",
-            {0: "seed"},
+            POC_CLASS_NAMES,
         )
         self.assertIsNone(issue)
 
     def test_invalid_yolo_seg_line_rejects_bad_coordinates(self):
         issue = validate_yolo_seg_line(
             "0 0.10 0.10 1.20 0.10 0.20 0.20",
-            {0: "seed"},
+            POC_CLASS_NAMES,
         )
         self.assertIn("outside normalized range", issue or "")
 
@@ -43,7 +45,11 @@ train: images/train
 val: images/val
 test: images/test
 names:
-  0: seed
+  0: apple
+  1: banana
+  2: broccoli
+  3: carrot
+  4: orange
 """,
                 encoding="utf-8",
             )
@@ -52,6 +58,7 @@ names:
 
         self.assertTrue(report.ok)
         self.assertEqual(report.split_images, {"train": 1, "val": 1, "test": 1})
+        self.assertEqual(report.class_names, POC_CLASS_NAMES)
         self.assertEqual(report.class_counts, {0: 3})
 
 

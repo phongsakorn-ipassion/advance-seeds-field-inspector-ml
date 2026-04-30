@@ -30,7 +30,7 @@ module. If the app switches to loading model files directly from
 - app-compatible mobile TFLite filename
 - task type
 - input size
-- class names
+- class names: `apple`, `banana`, `broccoli`, `carrot`, `orange`
 - output kind and output shape
 - score / IoU thresholds
 - calibration requirement and supported calibration sources

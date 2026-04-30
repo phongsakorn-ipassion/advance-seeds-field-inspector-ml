@@ -6,10 +6,11 @@
   "source_weights": "yolo26n-seg.pt",
   "mobile_tflite_filename": "yolo11n-seeds.tflite",
   "class_names": [
-    "seed",
-    "damaged_seed",
-    "immature_seed",
-    "foreign_material"
+    "apple",
+    "banana",
+    "broccoli",
+    "carrot",
+    "orange"
   ],
   "output_kind": "end2end_nms_free",
   "output_shape": [1, 300, 6],

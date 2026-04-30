@@ -16,6 +16,14 @@ dataset root, train/val/test image folders, and class names.
 - **WHEN** `python3 scripts/validate_dataset.py configs/dataset.example.yaml` runs
 - **THEN** the config loads and reports split counts and class names
 
+#### Scenario: PoC class order is stable
+- **WHEN** the dataset config is loaded
+- **THEN** class id `0` is `apple`
+- **AND** class id `1` is `banana`
+- **AND** class id `2` is `broccoli`
+- **AND** class id `3` is `carrot`
+- **AND** class id `4` is `orange`
+
 ### Requirement: Segmentation label validation
 Dataset validation SHALL reject malformed YOLO segmentation label rows, including
 undefined class ids, fewer than three polygon points, odd coordinate counts,

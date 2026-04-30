@@ -95,7 +95,7 @@ python scripts/write_model_metadata.py \
   --model-version 0.1.0 \
   --source-weights yolo26n-seg.pt \
   --input-size 640 \
-  --classes seed damaged_seed immature_seed foreign_material \
+  --classes apple banana broccoli carrot orange \
   --output models/model-metadata.json
 ```
 
@@ -145,7 +145,8 @@ openspec init --tools codex --profile core .
 1. Place labeled data in YOLO segmentation layout under `data/`.
 2. Validate labels and class distribution.
 3. Lock train/val/test splits by image.
-4. Train YOLO26n-seg (`yolo26n-seg.pt`) for instance segmentation.
+4. Train YOLO26n-seg (`yolo26n-seg.pt`) for instance segmentation over the PoC classes:
+   Apple, Banana, Broccoli, Carrot, and Orange.
 5. Evaluate:
    - segmentation mAP >= 0.85
    - mask mAP >= 0.80

@@ -30,6 +30,10 @@ kind, output shape, thresholds, calibration contract, and acceptance targets.
 - **THEN** `source_weights` is `yolo26n-seg.pt`
 - **AND** `output_kind` is `end2end_nms_free`
 
+#### Scenario: Metadata exports PoC classes
+- **WHEN** metadata is generated for the PoC model
+- **THEN** `class_names` are `apple`, `banana`, `broccoli`, `carrot`, `orange`
+
 ### Requirement: Export does not assume calibration is optional
 Model metadata SHALL state that calibration is required for millimeter
 measurements.

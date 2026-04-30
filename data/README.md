@@ -28,6 +28,16 @@ Coordinates are normalized to `[0, 1]`. Each polygon needs at least three
 points, so each label row must contain one class id plus at least six numeric
 coordinate values.
 
+PoC class ids:
+
+| id | class |
+| --- | --- |
+| 0 | apple |
+| 1 | banana |
+| 2 | broccoli |
+| 3 | carrot |
+| 4 | orange |
+
 Split rules:
 
 - split by image, not by seed instance
