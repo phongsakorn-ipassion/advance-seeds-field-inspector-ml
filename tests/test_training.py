@@ -5,7 +5,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from advance_seeds_ml.training import apply_overrides, cli_preview, load_training_config, train_kwargs
+from advance_seeds_ml.training import (
+    HardwareProfile,
+    apply_hardware_profile,
+    apply_overrides,
+    cli_preview,
+    load_training_config,
+    train_kwargs,
+)
 
 
 class TrainingConfigTests(unittest.TestCase):
@@ -54,6 +61,44 @@ class TrainingConfigTests(unittest.TestCase):
         self.assertIn("yolo segment train", command)
         self.assertIn("model=yolo26n-seg.pt", command)
         self.assertIn("epochs=3", command)
+
+    def test_cuda_hardware_profile_uses_gpu_auto_batch_and_amp(self):
+        config = {"device": "auto", "batch": "auto", "workers": "auto", "amp": "auto", "cache": "auto"}
+        profile = HardwareProfile(kind="cuda", device="0", cpu_count=12, memory_gb=32, gpu_name="RTX", gpu_memory_gb=12)
+        resolved = apply_hardware_profile(config, profile)
+        self.assertEqual(resolved["device"], "0")
+        self.assertEqual(resolved["batch"], -1)
+        self.assertEqual(resolved["workers"], 8)
+        self.assertTrue(resolved["amp"])
+        self.assertEqual(resolved["cache"], "ram")
+
+    def test_mps_hardware_profile_uses_mps_safe_defaults(self):
+        config = {"device": "auto", "batch": "auto", "workers": "auto", "amp": "auto", "cache": "auto"}
+        profile = HardwareProfile(kind="mps", device="mps", cpu_count=10, memory_gb=16)
+        resolved = apply_hardware_profile(config, profile)
+        self.assertEqual(resolved["device"], "mps")
+        self.assertEqual(resolved["batch"], 8)
+        self.assertEqual(resolved["workers"], 6)
+        self.assertFalse(resolved["amp"])
+        self.assertFalse(resolved["cache"])
+
+    def test_cpu_hardware_profile_uses_small_batch(self):
+        config = {"device": "auto", "batch": "auto", "workers": "auto", "amp": "auto", "cache": "auto"}
+        profile = HardwareProfile(kind="cpu", device="cpu", cpu_count=4, memory_gb=8)
+        resolved = apply_hardware_profile(config, profile)
+        self.assertEqual(resolved["device"], "cpu")
+        self.assertEqual(resolved["batch"], 4)
+        self.assertEqual(resolved["workers"], 2)
+        self.assertFalse(resolved["amp"])
+        self.assertFalse(resolved["cache"])
+
+    def test_explicit_values_are_not_overwritten_by_hardware_profile(self):
+        config = {"device": "cpu", "batch": 2, "workers": 1, "amp": False, "cache": False}
+        profile = HardwareProfile(kind="cuda", device="0", cpu_count=12, memory_gb=32, gpu_memory_gb=12)
+        resolved = apply_hardware_profile(config, profile)
+        for key, value in config.items():
+            self.assertEqual(resolved[key], value)
+        self.assertEqual(resolved["hardware"]["kind"], "cuda")
 
 
 if __name__ == "__main__":

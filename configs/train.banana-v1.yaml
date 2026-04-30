@@ -14,14 +14,14 @@ name: banana-v1-poc
 epochs: 50
 patience: 20
 imgsz: 640
-batch: -1
-workers: 8
+batch: auto
+workers: auto
 device: auto
 seed: 42
 deterministic: true
 pretrained: true
-cache: false
-amp: true
+cache: auto
+amp: auto
 
 optimizer: auto
 lr0: 0.001

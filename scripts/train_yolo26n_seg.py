@@ -8,13 +8,25 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from advance_seeds_ml.training import apply_overrides, cli_preview, load_training_config, train_kwargs
+from advance_seeds_ml.training import (
+    apply_hardware_profile,
+    apply_overrides,
+    cli_preview,
+    detect_hardware,
+    load_training_config,
+    train_kwargs,
+)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Train YOLO26n-seg for the Advance Seeds PoC.")
     parser.add_argument("--config", default="configs/train.banana-v1.yaml")
     parser.add_argument("--dry-run", action="store_true", help="Print resolved config and command only.")
+    parser.add_argument(
+        "--no-auto-hardware",
+        action="store_true",
+        help="Do not resolve device/batch/workers/amp/cache from local hardware.",
+    )
     parser.add_argument("--model")
     parser.add_argument("--data")
     parser.add_argument("--project")
@@ -53,6 +65,8 @@ def main() -> int:
             "copy_paste": args.copy_paste,
         },
     )
+    if not args.no_auto_hardware:
+        config = apply_hardware_profile(config, detect_hardware())
 
     print("Resolved training config:")
     print(json.dumps(config, indent=2))

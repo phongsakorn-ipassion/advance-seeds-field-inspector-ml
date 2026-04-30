@@ -10,6 +10,7 @@
 - [x] 2.1 Add config loading helpers.
 - [x] 2.2 Add `scripts/train_yolo26n_seg.py`.
 - [x] 2.3 Support `--dry-run` and common CLI overrides.
+- [x] 2.4 Auto-resolve hardware-sensitive settings for CUDA, MPS, and CPU.
 
 ## 3. Tests And Specs
 

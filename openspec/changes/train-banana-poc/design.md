@@ -23,7 +23,18 @@ training does not depend on chat history.
 execution and prints an equivalent `yolo segment train ...` command. This gives
 repeatability plus an easy way to inspect the final arguments.
 
-### D3. Start with smoke training
+### D3. Auto-tune hardware-sensitive settings
+
+The training config uses `auto` for device, batch, workers, AMP, and cache. The
+script resolves those at runtime:
+
+- CUDA: `device=0`, Ultralytics auto-batch (`batch=-1`), AMP on.
+- Apple Silicon: `device=mps`, fixed batch based on unified memory, AMP off.
+- CPU: `device=cpu`, conservative batch/workers, AMP off.
+
+Explicit CLI/config values are preserved.
+
+### D4. Start with smoke training
 
 The script defaults to a 50-epoch PoC profile, but supports:
 
@@ -43,6 +54,7 @@ Key defaults:
 - `patience: 20`
 - `imgsz: 640`
 - `batch: -1`
+- `device/batch/workers/amp/cache: auto` before hardware resolution
 - `lr0: 0.001`
 - `mosaic: 0.5`
 - `mixup: 0.0`

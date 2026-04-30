@@ -31,7 +31,7 @@ python3 scripts/train_yolo26n_seg.py
 | `epochs` | `50` | Small-dataset fine-tuning baseline with early stopping. |
 | `patience` | `20` | Stop if validation does not improve. |
 | `imgsz` | `640` | Matches mobile export contract and YOLO26 default resolution. |
-| `batch` | `-1` | Let Ultralytics choose batch size from available GPU memory. |
+| `batch` | `auto` | Resolved at runtime: CUDA uses Ultralytics auto-batch, MPS/CPU use fixed safe values. |
 | `optimizer` | `auto` | Let Ultralytics select the compatible optimizer for installed version/device. |
 | `lr0` | `0.001` | Lower LR for small dataset fine-tuning. |
 | `lrf` | `0.0495` | Follows YOLO26n pretraining LR decay profile. |
@@ -51,6 +51,20 @@ python3 scripts/train_yolo26n_seg.py
 | `hsv_h` | `0.014` | YOLO26n pretraining value. |
 | `hsv_s` | `0.5` | Moderate color augmentation for lighting variation. |
 | `hsv_v` | `0.4` | Moderate brightness/value augmentation. |
+
+## Hardware Auto-Tuning
+
+By default, `scripts/train_yolo26n_seg.py` resolves hardware-sensitive settings
+before training:
+
+| Hardware | `device` | `batch` | `workers` | `amp` | `cache` |
+| --- | --- | --- | --- | --- | --- |
+| CUDA GPU | `0` | `-1` | up to `8` | `true` | `ram` if system RAM >= 24 GB |
+| Apple Silicon | `mps` | `8` or `16` | up to `6` | `false` | `false` |
+| CPU | `cpu` | `4` or `8` | up to `4` | `false` | `false` |
+
+Use `--no-auto-hardware` to print or run the raw config values without resolving
+`device`, `batch`, `workers`, `amp`, and `cache`.
 
 ## Notes
 
