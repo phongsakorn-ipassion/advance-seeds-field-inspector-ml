@@ -1,0 +1,72 @@
+schema: spec-driven
+
+# Project context — read before drafting or applying any OpenSpec change.
+context: |
+  PROJECT
+  Advance Seeds Field Inspector ML.
+
+  Purpose: produce segmentation, calibration validation, and mobile model export
+  artifacts consumed by:
+    /Users/ppungpong/Github/advance-seeds-field-inspector-demo
+
+  This repo is the ML/training/export companion to the demo app repo. It is not
+  the mobile app and should not duplicate app UI or Supabase behavior.
+
+  CURRENT STACK
+  - Python package under src/advance_seeds_ml
+  - Standard-library unit tests under tests/
+  - Optional training dependencies declared under pyproject optional extra "train"
+  - Dataset configs live under configs/
+  - Local datasets live under data/ and are ignored by Git
+  - Heavy model outputs live under models/ and are ignored by Git
+  - App handoff contract documented in docs/app-handoff.md
+
+  CONSUMING APP CONTRACT
+  - TFLite destination:
+      /Users/ppungpong/Github/advance-seeds-field-inspector-demo/apps/mobile/assets/models/yolo11n-seeds.tflite
+  - Metadata destination:
+      /Users/ppungpong/Github/advance-seeds-field-inspector-demo/apps/mobile/assets/models/model-metadata.json
+  - Keep the TFLite filename yolo11n-seeds.tflite until the app runtime changes,
+    even when the trained model architecture is YOLO26n.
+  - The app already owns SeedAnalyzer, TfliteSeedAnalyzer, CoreMLSeedAnalyzer,
+    selectAnalyzer, camera UI, calibration runtime, and persistence.
+
+  ML PRODUCT GOALS
+  - Validate labeled images before training.
+  - Maintain train/val/test splits by image, with a locked never-seen holdout set.
+  - Train an instance segmentation model for seed/fruit masks.
+  - Evaluate segmentation and mask metrics separately from calibrated measurement.
+  - Validate calibration using known-size ArUco markers and caliper-measured targets.
+  - Export app-compatible TFLite/Core ML artifacts with model metadata.
+
+  ACCEPTANCE TARGETS
+  - Segmentation mAP >= 0.85
+  - Mask mAP >= 0.80
+  - Length/width measurement error <= 0.5 mm on calibrated reference set
+  - Mobile artifact includes explicit class names, input size, output shape,
+    thresholds, calibration requirements, and model version.
+
+  DEVELOPMENT RULE
+  OpenSpec is mandatory for this project. Every non-trivial change must create
+  or update an OpenSpec change under openspec/changes before implementation,
+  and completed behavior must be reflected in openspec/specs before completion.
+
+rules:
+  proposal:
+    - State the user-visible ML outcome first.
+    - Include Non-goals to prevent app/UI scope creep.
+    - Mention which existing specs are added or modified.
+    - Keep under 500 words unless the change has multiple model phases.
+  specs:
+    - Specs are capability-based: dataset-preparation, segmentation-training, calibration-validation, mobile-model-export, project-governance.
+    - Every requirement must include at least one concrete Given/When/Then scenario.
+    - Requirements must be testable through scripts, reports, artifacts, or app handoff checks.
+  design:
+    - Include file/folder layout when adding scripts, datasets, reports, or export artifacts.
+    - Call out the consuming app contract when export behavior changes.
+    - Separate training-time assumptions from mobile-runtime assumptions.
+  tasks:
+    - Group tasks by phase.
+    - Keep each task reviewable in one focused commit where practical.
+    - Include validation commands for every phase.
+    - Mark OpenSpec update tasks explicitly.
