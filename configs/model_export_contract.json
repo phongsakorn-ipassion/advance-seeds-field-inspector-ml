@@ -1,0 +1,26 @@
+{
+  "model_name": "yolo26n-seg",
+  "model_version": "0.1.0",
+  "task": "instance-segmentation",
+  "input_size": 640,
+  "class_names": [
+    "seed",
+    "damaged_seed",
+    "immature_seed",
+    "foreign_material"
+  ],
+  "output_kind": "nms",
+  "output_shape": [1, 300, 6],
+  "score_threshold": 0.5,
+  "iou_threshold": 0.75,
+  "calibration": {
+    "required": true,
+    "supported_sources": ["aruco", "lidar", "manual"],
+    "default_marker_mm": 50.0
+  },
+  "acceptance_targets": {
+    "segmentation_map": 0.85,
+    "mask_map": 0.8,
+    "measurement_error_mm": 0.5
+  }
+}

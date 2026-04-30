@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "advance-seeds-field-inspector-ml"
+version = "0.1.0"
+description = "ML training and export workspace for Advance Seeds Field Inspector."
+requires-python = ">=3.10"
+dependencies = [
+  "PyYAML>=6.0.1",
+]
+
+[project.optional-dependencies]
+train = [
+  "ultralytics>=8.3.0",
+  "opencv-python>=4.9.0",
+  "numpy>=1.26",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

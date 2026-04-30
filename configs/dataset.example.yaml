@@ -1,0 +1,19 @@
+# Copy this file to configs/dataset.local.yaml and adjust paths/classes.
+# This follows Ultralytics YOLO segmentation dataset config conventions.
+
+path: ../data/processed/advance-seeds-v1
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: seed
+  1: damaged_seed
+  2: immature_seed
+  3: foreign_material
+
+metadata:
+  client: Advance Seeds Co., Ltd.
+  task: instance-segmentation
+  marker_mm: 50.0
+  split_policy: split-by-image

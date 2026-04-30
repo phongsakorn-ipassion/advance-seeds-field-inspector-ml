@@ -1,0 +1,24 @@
+.DS_Store
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local data and heavy model outputs
+data/raw/
+data/interim/
+data/processed/
+runs/
+weights/
+models/*.pt
+models/*.onnx
+models/*.tflite
+models/*.mlmodel
+models/*.mlpackage
+models/*.mlmodelc/
+
+# Keep documentation in otherwise local artifact folders
+!data/README.md
+!models/README.md
