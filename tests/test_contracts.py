@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from advance_seeds_ml.contracts import ModelMetadata, load_metadata, write_metadata
 
-POC_CLASSES = ["apple", "banana", "broccoli", "carrot", "orange"]
+POC_CLASSES = ["apple", "apple_spot", "banana", "banana_spot", "orange", "orange_spot"]
 
 
 class ContractTests(unittest.TestCase):

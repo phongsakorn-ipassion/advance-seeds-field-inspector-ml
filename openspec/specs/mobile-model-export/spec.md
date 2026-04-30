@@ -32,7 +32,7 @@ kind, output shape, thresholds, calibration contract, and acceptance targets.
 
 #### Scenario: Metadata exports PoC classes
 - **WHEN** metadata is generated for the PoC model
-- **THEN** `class_names` are `apple`, `banana`, `broccoli`, `carrot`, `orange`
+- **THEN** `class_names` are `apple`, `apple_spot`, `banana`, `banana_spot`, `orange`, `orange_spot`
 
 ### Requirement: Export does not assume calibration is optional
 Model metadata SHALL state that calibration is required for millimeter

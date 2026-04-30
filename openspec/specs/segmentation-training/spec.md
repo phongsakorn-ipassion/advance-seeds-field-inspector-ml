@@ -21,9 +21,9 @@ segmentation datasets.
 - **WHEN** training is configured
 - **THEN** the source weights are `yolo26n-seg.pt`
 
-#### Scenario: PoC training uses five produce classes
+#### Scenario: PoC training uses object and spot classes
 - **WHEN** PoC training is configured
-- **THEN** the class list is `apple`, `banana`, `broccoli`, `carrot`, `orange`
+- **THEN** the class list is `apple`, `apple_spot`, `banana`, `banana_spot`, `orange`, `orange_spot`
 
 ### Requirement: Segmentation metrics are reported
 Training validation SHALL report box mAP and mask mAP separately.

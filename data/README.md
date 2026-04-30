@@ -33,10 +33,15 @@ PoC class ids:
 | id | class |
 | --- | --- |
 | 0 | apple |
-| 1 | banana |
-| 2 | broccoli |
-| 3 | carrot |
+| 1 | apple_spot |
+| 2 | banana |
+| 3 | banana_spot |
 | 4 | orange |
+| 5 | orange_spot |
+
+Spot classes are defect/quality regions. Label them as their own polygons when
+the spot is visible. Whole-fruit/object masks and spot masks can both appear in
+the same image.
 
 Split rules:
 

@@ -7,7 +7,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from advance_seeds_ml.dataset import validate_yolo_seg_dataset, validate_yolo_seg_line
 
-POC_CLASS_NAMES = {0: "apple", 1: "banana", 2: "broccoli", 3: "carrot", 4: "orange"}
+POC_CLASS_NAMES = {
+    0: "apple",
+    1: "apple_spot",
+    2: "banana",
+    3: "banana_spot",
+    4: "orange",
+    5: "orange_spot",
+}
 
 
 class DatasetTests(unittest.TestCase):
@@ -46,10 +53,11 @@ val: images/val
 test: images/test
 names:
   0: apple
-  1: banana
-  2: broccoli
-  3: carrot
+  1: apple_spot
+  2: banana
+  3: banana_spot
   4: orange
+  5: orange_spot
 """,
                 encoding="utf-8",
             )

@@ -19,10 +19,11 @@ dataset root, train/val/test image folders, and class names.
 #### Scenario: PoC class order is stable
 - **WHEN** the dataset config is loaded
 - **THEN** class id `0` is `apple`
-- **AND** class id `1` is `banana`
-- **AND** class id `2` is `broccoli`
-- **AND** class id `3` is `carrot`
+- **AND** class id `1` is `apple_spot`
+- **AND** class id `2` is `banana`
+- **AND** class id `3` is `banana_spot`
 - **AND** class id `4` is `orange`
+- **AND** class id `5` is `orange_spot`
 
 ### Requirement: Segmentation label validation
 Dataset validation SHALL reject malformed YOLO segmentation label rows, including

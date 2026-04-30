@@ -36,8 +36,8 @@ context: |
   ML PRODUCT GOALS
   - Validate labeled images before training.
   - Maintain train/val/test splits by image, with a locked never-seen holdout set.
-  - Train YOLO26n-seg for PoC instance masks across:
-      apple, banana, broccoli, carrot, orange.
+  - Train YOLO26n-seg for PoC instance masks and defect masks across:
+      apple, apple_spot, banana, banana_spot, orange, orange_spot.
   - Evaluate segmentation and mask metrics separately from calibrated measurement.
   - Validate calibration using known-size ArUco markers and caliper-measured targets.
   - Export app-compatible TFLite/Core ML artifacts with model metadata.
@@ -48,7 +48,8 @@ context: |
   - Length/width measurement error <= 0.5 mm on calibrated reference set
   - Mobile artifact includes explicit class names, source weights, input size,
     output shape, thresholds, calibration requirements, and model version.
-  - PoC class order is stable: 0 apple, 1 banana, 2 broccoli, 3 carrot, 4 orange.
+  - PoC class order is stable: 0 apple, 1 apple_spot, 2 banana,
+    3 banana_spot, 4 orange, 5 orange_spot.
 
   DEVELOPMENT RULE
   OpenSpec is mandatory for this project. Every non-trivial change must create
