@@ -10,5 +10,7 @@ models/yolo11n-seeds.mlmodel
 models/model-metadata.json
 ```
 
-The TFLite filename intentionally matches the consuming app's current path,
-even if the model architecture is YOLO26n.
+The selected source model is Ultralytics YOLO26n-seg (`yolo26n-seg.pt`). The
+TFLite filename intentionally matches the consuming app's current path:
+`yolo11n-seeds.tflite`. Treat that as a compatibility alias, not the model
+architecture.

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 
-OutputKind = Literal["raw", "nms", "segmentation"]
+OutputKind = Literal["raw", "nms", "end2end_nms_free", "segmentation"]
 
 
 @dataclass(frozen=True)
@@ -34,6 +34,8 @@ class ModelMetadata:
     output_shape: list[int]
     score_threshold: float
     iou_threshold: float
+    source_weights: str = "yolo26n-seg.pt"
+    mobile_tflite_filename: str = "yolo11n-seeds.tflite"
     calibration: CalibrationContract = field(default_factory=CalibrationContract)
     acceptance_targets: AcceptanceTargets = field(default_factory=AcceptanceTargets)
 
@@ -50,6 +52,10 @@ class ModelMetadata:
             raise ValueError("class_names must not be empty")
         if any(not name.strip() for name in self.class_names):
             raise ValueError("class_names must not contain blank names")
+        if not self.source_weights.strip():
+            raise ValueError("source_weights is required")
+        if not self.mobile_tflite_filename.strip():
+            raise ValueError("mobile_tflite_filename is required")
         if not self.output_shape or any(dim <= 0 for dim in self.output_shape):
             raise ValueError("output_shape dimensions must be > 0")
         if not 0 <= self.score_threshold <= 1:

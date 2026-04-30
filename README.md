@@ -29,8 +29,8 @@ The app already has a `SeedAnalyzer` runtime seam. This ML repo should produce:
 
 | Artifact | Purpose |
 | --- | --- |
-| `yolo11n-seeds.tflite` | Android / cross-platform TFLite model consumed by `TfliteSeedAnalyzer` |
-| `yolo11n-seeds.mlmodel` or compiled `.mlmodelc` | iOS Core ML artifact consumed by `CoreMLSeedAnalyzer` |
+| `yolo11n-seeds.tflite` | YOLO26n-seg TFLite export consumed by `TfliteSeedAnalyzer` |
+| `yolo11n-seeds.mlmodel` or compiled `.mlmodelc` | YOLO26n-seg Core ML export consumed by `CoreMLSeedAnalyzer` |
 | `model-metadata.json` | model version, classes, thresholds, input size, output shape, calibration assumptions |
 
 For the current app code, keep the TFLite filename stable:
@@ -39,8 +39,9 @@ For the current app code, keep the TFLite filename stable:
 yolo11n-seeds.tflite
 ```
 
-Even when the underlying trained model is YOLO26n, the app path currently uses
-that historical filename.
+The selected source model is **Ultralytics YOLO26n-seg** (`yolo26n-seg.pt`).
+The app path still uses the historical filename above; metadata records the real
+source model so this compatibility alias is explicit.
 
 ## Repo Layout
 
@@ -92,6 +93,7 @@ Create metadata for an exported model:
 python scripts/write_model_metadata.py \
   --model-name yolo26n-seg \
   --model-version 0.1.0 \
+  --source-weights yolo26n-seg.pt \
   --input-size 640 \
   --classes seed damaged_seed immature_seed foreign_material \
   --output models/model-metadata.json
@@ -143,12 +145,13 @@ openspec init --tools codex --profile core .
 1. Place labeled data in YOLO segmentation layout under `data/`.
 2. Validate labels and class distribution.
 3. Lock train/val/test splits by image.
-4. Train the segmentation model.
+4. Train YOLO26n-seg (`yolo26n-seg.pt`) for instance segmentation.
 5. Evaluate:
    - segmentation mAP >= 0.85
    - mask mAP >= 0.80
    - length/width error <= 0.5 mm against calibrated references
-6. Export TFLite and Core ML artifacts.
+6. Export YOLO26n-seg TFLite and Core ML artifacts using the end-to-end,
+   NMS-free head unless a later OpenSpec change selects otherwise.
 7. Copy the mobile artifacts into the demo app.
 
 ## Calibration Principle

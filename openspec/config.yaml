@@ -26,15 +26,17 @@ context: |
       /Users/ppungpong/Github/advance-seeds-field-inspector-demo/apps/mobile/assets/models/yolo11n-seeds.tflite
   - Metadata destination:
       /Users/ppungpong/Github/advance-seeds-field-inspector-demo/apps/mobile/assets/models/model-metadata.json
-  - Keep the TFLite filename yolo11n-seeds.tflite until the app runtime changes,
-    even when the trained model architecture is YOLO26n.
+  - The selected source model is Ultralytics YOLO26n-seg (`yolo26n-seg.pt`).
+  - Keep the TFLite filename yolo11n-seeds.tflite until the app runtime changes.
+    This is a compatibility alias; model metadata must record the real YOLO26n
+    source weights.
   - The app already owns SeedAnalyzer, TfliteSeedAnalyzer, CoreMLSeedAnalyzer,
     selectAnalyzer, camera UI, calibration runtime, and persistence.
 
   ML PRODUCT GOALS
   - Validate labeled images before training.
   - Maintain train/val/test splits by image, with a locked never-seen holdout set.
-  - Train an instance segmentation model for seed/fruit masks.
+  - Train YOLO26n-seg for seed/fruit instance masks.
   - Evaluate segmentation and mask metrics separately from calibrated measurement.
   - Validate calibration using known-size ArUco markers and caliper-measured targets.
   - Export app-compatible TFLite/Core ML artifacts with model metadata.
@@ -43,8 +45,8 @@ context: |
   - Segmentation mAP >= 0.85
   - Mask mAP >= 0.80
   - Length/width measurement error <= 0.5 mm on calibrated reference set
-  - Mobile artifact includes explicit class names, input size, output shape,
-    thresholds, calibration requirements, and model version.
+  - Mobile artifact includes explicit class names, source weights, input size,
+    output shape, thresholds, calibration requirements, and model version.
 
   DEVELOPMENT RULE
   OpenSpec is mandatory for this project. Every non-trivial change must create

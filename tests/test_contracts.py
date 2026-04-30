@@ -17,7 +17,7 @@ class ContractTests(unittest.TestCase):
             task="instance-segmentation",
             input_size=640,
             class_names=["seed", "damaged_seed"],
-            output_kind="nms",
+            output_kind="end2end_nms_free",
             output_shape=[1, 300, 6],
             score_threshold=0.5,
             iou_threshold=0.75,
@@ -26,6 +26,8 @@ class ContractTests(unittest.TestCase):
             path = write_metadata(metadata, Path(tmp) / "model-metadata.json")
             loaded = load_metadata(path)
         self.assertEqual(loaded.model_name, "yolo26n-seg")
+        self.assertEqual(loaded.source_weights, "yolo26n-seg.pt")
+        self.assertEqual(loaded.mobile_tflite_filename, "yolo11n-seeds.tflite")
         self.assertEqual(loaded.class_names, ["seed", "damaged_seed"])
         self.assertEqual(loaded.calibration.default_marker_mm, 50.0)
 
@@ -36,7 +38,7 @@ class ContractTests(unittest.TestCase):
             task="instance-segmentation",
             input_size=640,
             class_names=[],
-            output_kind="nms",
+            output_kind="end2end_nms_free",
             output_shape=[1, 300, 6],
             score_threshold=0.5,
             iou_threshold=0.75,
@@ -51,7 +53,7 @@ class ContractTests(unittest.TestCase):
             task="instance-segmentation",
             input_size=640,
             class_names=["seed"],
-            output_kind="nms",
+            output_kind="end2end_nms_free",
             output_shape=[1, 300, 6],
             score_threshold=0.5,
             iou_threshold=0.75,
