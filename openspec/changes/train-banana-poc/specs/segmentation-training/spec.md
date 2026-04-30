@@ -16,6 +16,15 @@ processed banana-v1 dataset.
 - **THEN** the resolved config has `epochs` equal to `3`
 - **AND** `name` equal to `banana-v1-smoke`
 
+#### Scenario: Training paths are anchored to the repository
+- **WHEN** the training entrypoint resolves a repo-relative dataset config or
+run project path
+- **THEN** it materializes an ignored runtime dataset config with an absolute
+dataset root
+- **AND** it passes absolute dataset config and run project paths to Ultralytics
+- **AND** global Ultralytics settings cannot redirect the dataset or run output
+outside the repository
+
 ### Requirement: Banana PoC hyperparameters are documented
 The project SHALL document the default banana-v1 training hyperparameters and
 the rationale for using them.

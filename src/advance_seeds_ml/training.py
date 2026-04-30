@@ -120,6 +120,61 @@ def apply_overrides(config: dict[str, Any], overrides: dict[str, Any]) -> dict[s
     return merged
 
 
+def resolve_training_paths(config: dict[str, Any], root: str | Path) -> dict[str, Any]:
+    resolved = dict(config)
+    root_path = Path(root).resolve()
+    for key in ("data", "project"):
+        value = resolved.get(key)
+        if value is None:
+            continue
+        path = Path(str(value)).expanduser()
+        if not path.is_absolute():
+            path = root_path / path
+        resolved[key] = str(path.resolve())
+    return resolved
+
+
+def materialize_ultralytics_dataset_config(config: dict[str, Any], runtime_dir: str | Path) -> dict[str, Any]:
+    """Write a runtime dataset YAML with an absolute root for Ultralytics.
+
+    Ultralytics resolves relative dataset `path:` values against its global
+    datasets directory, not necessarily the dataset YAML location. Keeping the
+    checked-in YAML repo-relative and materializing an ignored runtime copy
+    makes local training independent from user-level Ultralytics settings.
+    """
+    resolved = dict(config)
+    data_path = Path(str(resolved["data"])).expanduser().resolve()
+    dataset = _read_yaml_mapping(data_path)
+    dataset_root = Path(str(dataset["path"])).expanduser()
+    if not dataset_root.is_absolute():
+        dataset_root = (data_path.parent / dataset_root).resolve()
+    dataset["path"] = str(dataset_root)
+
+    output_dir = Path(runtime_dir).expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"{data_path.stem}.ultralytics.yaml"
+    output_path.write_text(_dump_simple_yaml(dataset), encoding="utf-8")
+    resolved["data"] = str(output_path)
+    return resolved
+
+
+def _dump_simple_yaml(mapping: dict[str, Any]) -> str:
+    lines: list[str] = []
+    for key, value in mapping.items():
+        if isinstance(value, dict):
+            lines.append(f"{key}:")
+            for nested_key, nested_value in value.items():
+                lines.append(f"  {nested_key}: {nested_value}")
+            continue
+        if isinstance(value, list):
+            lines.append(f"{key}:")
+            for index, item in enumerate(value):
+                lines.append(f"  {index}: {item}")
+            continue
+        lines.append(f"{key}: {value}")
+    return "\n".join(lines) + "\n"
+
+
 def train_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     kwargs = dict(config)
     kwargs.pop("model", None)

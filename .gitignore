@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+*.egg-info/
 
 # Local data and heavy model outputs
 data/raw/
@@ -12,6 +13,7 @@ data/interim/
 data/processed/
 runs/
 weights/
+/yolo26n-seg.pt
 models/*.pt
 models/*.onnx
 models/*.tflite

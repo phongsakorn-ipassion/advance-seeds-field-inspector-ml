@@ -14,6 +14,8 @@ from advance_seeds_ml.training import (
     cli_preview,
     detect_hardware,
     load_training_config,
+    materialize_ultralytics_dataset_config,
+    resolve_training_paths,
     train_kwargs,
 )
 
@@ -67,6 +69,9 @@ def main() -> int:
     )
     if not args.no_auto_hardware:
         config = apply_hardware_profile(config, detect_hardware())
+    repo_root = Path(__file__).resolve().parents[1]
+    config = resolve_training_paths(config, repo_root)
+    config = materialize_ultralytics_dataset_config(config, repo_root / "runs" / "_runtime_datasets")
 
     print("Resolved training config:")
     print(json.dumps(config, indent=2))

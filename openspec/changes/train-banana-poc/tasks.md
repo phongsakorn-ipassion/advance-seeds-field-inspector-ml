@@ -11,6 +11,7 @@
 - [x] 2.2 Add `scripts/train_yolo26n_seg.py`.
 - [x] 2.3 Support `--dry-run` and common CLI overrides.
 - [x] 2.4 Auto-resolve hardware-sensitive settings for CUDA, MPS, and CPU.
+- [x] 2.5 Anchor dataset and output paths to the repository before calling Ultralytics.
 
 ## 3. Tests And Specs
 

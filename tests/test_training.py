@@ -11,6 +11,8 @@ from advance_seeds_ml.training import (
     apply_overrides,
     cli_preview,
     load_training_config,
+    materialize_ultralytics_dataset_config,
+    resolve_training_paths,
     train_kwargs,
 )
 
@@ -55,6 +57,47 @@ class TrainingConfigTests(unittest.TestCase):
     def test_train_kwargs_excludes_model(self):
         kwargs = train_kwargs({"model": "yolo26n-seg.pt", "data": "data.yaml"})
         self.assertEqual(kwargs, {"data": "data.yaml"})
+
+    def test_resolve_training_paths_anchors_data_and_project_to_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            resolved = resolve_training_paths(
+                {"data": "configs/data.yaml", "project": "runs/banana-v1", "model": "yolo26n-seg.pt"},
+                root,
+            )
+        self.assertEqual(resolved["data"], str((root / "configs/data.yaml").resolve()))
+        self.assertEqual(resolved["project"], str((root / "runs/banana-v1").resolve()))
+        self.assertEqual(resolved["model"], "yolo26n-seg.pt")
+
+    def test_materialize_ultralytics_dataset_config_writes_absolute_dataset_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_dir = root / "configs"
+            config_dir.mkdir()
+            data_config = config_dir / "dataset.yaml"
+            data_config.write_text(
+                "\n".join(
+                    [
+                        "path: ../data/processed/demo",
+                        "train: images/train",
+                        "val: images/val",
+                        "names:",
+                        "  2: banana",
+                        "  3: banana_spot",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            resolved = materialize_ultralytics_dataset_config(
+                {"data": str(data_config), "model": "yolo26n-seg.pt"},
+                root / "runs" / "_runtime_datasets",
+            )
+            runtime_config = Path(resolved["data"])
+            contents = runtime_config.read_text(encoding="utf-8")
+        self.assertTrue(runtime_config.name.endswith(".ultralytics.yaml"))
+        self.assertIn(f"path: {(root / 'data/processed/demo').resolve()}", contents)
+        self.assertIn("2: banana", contents)
+        self.assertIn("3: banana_spot", contents)
 
     def test_cli_preview_uses_segment_train(self):
         command = cli_preview({"model": "yolo26n-seg.pt", "data": "data.yaml", "epochs": 3})
