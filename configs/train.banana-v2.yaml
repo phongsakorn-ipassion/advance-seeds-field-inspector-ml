@@ -1,0 +1,51 @@
+# Banana v2 YOLO26n-seg PoC training config.
+#
+# Source dataset:
+# /Users/ppungpong/Downloads/Advance Seeds.v3-banana-v2.yolo26
+#
+# This keeps the same conservative local-training profile as banana-v1 while
+# pointing at the cleaner Roboflow v3 banana/banana_spot dataset.
+
+model: yolo26n-seg.pt
+data: configs/dataset.banana-v2.yaml
+project: runs/banana-v2
+name: banana-v2-poc
+
+epochs: 50
+patience: 20
+imgsz: 640
+batch: auto
+workers: auto
+device: auto
+seed: 42
+deterministic: true
+pretrained: true
+cache: auto
+amp: auto
+
+optimizer: auto
+lr0: 0.001
+lrf: 0.0495
+momentum: 0.947
+weight_decay: 0.00064
+warmup_epochs: 1.0
+cos_lr: true
+close_mosaic: 10
+
+mosaic: 0.5
+mixup: 0.0
+copy_paste: 0.0
+scale: 0.56
+translate: 0.07
+fliplr: 0.5
+flipud: 0.0
+degrees: 2.0
+shear: 0.0
+hsv_h: 0.014
+hsv_s: 0.5
+hsv_v: 0.4
+
+save: true
+save_period: 10
+plots: true
+val: true
