@@ -53,6 +53,8 @@ data/
   README.md                   Dataset placement and split rules
 docs/
   app-handoff.md              How outputs move into the demo app
+  dynamic-model-loading-handoff.md
+                               App-side plan for browsing/downloading trained models
 models/
   README.md                   Local trained/exported model artifacts
 openspec/
@@ -63,6 +65,8 @@ scripts/
   validate_dataset.py         Validate YOLO-seg labels and split coverage
   write_model_metadata.py     Write app-facing model-metadata.json
   export_to_demo.py           Copy exported artifacts into the demo app
+  export_mobile_model_candidates.py
+                               Export Android TFLite and iOS Core ML candidate sets
 src/advance_seeds_ml/
   calibration.py              Calibration and measurement-error helpers
   contracts.py                Model metadata contract helpers
@@ -106,6 +110,16 @@ python scripts/export_to_demo.py \
   --tflite models/yolo11n-seeds.tflite \
   --metadata models/model-metadata.json
 ```
+
+Export the current banana candidate set for app QA:
+
+```bash
+python scripts/export_mobile_model_candidates.py
+```
+
+The generated artifacts are written under `runs/mobile-exports/` and are not
+committed. See `docs/dynamic-model-loading-handoff.md` for the app-side dynamic
+loading design.
 
 ## OpenSpec Workflow
 
