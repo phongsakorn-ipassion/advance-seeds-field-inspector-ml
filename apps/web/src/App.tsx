@@ -263,6 +263,13 @@ export function App() {
     setTrainTab(run?.status === "running" ? "live" : "recent");
   }
 
+  // Manual sub-nav clicks clear the focused run so the detail panel
+  // doesn't bleed across Live tracking ↔ Recent runs.
+  function changeTrainTab(next: TrainTab) {
+    setTrainTab(next);
+    setFocusedRunId(null);
+  }
+
   useEffect(() => {
     if (!selectedVersionId && snapshot.versions[0]) setSelectedVersionId(snapshot.versions[0].id);
   }, [snapshot.versions, selectedVersionId]);
@@ -352,7 +359,7 @@ export function App() {
             focusedRunId={focusedRunId}
             setFocusedRunId={setFocusedRunId}
             tab={trainTab}
-            setTab={setTrainTab}
+            setTab={changeTrainTab}
             onStart={() => void store.startTraining(trainConfig)}
           />
         )}
