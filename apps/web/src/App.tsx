@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   Sprout,
   Trash2,
+  Upload,
   Wand2,
   X,
 } from "lucide-react";
@@ -34,19 +35,95 @@ function Hint({ text }: { text: string }) {
   );
 }
 
+function DatasetConfigField({
+  value,
+  onChange,
+  modelLineSlug,
+  disabled,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  modelLineSlug: string;
+  disabled?: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [uploaded, setUploaded] = useState<{ name: string; size: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function pickFile() {
+    if (disabled || busy) return;
+    setError(null);
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".yaml,.yml,application/yaml,text/yaml,text/x-yaml";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setBusy(true);
+      try {
+        const { r2Key } = await store.uploadDataset(file, modelLineSlug || "seeds-poc");
+        onChange(r2Key);
+        setUploaded({ name: file.name, size: file.size });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Upload failed.");
+      } finally {
+        setBusy(false);
+      }
+    };
+    input.click();
+  }
+
+  return (
+    <div className="dataset-field">
+      <div className="dataset-row">
+        <input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="configs/dataset.banana-v2.yaml or datasets/seeds-poc/.../file.yaml"
+        />
+        <button
+          type="button"
+          className="ghost-button compact"
+          onClick={pickFile}
+          disabled={disabled || busy}
+          title={disabled ? "Admin role required" : "Upload a YOLO dataset YAML to R2"}
+        >
+          <Upload size={14} /> {busy ? "Uploading…" : "Upload .yaml"}
+        </button>
+      </div>
+      {uploaded && !error && (
+        <p className="dataset-note">
+          Uploaded <code>{uploaded.name}</code> ({(uploaded.size / 1024).toFixed(1)} KB) → reference points to R2 key
+        </p>
+      )}
+      {error && <p className="form-error">{error}</p>}
+    </div>
+  );
+}
+
 function TagInput({
   value,
   onChange,
   placeholder = "Add class…",
+  numbered = false,
 }: {
   value: string[];
   onChange: (next: string[]) => void;
   placeholder?: string;
+  numbered?: boolean;
 }) {
   const [draft, setDraft] = useState("");
 
+  // Accept "apple" or "0=apple" (or "0:apple"). The numeric prefix is dropped
+  // because the index is positional in the array — it's display, not data.
+  function parseToken(raw: string): string {
+    const trimmed = raw.trim();
+    const match = trimmed.match(/^\s*\d+\s*[=:]\s*(.+)$/);
+    return (match ? match[1] : trimmed).trim();
+  }
+
   function commit(raw: string) {
-    const cleaned = raw.trim();
+    const cleaned = parseToken(raw);
     if (!cleaned) return;
     if (value.includes(cleaned)) {
       setDraft("");
@@ -76,7 +153,7 @@ function TagInput({
     const pasted = event.clipboardData.getData("text");
     if (/[,\n]/.test(pasted)) {
       event.preventDefault();
-      const tokens = pasted.split(/[,\n]/).map((t) => t.trim()).filter(Boolean);
+      const tokens = pasted.split(/[,\n]/).map((t) => parseToken(t)).filter(Boolean);
       const merged = Array.from(new Set([...value, ...tokens]));
       onChange(merged);
       setDraft("");
@@ -87,6 +164,7 @@ function TagInput({
     <div className="tag-input">
       {value.map((tag, index) => (
         <span className="tag-chip" key={`${tag}-${index}`}>
+          {numbered && <span className="tag-index">{index}</span>}
           <span>{tag}</span>
           <button
             type="button"
@@ -134,8 +212,14 @@ export function App() {
   const session = useStoreSession(store);
   const [section, setSection] = useState<Section>("overview");
   const [selectedVersionId, setSelectedVersionId] = useState("");
+  const [focusedRunId, setFocusedRunId] = useState<string | null>(null);
   const [loginError, setLoginError] = useState("");
   const [trainConfig, setTrainConfig] = useState<TrainConfig>(defaultConfig);
+
+  function openRun(runId: string) {
+    setFocusedRunId(runId);
+    setSection("train");
+  }
 
   useEffect(() => {
     if (!selectedVersionId && snapshot.versions[0]) setSelectedVersionId(snapshot.versions[0].id);
@@ -213,6 +297,7 @@ export function App() {
             storagePercent={storagePercent}
             storageOverQuota={storageOverQuota}
             onOpenTrain={() => setSection("train")}
+            onOpenRun={openRun}
           />
         )}
 
@@ -222,6 +307,8 @@ export function App() {
             setConfig={setTrainConfig}
             runs={snapshot.runs}
             isAdmin={isAdmin}
+            focusedRunId={focusedRunId}
+            setFocusedRunId={setFocusedRunId}
             onStart={() => void store.startTraining(trainConfig)}
           />
         )}
@@ -368,6 +455,7 @@ function Overview({
   storagePercent,
   storageOverQuota,
   onOpenTrain,
+  onOpenRun,
 }: {
   production?: RegistryVersion;
   staging?: RegistryVersion;
@@ -377,6 +465,7 @@ function Overview({
   storagePercent: number;
   storageOverQuota: boolean;
   onOpenTrain: () => void;
+  onOpenRun: (runId: string) => void;
 }) {
   const running = runs.find((run) => run.status === "running");
   return (
@@ -401,8 +490,8 @@ function Overview({
           </button>
         </section>
         <section className="panel">
-          <SectionHeading title="Live runs" text="Reported by the Python SDK; Colab MCP context is preserved per run." />
-          <RunList runs={runs.slice(0, 4)} />
+          <SectionHeading title="Live runs" text="Reported by the Python SDK; click any run to open its full detail in the Train pipeline." />
+          <RunList runs={runs.slice(0, 4)} onSelect={onOpenRun} />
         </section>
       </section>
     </>
@@ -414,18 +503,24 @@ function TrainWorkflow({
   setConfig,
   runs,
   isAdmin,
+  focusedRunId,
+  setFocusedRunId,
   onStart,
 }: {
   config: TrainConfig;
   setConfig: (config: TrainConfig) => void;
   runs: RegistryRun[];
   isAdmin: boolean;
+  focusedRunId: string | null;
+  setFocusedRunId: (id: string | null) => void;
   onStart: () => void;
 }) {
-  const running = runs.find((r) => r.status === "running");
-  const focused = running ?? runs[0];
+  const runningRuns = runs.filter((r) => r.status === "running");
+  const explicit = focusedRunId ? runs.find((r) => r.id === focusedRunId) : undefined;
+  const focused = explicit ?? runningRuns[0] ?? runs[0];
   const recent = runs.filter((r) => r.id !== focused?.id).slice(0, 6);
-  const focusedTone = running ? "running" : "recent";
+  const isFocusedRunning = focused?.status === "running";
+  const focusedTone = isFocusedRunning ? "running" : "recent";
   return (
     <section className="train-layout">
     <aside className="boundary-card" role="note">
@@ -460,9 +555,14 @@ function TrainWorkflow({
         <label>
           <span className="label-text">
             Dataset config
-            <Hint text="Path to the YOLO dataset YAML, resolved on the training machine — the dashboard does NOT fetch this file. Whatever runs the SDK (your laptop, a Colab notebook, a worker) must have this file and the referenced images on disk. Use configs/dataset.banana-v2.yaml for the PoC." />
+            <Hint text="Reference to a YOLO dataset YAML. You can paste a path the trainer already has on disk, OR upload a .yaml file here so the trainer can pull it from R2. Image data is still expected to be reachable by the trainer; this only uploads the YAML." />
           </span>
-          <input value={config.dataset} onChange={(event) => setConfig({ ...config, dataset: event.target.value })} />
+          <DatasetConfigField
+            value={config.dataset}
+            onChange={(next) => setConfig({ ...config, dataset: next })}
+            modelLineSlug={config.modelLine}
+            disabled={!isAdmin}
+          />
         </label>
         <label>
           <span className="label-text">
@@ -485,7 +585,8 @@ function TrainWorkflow({
           <TagInput
             value={config.classes}
             onChange={(next) => setConfig({ ...config, classes: next })}
-            placeholder="Type a class and press Enter…"
+            placeholder="Type a class (e.g. apple or 0=apple) and press Enter…"
+            numbered
           />
         </label>
         <div className="form-grid">
@@ -515,7 +616,24 @@ function TrainWorkflow({
         </button>
       </form>
       <section className="panel">
-        <SectionHeading title="Live tracking" text="Realtime metric stream from the Python SDK to Supabase." />
+        <SectionHeading
+          title="Live tracking"
+          text={
+            runningRuns.length > 1
+              ? `${runningRuns.length} runs in progress. Click a row to inspect its full detail.`
+              : "Realtime metric stream from the Python SDK to Supabase."
+          }
+        />
+        {runningRuns.length > 1 && (
+          <div className="track-multi">
+            <span className="track-multi-label">Running now</span>
+            <RunList
+              runs={runningRuns}
+              selectedId={focused?.id ?? null}
+              onSelect={(id) => setFocusedRunId(id)}
+            />
+          </div>
+        )}
         {focused ? (
           <>
             <div className="track-banner">
@@ -524,7 +642,7 @@ function TrainWorkflow({
               </span>
               <span className="track-meta">{focused.hardware}{focused.colabNotebook ? ` · ${focused.colabNotebook}` : ""}</span>
             </div>
-            {focusedTone === "running" && focused.map50 === null && (
+            {isFocusedRunning && focused.map50 === null && (
               <div className="track-hint">
                 <Info size={14} aria-hidden="true" />
                 <span>
@@ -545,9 +663,9 @@ function TrainWorkflow({
       </section>
     </section>
     <section className="panel">
-      <SectionHeading title="Recent training runs" text="History from this model line. Realtime updates flow in as the SDK reports them." />
+      <SectionHeading title="Recent training runs" text="History from this model line. Click a row to open its full detail above." />
       {recent.length > 0 ? (
-        <RunList runs={recent} />
+        <RunList runs={recent} selectedId={focused?.id ?? null} onSelect={(id) => setFocusedRunId(id)} />
       ) : (
         <EmptyState
           icon={<Activity size={24} />}
@@ -739,8 +857,27 @@ function ModelDetail({
   );
 }
 
-function RunList({ runs }: { runs: RegistryRun[] }) {
-  return <div className="run-list">{runs.map((run) => <RunRow run={run} key={run.id} />)}</div>;
+function RunList({
+  runs,
+  onSelect,
+  selectedId,
+}: {
+  runs: RegistryRun[];
+  onSelect?: (runId: string) => void;
+  selectedId?: string | null;
+}) {
+  return (
+    <div className="run-list">
+      {runs.map((run) => (
+        <RunRow
+          run={run}
+          key={run.id}
+          onClick={onSelect ? () => onSelect(run.id) : undefined}
+          selected={selectedId === run.id}
+        />
+      ))}
+    </div>
+  );
 }
 
 function RunDetail({ run }: { run: RegistryRun }) {
@@ -838,9 +975,18 @@ function InfoSection({
   );
 }
 
-function RunRow({ run }: { run: RegistryRun }) {
-  return (
-    <article className="run-row">
+function RunRow({
+  run,
+  onClick,
+  selected = false,
+}: {
+  run: RegistryRun;
+  onClick?: () => void;
+  selected?: boolean;
+}) {
+  const cls = ["run-row", onClick ? "clickable" : "", selected ? "selected" : ""].filter(Boolean).join(" ");
+  const inner = (
+    <>
       <div className={`status-dot ${run.status}`} aria-hidden="true" />
       <div className="run-main">
         <strong>{run.name}</strong>
@@ -852,8 +998,16 @@ function RunRow({ run }: { run: RegistryRun }) {
         <span>{run.map50 === null ? "mAP pending" : `${pct(run.map50)} mAP50`}</span>
         <span>{run.maskMap === null ? "mask pending" : `${pct(run.maskMap)} mask`}</span>
       </div>
-    </article>
+    </>
   );
+  if (onClick) {
+    return (
+      <button type="button" className={cls} onClick={onClick} aria-pressed={selected}>
+        {inner}
+      </button>
+    );
+  }
+  return <article className={cls}>{inner}</article>;
 }
 
 function MetricCard({ label, value, detail, danger = false }: { label: string; value: string; detail: string; danger?: boolean }) {

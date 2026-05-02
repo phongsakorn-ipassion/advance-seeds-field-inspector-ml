@@ -396,6 +396,35 @@ export function createSupabaseStore(env: Env): RegistryStore {
         await refresh();
       });
     },
+    async uploadDataset(file, modelLineSlug) {
+      return await adminWrite(async () => {
+        const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, "_");
+        const tokenRes = await client.auth.getSession();
+        const token = tokenRes.data.session?.access_token;
+        const presignRes = await fetch(`${env.supabaseUrl}/functions/v1/upload-dataset`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: token ? `Bearer ${token}` : "",
+            apikey: env.supabaseAnonKey,
+          },
+          body: JSON.stringify({ filename: safeName, model_line_slug: modelLineSlug }),
+        });
+        if (!presignRes.ok) {
+          throw new Error(`upload-dataset presign failed: ${presignRes.status} ${await presignRes.text()}`);
+        }
+        const { upload_url, r2_key } = await presignRes.json() as { upload_url: string; r2_key: string };
+        const putRes = await fetch(upload_url, {
+          method: "PUT",
+          headers: { "content-type": file.type || "application/octet-stream" },
+          body: file,
+        });
+        if (!putRes.ok) {
+          throw new Error(`R2 PUT failed: ${putRes.status} ${await putRes.text()}`);
+        }
+        return { r2Key: r2_key };
+      });
+    },
     async deleteInactiveArtifact(storageId) {
       await adminWrite(async () => {
         const versionId = storageId.replace(/-(tflite|coreml)$/, "");

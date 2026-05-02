@@ -460,7 +460,7 @@ button {
   align-items: center;
   gap: 4px;
   height: 28px;
-  padding: 0 4px 0 10px;
+  padding: 0 4px 0 6px;
   border-radius: var(--as-radius-md);
   background: var(--as-brand-soft);
   color: var(--as-brand-deep);
@@ -469,6 +469,18 @@ button {
   text-transform: none;
   letter-spacing: normal;
   font-family: var(--as-font-mono);
+}
+.tag-chip .tag-index {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: var(--as-radius-sm);
+  background: var(--as-brand);
+  color: var(--as-brand-on);
+  font-size: 10px;
+  font-weight: 600;
 }
 .tag-remove {
   display: inline-grid;
@@ -501,6 +513,31 @@ button {
   padding: 0 4px;
 }
 .tag-field::placeholder { color: var(--as-text-tertiary); }
+
+/* Dataset config field */
+.dataset-field { display: grid; gap: 6px; }
+.dataset-row {
+  display: flex;
+  gap: var(--as-space-sm);
+  align-items: stretch;
+}
+.dataset-row input { flex: 1; }
+.dataset-row .ghost-button { white-space: nowrap; }
+.dataset-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--as-text-secondary);
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+.dataset-note code {
+  font-family: var(--as-font-mono);
+  font-size: 11px;
+  background: var(--as-bg-secondary);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
 
 /* Info hint */
 .hint {
@@ -615,6 +652,37 @@ button {
   padding: var(--as-space-md) var(--as-space-lg);
   border-radius: var(--as-radius-md);
   background: var(--as-bg-tertiary);
+  border: 1px solid transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+}
+button.run-row {
+  cursor: pointer;
+  transition: background var(--as-duration-fast) var(--as-easing-standard),
+              border-color var(--as-duration-fast) var(--as-easing-standard);
+}
+button.run-row:hover { background: var(--as-bg-secondary); }
+.run-row.selected {
+  background: var(--as-brand-soft);
+  border-color: var(--as-brand);
+}
+
+.track-multi {
+  display: grid;
+  gap: var(--as-space-sm);
+  padding: var(--as-space-md);
+  border: 1px solid var(--as-border-tertiary);
+  border-radius: var(--as-radius-md);
+  background: var(--as-bg-tertiary);
+}
+.track-multi-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--as-text-secondary);
+  font-weight: 500;
 }
 .run-main strong {
   display: block;

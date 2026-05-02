@@ -297,5 +297,9 @@ export function createDemoStore(): RegistryStore {
     async deleteInactiveArtifact(storageId) {
       setSnapshot({ ...snapshot, storage: snapshot.storage.filter((it) => it.id !== storageId) });
     },
+    async uploadDataset(file, modelLineSlug) {
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      return { r2Key: `datasets/${modelLineSlug}/${stamp}/${file.name}` };
+    },
   };
 }
