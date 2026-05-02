@@ -737,6 +737,7 @@ button {
 .status-pill.failed    { background: var(--as-danger-bg); color: var(--as-danger-text); }
 .status-pill.queued,
 .status-pill.cancelled { background: var(--as-bg-secondary); color: var(--as-text-secondary); }
+.status-pill.waiting { background: var(--as-bg-secondary); color: var(--as-text-secondary); border: 1px dashed var(--as-border-secondary); }
 
 .status-dot {
   width: 8px;
@@ -748,6 +749,9 @@ button {
 .status-dot.succeeded { background: var(--as-success-text); }
 .status-dot.failed    { background: var(--as-danger-text); }
 .status-dot.queued, .status-dot.cancelled { background: var(--as-text-tertiary); }
+.status-dot.waiting { background: var(--as-text-tertiary); outline: 1px dashed var(--as-text-tertiary); outline-offset: 1px; }
+.run-row-wrapper { position: relative; }
+.run-row-delete { position: absolute; top: 50%; right: 12px; transform: translateY(-50%); width: 28px; height: 28px; }
 
 /* ==== Run list / run detail ==== */
 
@@ -812,16 +816,25 @@ button.run-row:hover { background: var(--as-bg-secondary); }
 .run-metrics {
   display: flex;
   align-items: center;
-  gap: var(--as-space-md);
+  justify-content: flex-end;
+  gap: var(--as-space-lg);
   flex-wrap: wrap;
 }
 .run-metrics span {
   font-size: 12px;
   color: var(--as-text-secondary);
+  white-space: nowrap;
 }
 .run-metrics .run-status-pill {
   justify-content: center;
   min-width: 84px;
+}
+.run-metrics .run-progress {
+  font-variant-numeric: tabular-nums;
+  color: var(--as-text-primary);
+  font-weight: 500;
+  min-width: 44px;
+  text-align: right;
 }
 
 .train-layout {

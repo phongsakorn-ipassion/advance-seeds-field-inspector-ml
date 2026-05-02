@@ -109,6 +109,17 @@ function formatCount(value?: number): string {
   return typeof value === "number" ? value.toLocaleString() : "Pending";
 }
 
+// Display-only status that promotes a stuck "running" run (no progress, no
+// metrics yet) into "waiting" — i.e. the dashboard inserted the row but no
+// trainer has started reporting back. Used purely for status pill rendering.
+type DisplayStatus = "queued" | "waiting" | "running" | "succeeded" | "failed" | "cancelled";
+function displayRunStatus(run: RegistryRun): DisplayStatus {
+  if (run.status === "running" && run.progress === 0 && run.map50 === null && run.maskMap === null) {
+    return "waiting";
+  }
+  return run.status;
+}
+
 function compareVersions(a: RegistryVersion, b: RegistryVersion, sort: VersionSort): number {
   if (sort === "performance") {
     return ((b.map50 + b.maskMap) / 2) - ((a.map50 + a.maskMap) / 2);
@@ -428,7 +439,10 @@ export function App() {
             setFocusedRunId={setFocusedRunId}
             tab={trainTab}
             setTab={changeTrainTab}
-            onStart={() => store.startTraining(trainConfig)}
+            onStart={async () => {
+              await store.startTraining(trainConfig);
+              setTrainConfig(defaultConfig);
+            }}
           />
         )}
 
@@ -610,7 +624,7 @@ function Overview({
         </section>
         <section className="panel">
           <SectionHeading title="Live runs" text="Reported by the Python SDK; click any run to open its full detail in the Train pipeline." />
-          <RunList runs={runs.slice(0, 4)} onSelect={onOpenRun} />
+          <RunList runs={runs.filter((r) => r.status === "running").slice(0, 4)} onSelect={onOpenRun} />
         </section>
       </section>
     </>
@@ -644,6 +658,19 @@ function TrainWorkflow({
   const isFocusedRunning = focused?.status === "running";
   const [howOpen, setHowOpen] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<RegistryRun | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    setDeleteBusy(true);
+    try {
+      await store.deleteRun(pendingDelete.id);
+      if (focusedRunId === pendingDelete.id) setFocusedRunId(null);
+    } finally {
+      setDeleteBusy(false);
+      setPendingDelete(null);
+    }
+  }
 
   const detailPanel = (
     <section className={`panel run-detail-panel ${focused ? "open" : "closed"}`} aria-live="polite">
@@ -858,7 +885,12 @@ function TrainWorkflow({
             }
           />
           {runningRuns.length > 0 ? (
-            <RunList runs={runningRuns} selectedId={focused?.id ?? null} onSelect={(id) => setFocusedRunId(id)} />
+            <RunList
+              runs={runningRuns}
+              selectedId={focused?.id ?? null}
+              onSelect={(id) => setFocusedRunId(id)}
+              onDelete={(run) => setPendingDelete(run)}
+            />
           ) : (
             <EmptyState
               icon={<Wand2 size={24} />}
@@ -868,6 +900,22 @@ function TrainWorkflow({
           )}
         </section>
         {detailPanel}
+        {pendingDelete && (
+          <Modal title="Delete waiting run" onClose={() => (deleteBusy ? undefined : setPendingDelete(null))}>
+            <p>
+              Delete the waiting run <strong>{pendingDelete.name}</strong>? Training has not started yet,
+              so no metrics will be lost. This removes the run row and any queued metric data.
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="ghost-button" onClick={() => setPendingDelete(null)} disabled={deleteBusy}>
+                Cancel
+              </button>
+              <button type="button" className="danger-button" onClick={() => void confirmDelete()} disabled={deleteBusy}>
+                {deleteBusy ? "Deleting…" : "Delete run"}
+              </button>
+            </div>
+          </Modal>
+        )}
       </>
     )}
 
@@ -1431,10 +1479,12 @@ function RunList({
   runs,
   onSelect,
   selectedId,
+  onDelete,
 }: {
   runs: RegistryRun[];
   onSelect?: (runId: string) => void;
   selectedId?: string | null;
+  onDelete?: (run: RegistryRun) => void;
 }) {
   return (
     <div className="run-list">
@@ -1444,6 +1494,7 @@ function RunList({
           key={run.id}
           onClick={onSelect ? () => onSelect(run.id) : undefined}
           selected={selectedId === run.id}
+          onDelete={onDelete}
         />
       ))}
     </div>
@@ -1642,32 +1693,52 @@ function RunRow({
   run,
   onClick,
   selected = false,
+  onDelete,
 }: {
   run: RegistryRun;
   onClick?: () => void;
   selected?: boolean;
+  onDelete?: (run: RegistryRun) => void;
 }) {
   const cls = ["run-row", onClick ? "clickable" : "", selected ? "selected" : ""].filter(Boolean).join(" ");
+  const status = displayRunStatus(run);
+  const showDelete = status === "waiting" && Boolean(onDelete);
   const inner = (
     <>
-      <div className={`status-dot ${run.status}`} aria-hidden="true" />
+      <div className={`status-dot ${status}`} aria-hidden="true" />
       <div className="run-main">
         <strong>{run.name}</strong>
         <span>{run.id}</span>
       </div>
       <div className="run-metrics">
-        <span className={`run-status-pill status-pill ${run.status}`}>{run.status}</span>
-        <span>{run.progress}%</span>
-        <span>{run.map50 === null ? "mAP pending" : `${pct(run.map50)} mAP50`}</span>
-        <span>{run.maskMap === null ? "mask pending" : `${pct(run.maskMap)} mask`}</span>
+        <span className={`run-status-pill status-pill ${status}`}>{status}</span>
+        <span className="run-progress">{run.progress}%</span>
+        {run.map50 !== null && <span>{pct(run.map50)} mAP50</span>}
+        {run.maskMap !== null && <span>{pct(run.maskMap)} mask</span>}
       </div>
     </>
   );
   if (onClick) {
     return (
-      <button type="button" className={cls} onClick={onClick} aria-pressed={selected}>
-        {inner}
-      </button>
+      <div className="run-row-wrapper">
+        <button type="button" className={cls} onClick={onClick} aria-pressed={selected}>
+          {inner}
+        </button>
+        {showDelete && (
+          <button
+            type="button"
+            className="icon-action-button danger run-row-delete"
+            aria-label={`Delete waiting run ${run.name}`}
+            title="Delete this waiting run"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete?.(run);
+            }}
+          >
+            <Trash2 size={14} aria-hidden="true" />
+          </button>
+        )}
+      </div>
     );
   }
   return <article className={cls}>{inner}</article>;

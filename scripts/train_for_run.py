@@ -61,6 +61,59 @@ def materialize_dataset_yaml(client: RegistryClient, dataset_ref: str, repo_root
     return str(local_path)
 
 
+def write_dataset_stats(client: RegistryClient, run_id: str, run_row: dict, config: dict) -> None:
+    """Walk the resolved train/val/test image dirs from the materialized YAML
+    and PATCH runs.config_yaml.dataset_stats with real counts. The dashboard's
+    DATASET IMAGES section reads this via Realtime, replacing the '—' it shows
+    pre-scan."""
+    try:
+        import yaml as _yaml
+        materialized_path = Path(config.get("data", ""))
+        if not materialized_path.exists():
+            return
+        doc = _yaml.safe_load(materialized_path.read_text())
+        if not isinstance(doc, dict):
+            return
+        root_str = str(doc.get("path", ""))
+        if not root_str:
+            return
+        root = Path(root_str)
+        if not root.is_absolute():
+            root = (materialized_path.parent / root).resolve()
+        image_exts = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
+
+        def _count(rel: str | None) -> int | None:
+            if not rel:
+                return None
+            d = (root / rel).resolve()
+            if not d.exists():
+                return None
+            return sum(1 for p in d.rglob("*") if p.is_file() and p.suffix.lower() in image_exts)
+
+        train_path = doc.get("train")
+        val_path = doc.get("val") or doc.get("validation")
+        test_path = doc.get("test") or doc.get("testing")
+        train_n = _count(train_path)
+        val_n = _count(val_path)
+        test_n = _count(test_path)
+        total = sum(n for n in (train_n, val_n, test_n) if n is not None) or None
+        stats: dict = {
+            "total": total,
+            "train": train_n,
+            "validation": val_n,
+            "testing": test_n,
+            "trainPath": str((root / train_path).resolve()) if train_path else None,
+            "validationPath": str((root / val_path).resolve()) if val_path else None,
+            "testingPath": str((root / test_path).resolve()) if test_path else None,
+        }
+        cfg_yaml = run_row.get("config_yaml") or {}
+        cfg_yaml["dataset_stats"] = stats
+        client._json("PATCH", f"/rest/v1/runs?id=eq.{run_id}", {"config_yaml": cfg_yaml})
+        print(f"Reported dataset_stats: total={total} train={train_n} val={val_n} test={test_n}")
+    except Exception as exc:
+        print(f"[dataset_stats] failed to scan/report: {exc}", file=sys.stderr)
+
+
 def build_training_config(run_row: dict, repo_root: Path, client: RegistryClient) -> dict:
     cfg_yaml = run_row.get("config_yaml") or {}
     hp = cfg_yaml.get("hyperparameters") or {}
@@ -103,6 +156,10 @@ def main(argv: list[str] | None = None) -> int:
 
     print("Resolved training config:")
     print(json.dumps(config, indent=2, default=str))
+
+    # Scan the resolved image dirs and PATCH dataset_stats so the dashboard
+    # can replace the '—' placeholders with real numbers via Realtime.
+    write_dataset_stats(client, args.run_id, run_row, config)
 
     if args.dry_run:
         return 0
