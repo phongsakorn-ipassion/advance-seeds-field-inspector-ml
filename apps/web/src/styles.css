@@ -203,7 +203,8 @@ button {
   border: 1px solid var(--as-border-tertiary);
   border-radius: var(--as-radius-xl);
   padding: var(--as-space-xl) var(--as-space-2xl);
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: var(--as-space-lg);
 }
 
@@ -591,7 +592,9 @@ button {
 }
 
 .empty-state {
+  flex: 1;
   display: grid;
+  align-content: center;
   justify-items: center;
   gap: var(--as-space-sm);
   padding: var(--as-space-3xl) var(--as-space-xl);
@@ -599,6 +602,7 @@ button {
   border-radius: var(--as-radius-lg);
   text-align: center;
   background: var(--as-bg-tertiary);
+  min-height: 200px;
 }
 .empty-state .empty-icon {
   display: grid;
