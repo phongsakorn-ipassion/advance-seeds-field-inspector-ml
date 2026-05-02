@@ -17,10 +17,22 @@ export type HyperParameters = {
 export type TrainConfig = {
   modelLine: string;
   dataset: string;
+  datasetStats?: DatasetStats;
   sourceWeights: string;
   classes: string[];
   hyperParameters: HyperParameters;
   colabAccelerator: "T4" | "L4" | "A100";
+  note?: string;
+};
+
+export type DatasetStats = {
+  total?: number;
+  train?: number;
+  validation?: number;
+  testing?: number;
+  trainPath?: string;
+  validationPath?: string;
+  testingPath?: string;
 };
 
 export type RegistryChannel = {
@@ -36,6 +48,7 @@ export type RegistryRun = {
   status: RunStatus;
   modelLine: string;
   dataset: string;
+  datasetStats?: DatasetStats;
   hardware: string;
   startedAt: string;
   finishedAt: string | null;
@@ -54,6 +67,7 @@ export type RegistryVersion = {
   state: VersionState;
   sourceWeights: string;
   dataset: string;
+  datasetStats?: DatasetStats;
   classes: string[];
   hyperParameters: HyperParameters;
   map50: number;
@@ -62,6 +76,8 @@ export type RegistryVersion = {
   contentHash: string;
   compatSignature: string;
   createdAt: string;
+  description?: string;
+  originalSemver?: string;
 };
 
 export type StorageObject = {

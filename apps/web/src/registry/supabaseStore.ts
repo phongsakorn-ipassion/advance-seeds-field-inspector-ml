@@ -3,6 +3,7 @@ import type { RegistryStore } from "./api";
 import type {
   AuthSession,
   ChannelName,
+  DatasetStats,
   HyperParameters,
   RegistryChannel,
   RegistryRun,
@@ -19,6 +20,28 @@ type Env = {
   modelLineSlug: string;
   quotaMb: number;
 };
+
+function datasetStatsFrom(value: any): DatasetStats | undefined {
+  const source = value?.dataset_stats ?? value?.datasetStats;
+  if (!source || typeof source !== "object") return undefined;
+  return {
+    total: numberOrUndefined(source.total),
+    train: numberOrUndefined(source.train),
+    validation: numberOrUndefined(source.validation ?? source.val),
+    testing: numberOrUndefined(source.testing ?? source.test),
+    trainPath: stringOrUndefined(source.train_path ?? source.trainPath),
+    validationPath: stringOrUndefined(source.validation_path ?? source.validationPath ?? source.val_path ?? source.valPath),
+    testingPath: stringOrUndefined(source.testing_path ?? source.testingPath ?? source.test_path ?? source.testPath),
+  };
+}
+
+function numberOrUndefined(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function stringOrUndefined(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
 
 type DbModelLine = { id: string; slug: string; display_name: string };
 
@@ -92,10 +115,12 @@ function configFromRun(run: DbRun): TrainConfig {
   return {
     modelLine: cfg.model_line ?? cfg.modelLine ?? "seeds-poc",
     dataset: cfg.dataset ?? "",
+    datasetStats: datasetStatsFrom(cfg),
     sourceWeights: cfg.source_weights ?? cfg.sourceWeights ?? "",
     classes: cfg.classes ?? cfg.class_names ?? [],
     hyperParameters: hp,
     colabAccelerator: cfg.colab_accelerator ?? cfg.colabAccelerator ?? "T4",
+    note: typeof cfg.note === "string" ? cfg.note : "",
   };
 }
 
@@ -132,6 +157,7 @@ function mapRun(run: DbRun, metrics: DbRunMetric[]): RegistryRun {
     status: run.status,
     modelLine: config.modelLine,
     dataset: config.dataset,
+    datasetStats: config.datasetStats,
     hardware: typeof run.hardware === "string" ? run.hardware : run.hardware?.label ?? "",
     startedAt: fmt(run.started_at),
     finishedAt: run.finished_at ? fmt(run.finished_at) : null,
@@ -156,6 +182,7 @@ function mapVersion(v: DbVersion, channelByVersion: Map<string, ChannelName>): R
     state,
     sourceWeights: md.source_weights ?? "",
     dataset: md.dataset ?? "",
+    datasetStats: datasetStatsFrom(md),
     classes: md.class_names ?? [],
     hyperParameters: {
       epochs: hp.epochs ?? 0,
@@ -174,6 +201,8 @@ function mapVersion(v: DbVersion, channelByVersion: Map<string, ChannelName>): R
     contentHash: v.content_hash,
     compatSignature: v.compat_signature ?? "",
     createdAt: fmt(v.created_at),
+    description: typeof md.description === "string" ? md.description : "",
+    originalSemver: typeof md.original_semver === "string" ? md.original_semver : v.semver,
   };
 }
 
@@ -318,6 +347,43 @@ export function createSupabaseStore(env: Env): RegistryStore {
     return fn();
   }
 
+  async function insertLocalRun(config: TrainConfig, lineId: string) {
+    const base = `${config.dataset.split("/").pop()?.replace(".yaml", "") ?? "run"}`;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const runName = `${base}-${stamp}`;
+    const classPreview = config.classes.slice(0, 6).join(", ") + (config.classes.length > 6 ? "..." : "");
+    const bootstrapLogs = [
+      `Run queued by dashboard for model_line=${config.modelLine}`,
+      `Runtime: Colab ${config.colabAccelerator}`,
+      `Source weights: ${config.sourceWeights}`,
+      `Dataset: ${config.dataset}`,
+      `Classes (${config.classes.length}): ${classPreview}`,
+      `Epochs=${config.hyperParameters.epochs} | imgsz=${config.hyperParameters.imgsz} | lr0=${config.hyperParameters.lr0}`,
+      "Hosted trigger is not configured. Awaiting Python SDK / Colab MCP to stream run_metrics...",
+    ];
+    const { error } = await client.from("runs").insert({
+      model_line_id: lineId,
+      status: "running",
+      config_yaml: {
+        name: runName,
+        model_line: config.modelLine,
+        dataset: config.dataset,
+        dataset_stats: config.datasetStats,
+        source_weights: config.sourceWeights,
+        classes: config.classes,
+        hyperparameters: config.hyperParameters,
+        colab_accelerator: config.colabAccelerator,
+        colab_notebook: `Colab MCP / ${runName}.ipynb (pending)`,
+        note: config.note ?? "",
+        logs: bootstrapLogs,
+      },
+      hardware: { label: `Colab ${config.colabAccelerator}` },
+    });
+    if (error) throw error;
+  }
+
   return {
     mode: "supabase",
     getSnapshot: () => snapshot,
@@ -341,34 +407,37 @@ export function createSupabaseStore(env: Env): RegistryStore {
     async startTraining(config) {
       await adminWrite(async () => {
         const lineId = await resolveModelLine();
-        const runName = `${config.dataset.split("/").pop()?.replace(".yaml", "") ?? "run"}`;
-        const classPreview = config.classes.slice(0, 6).join(", ") + (config.classes.length > 6 ? "…" : "");
-        const bootstrapLogs = [
-          `Run queued by dashboard for model_line=${config.modelLine}`,
-          `Runtime: Colab ${config.colabAccelerator}`,
-          `Source weights: ${config.sourceWeights}`,
-          `Dataset: ${config.dataset}`,
-          `Classes (${config.classes.length}): ${classPreview}`,
-          `Epochs=${config.hyperParameters.epochs} · imgsz=${config.hyperParameters.imgsz} · lr0=${config.hyperParameters.lr0}`,
-          "Awaiting Python SDK / Colab MCP to stream run_metrics…",
-        ];
-        const { error } = await client.from("runs").insert({
-          model_line_id: lineId,
-          status: "running",
-          config_yaml: {
-            name: runName,
-            model_line: config.modelLine,
-            dataset: config.dataset,
-            source_weights: config.sourceWeights,
-            classes: config.classes,
-            hyperparameters: config.hyperParameters,
-            colab_accelerator: config.colabAccelerator,
-            colab_notebook: `Colab MCP / ${runName}.ipynb (pending)`,
-            logs: bootstrapLogs,
+        const token = (await client.auth.getSession()).data.session?.access_token;
+        const res = await fetch(`${env.supabaseUrl}/functions/v1/start-training`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: token ? `Bearer ${token}` : "",
+            apikey: env.supabaseAnonKey,
           },
-          hardware: { label: `Colab ${config.colabAccelerator}` },
+          body: JSON.stringify({
+            model_line_slug: config.modelLine,
+            config: {
+              model_line: config.modelLine,
+              dataset: config.dataset,
+              dataset_stats: config.datasetStats,
+              source_weights: config.sourceWeights,
+              classes: config.classes,
+              hyperparameters: config.hyperParameters,
+              colab_accelerator: config.colabAccelerator,
+              note: config.note ?? "",
+            },
+          }),
         });
-        if (error) throw error;
+        if (!res.ok) {
+          let body: { error?: string } = {};
+          try { body = await res.json(); } catch { /* use status text */ }
+          if (res.status === 404 || res.status === 503 || body.error === "hosted_training_not_configured") {
+            await insertLocalRun(config, lineId);
+          } else {
+            throw new Error(body.error ?? `start-training failed: ${res.status}`);
+          }
+        }
         await refresh();
       });
     },
@@ -423,6 +492,44 @@ export function createSupabaseStore(env: Env): RegistryStore {
           throw new Error(`R2 PUT failed: ${putRes.status} ${await putRes.text()}`);
         }
         return { r2Key: r2_key };
+      });
+    },
+    async renameVersion(versionId, semver) {
+      const next = semver.trim();
+      if (!next) throw new Error("Version name cannot be empty.");
+      await adminWrite(async () => {
+        const { data: row, error: readErr } = await client
+          .from("versions")
+          .select("semver, metadata")
+          .eq("id", versionId)
+          .single();
+        if (readErr) throw readErr;
+        const md = (row?.metadata ?? {}) as Record<string, unknown>;
+        const updates: { semver: string; metadata?: Record<string, unknown> } = { semver: next };
+        if (typeof md.original_semver !== "string" && row?.semver) {
+          updates.metadata = { ...md, original_semver: row.semver };
+        }
+        const { error } = await client.from("versions").update(updates).eq("id", versionId);
+        if (error) {
+          if (error.code === "23505") throw new Error(`Version "${next}" already exists.`);
+          throw error;
+        }
+        await refresh();
+      });
+    },
+    async updateVersionDescription(versionId, description) {
+      await adminWrite(async () => {
+        const { data, error: readErr } = await client
+          .from("versions")
+          .select("metadata")
+          .eq("id", versionId)
+          .single();
+        if (readErr) throw readErr;
+        const md = (data?.metadata ?? {}) as Record<string, unknown>;
+        const nextMd = { ...md, description };
+        const { error } = await client.from("versions").update({ metadata: nextMd }).eq("id", versionId);
+        if (error) throw error;
+        await refresh();
       });
     },
     async deleteInactiveArtifact(storageId) {

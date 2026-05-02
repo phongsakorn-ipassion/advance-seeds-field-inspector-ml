@@ -24,6 +24,8 @@ export type RegistryStore = {
   deployVersion(versionId: string, channel: ChannelName): Promise<void>;
   undeployChannel(channel: ChannelName): Promise<void>;
   deleteInactiveArtifact(storageId: string): Promise<void>;
+  renameVersion(versionId: string, semver: string): Promise<void>;
+  updateVersionDescription(versionId: string, description: string): Promise<void>;
 
   // Dataset upload (returns the R2 key the dashboard records)
   uploadDataset(file: File, modelLineSlug: string): Promise<{ r2Key: string }>;

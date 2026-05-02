@@ -6,6 +6,7 @@ import {
   Info,
   LogOut,
   Notebook,
+  Pencil,
   Rocket,
   ShieldCheck,
   Sprout,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 import {
   ChannelName,
+  DatasetStats,
   defaultConfig,
   RegistryRun,
   RegistryStore,
@@ -26,6 +28,8 @@ import {
 
 type Section = "overview" | "train" | "models" | "storage";
 type TrainTab = "form" | "live" | "recent";
+type VersionFilter = "all" | "staging" | "production" | "candidate" | "inactive";
+type VersionSort = "created" | "performance" | "map50" | "maskMap";
 
 function Hint({ text }: { text: string }) {
   return (
@@ -38,15 +42,24 @@ function Hint({ text }: { text: string }) {
   );
 }
 
+function SectionMiniHeading({ title, hint }: { title: string; hint: string }) {
+  return (
+    <div className="section-mini-heading">
+      <h3>{title}</h3>
+      <Hint text={hint} />
+    </div>
+  );
+}
+
 function parseYoloClasses(yaml: string): string[] | null {
   // Supports either:
-  //   names: [apple, banana, ...]
+  //   names: [class_a, class_b, ...]
   //   names:
-  //     - apple
-  //     - banana
+  //     - class_a
+  //     - class_b
   //   names:
-  //     0: apple
-  //     1: banana
+  //     0: class_a
+  //     1: class_b
   const inline = yaml.match(/^\s*names\s*:\s*\[([^\]]*)\]/m);
   if (inline) {
     return inline[1].split(",").map((s) => s.trim().replace(/^['"]|['"]$/g, "")).filter(Boolean);
@@ -66,18 +79,72 @@ function parseYoloClasses(yaml: string): string[] | null {
   return null;
 }
 
+function parseYoloDatasetStats(yaml: string): DatasetStats | undefined {
+  const trainPath = parseYamlStringValue(yaml, "train");
+  const validationPath = parseYamlStringValue(yaml, "val") ?? parseYamlStringValue(yaml, "validation");
+  const testingPath = parseYamlStringValue(yaml, "test") ?? parseYamlStringValue(yaml, "testing");
+  if (!trainPath && !validationPath && !testingPath) return undefined;
+  return { trainPath, validationPath, testingPath };
+}
+
+function parseYamlStringValue(yaml: string, key: string): string | undefined {
+  const match = yaml.match(new RegExp(`^\\s*${key}\\s*:\\s*(.+)\\s*$`, "m"));
+  if (!match) return undefined;
+  const raw = match[1].trim();
+  if (!raw || raw.startsWith("[") || raw.startsWith("{")) return undefined;
+  return raw.replace(/^['"]|['"]$/g, "");
+}
+
+function resolveDatasetStats(_dataset: string, stats?: DatasetStats): DatasetStats | undefined {
+  return stats;
+}
+
+function sumKnownCounts(stats?: DatasetStats): number | undefined {
+  if (!stats) return undefined;
+  const known = [stats.train, stats.validation, stats.testing].filter((value): value is number => typeof value === "number");
+  return known.length > 0 ? known.reduce((sum, value) => sum + value, 0) : undefined;
+}
+
+function formatCount(value?: number): string {
+  return typeof value === "number" ? value.toLocaleString() : "Pending";
+}
+
+function compareVersions(a: RegistryVersion, b: RegistryVersion, sort: VersionSort): number {
+  if (sort === "performance") {
+    return ((b.map50 + b.maskMap) / 2) - ((a.map50 + a.maskMap) / 2);
+  }
+  if (sort === "map50") return b.map50 - a.map50;
+  if (sort === "maskMap") return b.maskMap - a.maskMap;
+  return Date.parse(b.createdAt.replace(" ", "T")) - Date.parse(a.createdAt.replace(" ", "T"));
+}
+
+function expertLogLines(run: RegistryRun): string[] {
+  const stats = resolveDatasetStats(run.dataset, run.datasetStats ?? run.config.datasetStats);
+  const map50 = run.map50 === null ? "pending" : run.map50.toFixed(3);
+  const maskMap = run.maskMap === null ? "pending" : run.maskMap.toFixed(3);
+  return [
+    `[registry] run=${run.id} status=${run.status} progress=${run.progress}% hardware="${run.hardware || "pending"}"`,
+    `[dataset] config=${run.dataset || "pending"} total=${formatCount(stats?.total)} train=${formatCount(stats?.train)} val=${formatCount(stats?.validation)} test=${formatCount(stats?.testing)}`,
+    `[training] epochs=${run.config.hyperParameters.epochs} imgsz=${run.config.hyperParameters.imgsz} batch=${run.config.hyperParameters.batch} patience=${run.config.hyperParameters.patience}`,
+    `[augmentation] mosaic=${run.config.hyperParameters.mosaic} mixup=${run.config.hyperParameters.mixup} copyPaste=${run.config.hyperParameters.copyPaste}`,
+    `[metrics] mAP50=${map50} mask_mAP=${maskMap} source_weights=${run.config.sourceWeights || "pending"}`,
+    `[timing] started_at="${run.startedAt || "pending"}" finished_at="${run.finishedAt ?? "running"}" notebook="${run.colabNotebook || "pending"}"`,
+    ...run.logs.map((line, index) => `[log ${String(index + 1).padStart(2, "0")}] ${line}`),
+  ];
+}
+
 function DatasetConfigField({
   value,
   onChange,
   modelLineSlug,
   disabled,
-  onClassesParsed,
+  onDatasetParsed,
 }: {
   value: string;
   onChange: (next: string) => void;
   modelLineSlug: string;
   disabled?: boolean;
-  onClassesParsed?: (classes: string[]) => void;
+  onDatasetParsed?: (parsed: { dataset?: string; classes?: string[]; stats?: DatasetStats }) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [uploaded, setUploaded] = useState<{ name: string; size: number; classes: number | null } | null>(null);
@@ -96,9 +163,10 @@ function DatasetConfigField({
       try {
         const text = await file.text();
         const classes = parseYoloClasses(text);
+        const stats = parseYoloDatasetStats(text);
         const { r2Key } = await store.uploadDataset(file, modelLineSlug || "seeds-poc");
         onChange(r2Key);
-        if (classes && onClassesParsed) onClassesParsed(classes);
+        if (onDatasetParsed) onDatasetParsed({ dataset: r2Key, classes: classes ?? undefined, stats });
         setUploaded({ name: file.name, size: file.size, classes: classes?.length ?? null });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Upload failed.");
@@ -115,7 +183,7 @@ function DatasetConfigField({
         <input
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="configs/dataset.banana-v2.yaml or datasets/seeds-poc/.../file.yaml"
+          placeholder="configs/dataset.example.yaml or datasets/seeds-poc/.../file.yaml"
         />
         <button
           type="button"
@@ -360,7 +428,7 @@ export function App() {
             setFocusedRunId={setFocusedRunId}
             tab={trainTab}
             setTab={changeTrainTab}
-            onStart={() => void store.startTraining(trainConfig)}
+            onStart={() => store.startTraining(trainConfig)}
           />
         )}
 
@@ -524,14 +592,14 @@ function Overview({
       <section className="summary-grid">
         <MetricCard label="Production" value={production?.semver ?? "Undeployed"} detail={production ? `${pct(production.maskMap)} mask mAP` : "No live model"} />
         <MetricCard label="Staging" value={staging?.semver ?? "Unset"} detail={staging ? `${pct(staging.map50)} mAP50` : "Ready for candidate"} />
-        <MetricCard label="Training" value={running?.name ?? "Idle"} detail={running ? `${running.progress}% via ${running.hardware}` : "Colab MCP ready"} />
+        <MetricCard label="Training" value={running?.name ?? "Idle"} detail={running ? `${running.progress}% via ${running.hardware}` : "Manual Colab hand-off ready"} />
         <MetricCard label="R2 storage" value={`${storageUsed.toFixed(1)} / ${quota} MB`} detail={storageOverQuota ? "Over quota" : `${storagePercent}% used`} danger={storageOverQuota} />
       </section>
       <section className="content-grid">
         <section className="panel">
           <SectionHeading title="Operator journey" text="One path from training config to deployment." />
           <div className="journey-list">
-            <Step icon={<Wand2 size={18} />} title="Train" text="Define classes and hyperparameters, then create a Colab MCP run." />
+            <Step icon={<Wand2 size={18} />} title="Train" text="Define classes and hyperparameters, then open the Colab notebook and run it manually." />
             <Step icon={<Activity size={18} />} title="Track" text="Watch progress, logs, and metrics update while the job runs." />
             <Step icon={<Rocket size={18} />} title="Deploy" text="Promote a validated model to staging or production." />
             <Step icon={<Trash2 size={18} />} title="Clean" text="Watch R2 usage and delete inactive artifacts before quota is exceeded." />
@@ -568,13 +636,14 @@ function TrainWorkflow({
   setFocusedRunId: (id: string | null) => void;
   tab: TrainTab;
   setTab: (tab: TrainTab) => void;
-  onStart: () => void;
+  onStart: () => Promise<void>;
 }) {
   const runningRuns = runs.filter((r) => r.status === "running");
   const focused = focusedRunId ? runs.find((r) => r.id === focusedRunId) : undefined;
   const recent = runs.filter((r) => r.status !== "running").slice(0, 6);
   const isFocusedRunning = focused?.status === "running";
   const [howOpen, setHowOpen] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
 
   const detailPanel = (
     <section className={`panel run-detail-panel ${focused ? "open" : "closed"}`} aria-live="polite">
@@ -591,22 +660,24 @@ function TrainWorkflow({
                 href={colabUrl(focused.id)}
                 target="_blank"
                 rel="noopener noreferrer"
-                title="Opens the training notebook in Colab. After it loads, click Runtime → Run all (Cmd/Ctrl+F9) to start — Colab does not auto-execute."
+                title="Colab does NOT auto-run the notebook. Once it opens, click Runtime, then Run all (Cmd/Ctrl+F9). The notebook will prompt for a Supabase service-role key and start training."
+                aria-label="Open in Colab. Colab does NOT auto-run the notebook. Once it opens, click Runtime, then Run all. The notebook will prompt for a Supabase service-role key and start training."
               >
                 <Notebook size={14} /> Open in Colab <ExternalLink size={12} />
               </a>
-              <Hint text="Colab does NOT auto-run the notebook. Once it opens, click Runtime → Run all (Cmd/Ctrl+F9). The notebook will then prompt for a Supabase service-role key and start training." />
               <button type="button" className="ghost-button compact" onClick={() => setFocusedRunId(null)} aria-label="Close run detail">
                 <X size={14} /> Close
               </button>
             </div>
           </div>
+          <ColabManualSteps runId={focused.id} />
           {isFocusedRunning && focused.map50 === null && (
             <div className="track-hint">
               <Info size={14} aria-hidden="true" />
               <span>
-                Waiting for the Python SDK to stream <code>run_metrics</code>. Until the
-                training script writes metrics for this run, only the bootstrap log is shown.
+                Waiting for Colab or a hosted worker to write <code>run_metrics</code>.
+                If you have not clicked <em>Runtime, Run all</em> in Colab yet, this
+                run will remain at the bootstrap log.
               </span>
             </div>
           )}
@@ -639,12 +710,19 @@ function TrainWorkflow({
     {tab === "form" && (
     <form
       className="panel train-form"
-      onSubmit={(event: FormEvent) => {
+      onSubmit={async (event: FormEvent) => {
         event.preventDefault();
-        if (isAdmin) onStart();
+        if (!isAdmin) return;
+        setStartError(null);
+        try {
+          await onStart();
+          setTab("live");
+        } catch (err) {
+          setStartError(err instanceof Error ? err.message : String(err));
+        }
       }}
     >
-      <SectionHeading title="Train new model" text="Defaults are loaded from the current PoC config. Adjust only what the demo needs." />
+      <SectionHeading title="Train new model" text="Create the registry run here, then use the Run detail checklist to start Colab manually." />
         <label>
           <span className="label-text">
             Dataset config
@@ -652,10 +730,15 @@ function TrainWorkflow({
           </span>
           <DatasetConfigField
             value={config.dataset}
-            onChange={(next) => setConfig({ ...config, dataset: next })}
+            onChange={(next) => setConfig({ ...config, dataset: next, datasetStats: undefined })}
             modelLineSlug={config.modelLine}
             disabled={!isAdmin}
-            onClassesParsed={(classes) => setConfig({ ...config, dataset: config.dataset, classes })}
+            onDatasetParsed={({ dataset, classes, stats }) => setConfig({
+              ...config,
+              dataset: dataset ?? config.dataset,
+              classes: classes ?? config.classes,
+              datasetStats: stats,
+            })}
           />
         </label>
         <label>
@@ -697,10 +780,45 @@ function TrainWorkflow({
           <NumberField label="Mosaic" value={config.hyperParameters.mosaic} step="0.1" onChange={(value) => updateHp(config, setConfig, "mosaic", value)} hint="Mosaic augmentation probability (0–1). Tiles four images into one for richer context. Helps small-object recall; turn down if memory is tight." />
           <NumberField label="Mixup" value={config.hyperParameters.mixup} step="0.1" onChange={(value) => updateHp(config, setConfig, "mixup", value)} hint="MixUp augmentation probability (0–1). Blends two images together. Adds regularization; usually low (0.0–0.2) for detection/segmentation." />
         </div>
+        <details className="advanced-disclosure">
+          <summary>Advanced hyperparameters</summary>
+          <div className="form-grid">
+            <label>
+              <span className="label-text">
+                Batch
+                <Hint text="Batch size per training step. 'auto' lets YOLO pick based on GPU memory; otherwise pass an integer like 16 or 32. Larger batches train faster but need more VRAM." />
+              </span>
+              <select
+                value={config.hyperParameters.batch}
+                onChange={(event) => updateHp(config, setConfig, "batch", event.target.value)}
+              >
+                <option value="auto">auto</option>
+                <option value="8">8</option>
+                <option value="16">16</option>
+                <option value="32">32</option>
+                <option value="64">64</option>
+              </select>
+            </label>
+            <NumberField
+              label="LRF"
+              value={config.hyperParameters.lrf}
+              step="0.0001"
+              onChange={(value) => updateHp(config, setConfig, "lrf", value)}
+              hint="Final learning-rate factor. Final LR = LR0 × LRF. Smaller (e.g. 0.01) means more aggressive cosine annealing toward the end of training."
+            />
+            <NumberField
+              label="Copy-paste"
+              value={config.hyperParameters.copyPaste}
+              step="0.1"
+              onChange={(value) => updateHp(config, setConfig, "copyPaste", value)}
+              hint="Copy-paste augmentation probability (0–1). Pastes instances from one image onto another to boost rare-class recall. Usually 0–0.3."
+            />
+          </div>
+        </details>
         <label>
           <span className="label-text">
             Colab accelerator
-            <Hint text="Colab GPU class. T4 is free-tier and fine for YOLO-n. L4 is faster and worth it for longer runs. A100 is overkill for the PoC unless you're benchmarking." />
+            <Hint text="GPU class to select in Colab before Run all. T4 is free-tier and fine for YOLO-n. L4 is faster and worth it for longer runs. A100 is overkill for the PoC unless you're benchmarking." />
           </span>
           <select
             value={config.colabAccelerator}
@@ -711,9 +829,20 @@ function TrainWorkflow({
             <option value="A100">A100 — overkill, paid</option>
           </select>
         </label>
+        <label>
+          <span className="label-text">Note</span>
+          <textarea
+            value={config.note ?? ""}
+            onChange={(event) => setConfig({ ...config, note: event.target.value })}
+            placeholder="e.g. Expanded the spot-defect class with 200 new samples; testing if patience=12 is enough."
+            rows={3}
+            disabled={!isAdmin}
+          />
+        </label>
       <button className="primary-button" type="submit" disabled={!isAdmin} title={isAdmin ? "" : "Admin role required"}>
-        <Rocket size={18} /> Start Colab MCP training
+        <Rocket size={18} /> Create training run
       </button>
+      {startError && <p className="form-error">{startError}</p>}
     </form>
     )}
 
@@ -734,7 +863,7 @@ function TrainWorkflow({
             <EmptyState
               icon={<Wand2 size={24} />}
               title="No runs in progress"
-              text="Switch to Train new model to start a Colab MCP run."
+              text="Switch to Train new model to create a run, then open its Colab notebook."
             />
           )}
         </section>
@@ -752,7 +881,7 @@ function TrainWorkflow({
             <EmptyState
               icon={<Activity size={24} />}
               title="No prior runs"
-              text="Once a run completes it shows up here with its final metrics and Colab notebook context."
+              text="Once a run completes it shows up here with final metrics and artifact context."
             />
           )}
         </section>
@@ -763,27 +892,109 @@ function TrainWorkflow({
     {howOpen && (
       <Modal title="How training actually runs" onClose={() => setHowOpen(false)}>
         <p>
-          This dashboard is the <em>registry</em>. Clicking <em>Start Colab MCP training</em>{" "}
-          inserts a <code>runs</code> row in Supabase with the config below — it does
-          not download the dataset or run YOLO. The dataset path (e.g.{" "}
-          <code>configs/dataset.banana-v2.yaml</code>) only resolves on a machine that
-          has the repo and the images on disk.
+          Clicking <em>Start hosted training</em> first asks the Supabase{" "}
+          <code>start-training</code> Edge Function to create the run and dispatch a
+          hosted GPU worker. The worker reports metrics through the signed{" "}
+          <code>training-callback</code> function, so the live panel updates through
+          Realtime.
         </p>
         <p>
-          Live metrics appear here when{" "}
-          <code>scripts/train_yolo26n_seg.py</code> is run against this run id with the
-          Python SDK and a service-role key — typically inside a Colab notebook started
-          through the Colab MCP server. Until that script writes to{" "}
-          <code>run_metrics</code>, only the bootstrap log is shown.
+          If hosted training is not configured yet, this dashboard creates the
+          <code>runs</code> row only. You must open the notebook, set a GPU runtime,
+          click <em>Runtime, Run all</em>, and paste the service-role key when Colab
+          asks for it. The key stays in that notebook session.
         </p>
         <p>
-          A separate OpenSpec change (<code>wire-dashboard-to-hosted-training</code>)
-          scopes a hosted-GPU path so a stranger with the dashboard URL can start a
-          real run end-to-end without local repo access.
+          Dataset YAML uploads already land in R2. Image zip upload and automatic
+          dataset materialization are the next boundary to close for fully unattended
+          hosted runs.
         </p>
       </Modal>
     )}
     </section>
+  );
+}
+
+function ColabManualSteps({ runId }: { runId: string }) {
+  return (
+    <div className="manual-steps" aria-label="Manual Colab steps">
+      <div className="manual-steps-title">
+        <Notebook size={15} aria-hidden="true" />
+        <span>Manual Colab hand-off</span>
+      </div>
+      <ol>
+        <li>
+          <span>Click <strong>Open in Colab</strong> above. The notebook URL carries this run id:</span>
+          <code>run_id={runId}</code>
+        </li>
+        <li>
+          In Colab, set <strong>Runtime &rarr; Change runtime type &rarr; GPU</strong> (T4 is fine for YOLO-n,
+          L4 or A100 if you need more throughput).
+        </li>
+        <li>
+          Click <strong>Runtime &rarr; Run all</strong> (or <code>Cmd/Ctrl + F9</code>). Colab does not auto-run on open.
+        </li>
+        <li>
+          <strong>Cell 7</strong> prompts for your Supabase <em>service-role</em> key (not the anon key). Paste it once;
+          it lives only in this Colab session.
+        </li>
+        <li>
+          <strong>Cell 10</strong> auto-fetches the dataset YAML from R2 and prints the resolved image path. If it
+          warns <em>train images not found</em>, the trainer can&apos;t see your image folders. Add a cell that mounts
+          Drive and unzips your dataset to the printed path before running cell 12, e.g.:
+          <pre>{`from google.colab import drive\ndrive.mount('/content/drive')\n!unzip -q /content/drive/MyDrive/<your-dataset>.zip -d /content/advance-seeds-field-inspector-ml/data/processed/`}</pre>
+        </li>
+        <li>
+          <strong>Cell 12</strong> runs <code>scripts/train_for_run.py --run-id {runId.slice(0, 8)}…</code>. Real
+          training begins; per-epoch metrics stream back here via Realtime.
+        </li>
+        <li>
+          When training finishes, the script exports tflite, uploads to R2, creates the candidate version, and marks
+          the run <em>succeeded</em>. Switch to <strong>Models</strong> to deploy it.
+        </li>
+        <li>
+          Leave the Colab tab open while training is running — closing it terminates the runtime and your training.
+        </li>
+      </ol>
+    </div>
+  );
+}
+
+function DatasetSplitScroller({ stats }: { stats?: DatasetStats }) {
+  const splits = [
+    { label: "Training", count: stats?.train, path: stats?.trainPath, role: "Model fitting" },
+    { label: "Validation", count: stats?.validation, path: stats?.validationPath, role: "Early stopping and tuning" },
+    { label: "Testing", count: stats?.testing, path: stats?.testingPath, role: "Final holdout check" },
+  ];
+  const total = stats?.total ?? sumKnownCounts(stats);
+  const hasAnyPath = Boolean(stats?.trainPath || stats?.validationPath || stats?.testingPath);
+  const hasAnyCount = typeof total === "number";
+  const totalDisplay = hasAnyCount ? formatCount(total) : (hasAnyPath ? "—" : "No dataset");
+  return (
+    <div className="dataset-split-scroller" aria-label="Dataset split summary">
+      <div className="dataset-split-total">
+        <span>
+          DATASET IMAGES
+          <Hint text="Paths come from the YOLO YAML's train, val, and test fields. Image counts only appear once the trainer scans the dataset on disk — the browser can't count images in a remote folder." />
+        </span>
+        <strong>{totalDisplay}</strong>
+      </div>
+      {hasAnyPath && !hasAnyCount && (
+        <p className="dataset-split-note">
+          Paths parsed from YAML. Image counts will populate once the trainer scans the dataset.
+        </p>
+      )}
+      <div className="dataset-split-rail" tabIndex={0}>
+        {splits.map((split) => (
+          <article className="dataset-split-card" key={split.label}>
+            <span>{split.label}</span>
+            <strong>{typeof split.count === "number" ? formatCount(split.count) : "—"}</strong>
+            <small>{split.role}</small>
+            <code>{split.path ?? "not in YAML"}</code>
+          </article>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -853,12 +1064,53 @@ function ModelsWorkflow({
   setSelectedVersionId: (id: string) => void;
   isAdmin: boolean;
 }) {
+  const [filter, setFilter] = useState<VersionFilter>("all");
+  const [sort, setSort] = useState<VersionSort>("created");
+  const visibleVersions = versions
+    .filter((version) => filter === "all" || version.state === filter)
+    .slice()
+    .sort((a, b) => compareVersions(a, b, sort));
+
+  useEffect(() => {
+    if (visibleVersions.length > 0 && !visibleVersions.some((version) => version.id === selectedVersionId)) {
+      setSelectedVersionId(visibleVersions[0].id);
+    }
+  }, [selectedVersionId, setSelectedVersionId, visibleVersions]);
+
   return (
     <section className="content-grid wide-right">
       <section className="panel">
         <SectionHeading title="Model versions" text="Select a model, then deploy or undeploy channels." />
+        <div className="version-controls">
+          <label>
+            <span>Channel</span>
+            <select value={filter} onChange={(event) => setFilter(event.target.value as VersionFilter)}>
+              <option value="all">All versions</option>
+              <option value="staging">Staging</option>
+              <option value="production">Production</option>
+              <option value="candidate">Candidates</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </label>
+          <label>
+            <span>Sort</span>
+            <select value={sort} onChange={(event) => setSort(event.target.value as VersionSort)}>
+              <option value="created">Newest first</option>
+              <option value="performance">Best combined performance</option>
+              <option value="map50">Best mAP50</option>
+              <option value="maskMap">Best mask mAP</option>
+            </select>
+          </label>
+        </div>
         <div className="version-list">
-          {versions.map((version) => (
+          {visibleVersions.length === 0 && (
+            <EmptyState
+              icon={<Database size={24} />}
+              title="No matching versions"
+              text="Adjust channel or performance filters to see more model versions."
+            />
+          )}
+          {visibleVersions.map((version) => (
             <button
               className={version.id === selectedVersionId ? "version-card selected" : "version-card"}
               key={version.id}
@@ -868,7 +1120,7 @@ function ModelsWorkflow({
               <strong>{version.semver}</strong>
               <span>{version.dataset}</span>
               <small>
-                {pct(version.map50)} mAP50 / {pct(version.maskMap)} mask
+                {pct(version.map50)} mAP50 / {pct(version.maskMap)} mask · {formatCount(resolveDatasetStats(version.dataset, version.datasetStats)?.total)} images
               </small>
               <span className={`status-pill ${version.state}`}>{version.state}</span>
             </button>
@@ -902,13 +1154,13 @@ function StorageWorkflow({
 }) {
   return (
     <section className="panel">
-      <SectionHeading title="R2 storage" text="Monitor artifact usage and delete inactive models before storage exceeds quota." />
+      <SectionHeading title="R2 storage" text="Monitor artifact usage and delete inactive model records before storage exceeds quota." />
       <div className={storageOverQuota ? "quota-banner danger" : "quota-banner"}>
         <div>
           <strong>{storageUsed.toFixed(1)} MB used</strong>
           <span>{storagePercent}% of {quotaMb} MB demo quota</span>
         </div>
-        {storageOverQuota && <span>Over quota. Delete inactive artifacts.</span>}
+        {storageOverQuota && <span>Over quota. Delete inactive model records.</span>}
       </div>
       <div className="storage-bar">
         <div style={{ width: `${Math.min(storagePercent, 100)}%` }} />
@@ -923,15 +1175,15 @@ function StorageWorkflow({
                 <span>{item.key}</span>
               </div>
               <span>{item.sizeMb.toFixed(1)} MB</span>
-              <span className={item.active ? "status-pill production" : "status-pill inactive"}>{item.active ? "active" : "inactive"}</span>
+              <span className={`storage-status status-pill ${item.active ? "production" : "inactive"}`}>{item.active ? "active" : "inactive"}</span>
               <button
                 className="danger-button compact"
                 disabled={item.active || !isAdmin}
                 type="button"
                 onClick={() => void store.deleteInactiveArtifact(item.id)}
-                title={!isAdmin ? "Admin role required" : ""}
+                title={!isAdmin ? "Admin role required" : item.active ? "Undeploy this model before deleting it" : "Delete this model record and its stored artifacts"}
               >
-                <Trash2 size={16} /> Delete
+                <Trash2 size={16} /> Delete model
               </button>
             </article>
           );
@@ -955,41 +1207,219 @@ function ModelDetail({
   const run = runs.find((candidate) => candidate.id === version.runId);
   const channelNames = channels.filter((channel) => channel.versionId === version.id).map((channel) => channel.name);
   const writeTitle = isAdmin ? "" : "Admin role required";
+  const isActive = channelNames.length > 0;
+  const inProduction = channelNames.includes("production");
+  const inStaging = channelNames.includes("staging");
+  const [pending, setPending] = useState<null | {
+    title: string;
+    message: string;
+    confirmLabel: string;
+    danger?: boolean;
+    run: () => Promise<void>;
+  }>(null);
+  const [busy, setBusy] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [draftName, setDraftName] = useState(version.semver);
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renameBusy, setRenameBusy] = useState(false);
+  useEffect(() => {
+    setEditingName(false);
+    setDraftName(version.semver);
+    setRenameError(null);
+  }, [version.id, version.semver]);
+  async function saveRename() {
+    const next = draftName.trim();
+    if (!next || next === version.semver) {
+      setEditingName(false);
+      return;
+    }
+    setRenameBusy(true);
+    setRenameError(null);
+    try {
+      await store.renameVersion(version.id, next);
+      setEditingName(false);
+    } catch (err) {
+      setRenameError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRenameBusy(false);
+    }
+  }
+  function askDeploy(channel: ChannelName) {
+    if (!isAdmin) return;
+    setPending({
+      title: `Deploy to ${channel}`,
+      message: `Promote ${version.semver} to ${channel}. Any model currently on ${channel} will be replaced.`,
+      confirmLabel: `Deploy to ${channel}`,
+      run: () => store.deployVersion(version.id, channel),
+    });
+  }
+  function askUndeploy(channel: ChannelName) {
+    if (!isAdmin) return;
+    setPending({
+      title: `Undeploy from ${channel}`,
+      message: `Remove ${version.semver} from the ${channel} channel. Inference traffic on ${channel} will fall back to whichever version is deployed next.`,
+      confirmLabel: `Undeploy from ${channel}`,
+      danger: true,
+      run: () => store.undeployChannel(channel),
+    });
+  }
+  async function confirmPending() {
+    if (!pending) return;
+    setBusy(true);
+    try {
+      await pending.run();
+    } finally {
+      setBusy(false);
+      setPending(null);
+    }
+  }
   return (
     <div className="detail-grid">
       <div className="detail-hero">
         <div>
-          <h2>{version.semver}</h2>
+          <div className="detail-title-row">
+            {editingName ? (
+              <form
+                className="detail-rename-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void saveRename();
+                }}
+              >
+                <input
+                  className="detail-rename-input"
+                  value={draftName}
+                  onChange={(event) => setDraftName(event.target.value)}
+                  autoFocus
+                  disabled={renameBusy}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      setEditingName(false);
+                      setDraftName(version.semver);
+                      setRenameError(null);
+                    }
+                  }}
+                />
+                <button type="submit" className="primary-button compact" disabled={renameBusy}>
+                  {renameBusy ? "Saving…" : "Save"}
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button compact"
+                  disabled={renameBusy}
+                  onClick={() => {
+                    setEditingName(false);
+                    setDraftName(version.semver);
+                    setRenameError(null);
+                  }}
+                >
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <>
+                <h2>{version.semver}</h2>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    className="icon-action-button"
+                    aria-label="Rename version"
+                    title="Rename this version (used as the public model identifier)"
+                    onClick={() => setEditingName(true)}
+                  >
+                    <Pencil size={14} aria-hidden="true" />
+                  </button>
+                )}
+                <Hint text="This is the selected model package: version tag, dataset lineage, artifact, metrics, and deployment state." />
+              </>
+            )}
+          </div>
+          {renameError && <p className="form-error">{renameError}</p>}
+          {version.originalSemver && version.originalSemver !== version.semver && (
+            <p className="detail-original-semver">
+              <span className="detail-original-semver-label">Original</span>
+              <code>{version.originalSemver}</code>
+            </p>
+          )}
           <p>{version.dataset}</p>
         </div>
-        <span className={`status-pill ${version.state}`}>{version.state}</span>
+        <div className="detail-hero-actions" aria-label="Lifecycle status">
+          <span className={`status-pill ${version.state}`}>{version.state}</span>
+        </div>
       </div>
-      <div className="metrics-row">
-        <MetricCard label="mAP50" value={pct(version.map50)} detail="box metric" />
-        <MetricCard label="Mask mAP" value={pct(version.maskMap)} detail="segmentation metric" />
-        <MetricCard label="Artifact" value={`${version.sizeMb.toFixed(1)} MB`} detail={version.contentHash} />
+      {pending && (
+        <Modal title={pending.title} onClose={() => (busy ? undefined : setPending(null))}>
+          <p>{pending.message}</p>
+          <div className="modal-actions">
+            <button type="button" className="ghost-button" onClick={() => setPending(null)} disabled={busy}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={pending.danger ? "danger-button" : "primary-button"}
+              onClick={() => void confirmPending()}
+              disabled={busy}
+            >
+              {busy ? "Working…" : pending.confirmLabel}
+            </button>
+          </div>
+        </Modal>
+      )}
+      <div>
+        <SectionMiniHeading title="Performance" hint="Final validation metrics and artifact identity for this version. Use mAP50 and mask mAP to compare model quality before promotion." />
+        <div className="metrics-row">
+          <MetricCard label="mAP50" value={pct(version.map50)} detail="box metric" />
+          <MetricCard label="Mask mAP" value={pct(version.maskMap)} detail="segmentation metric" />
+          <MetricCard label="Artifact" value={`${version.sizeMb.toFixed(1)} MB`} detail={version.contentHash} />
+        </div>
       </div>
+      <DescriptionSection version={version} isAdmin={isAdmin} />
       <InfoSection
         dataset={version.dataset}
+        datasetStats={resolveDatasetStats(version.dataset, version.datasetStats ?? run?.config.datasetStats)}
         sourceWeights={version.sourceWeights}
         accelerator={run ? `Colab ${run.config.colabAccelerator}` : undefined}
         classes={version.classes}
         hyperParameters={version.hyperParameters}
       />
       <div>
-        <h3>Run</h3>
+        <SectionMiniHeading title="Run" hint="Source training run and notebook reference used to produce this model version." />
         <p className="info-run">{run ? `${run.name} · ${run.colabNotebook || "no notebook recorded"}` : "No linked run"}</p>
+        <RunNote note={run?.config.note} />
       </div>
-      <div className="button-row">
-        <button className="primary-button" type="button" disabled={!isAdmin} title={writeTitle} onClick={() => void store.deployVersion(version.id, "production")}>
-          Deploy production
-        </button>
-        <button className="ghost-button" type="button" disabled={!isAdmin} title={writeTitle} onClick={() => void store.deployVersion(version.id, "staging")}>
-          Deploy staging
-        </button>
+      <div className="detail-actions-bar" aria-label="Lifecycle actions">
+        {!inProduction && (
+          <button
+            className="primary-button compact"
+            type="button"
+            disabled={!isAdmin}
+            title={isAdmin ? "Deploy this model to production" : writeTitle}
+            onClick={() => askDeploy("production")}
+          >
+            <Rocket size={14} aria-hidden="true" /> Deploy to Prod
+          </button>
+        )}
+        {!inStaging && (
+          <button
+            className="ghost-button compact"
+            type="button"
+            disabled={!isAdmin}
+            title={isAdmin ? "Deploy this model to staging" : writeTitle}
+            onClick={() => askDeploy("staging")}
+          >
+            <Upload size={14} aria-hidden="true" /> Deploy to Staging
+          </button>
+        )}
         {channelNames.map((name) => (
-          <button className="danger-button" key={name} type="button" disabled={!isAdmin} title={writeTitle} onClick={() => void store.undeployChannel(name)}>
-            Undeploy {name}
+          <button
+            className="danger-button compact"
+            key={name}
+            type="button"
+            disabled={!isAdmin}
+            title={isAdmin ? `Undeploy from ${name}` : writeTitle}
+            onClick={() => askUndeploy(name)}
+          >
+            <LogOut size={14} aria-hidden="true" /> Undeploy {name}
           </button>
         ))}
       </div>
@@ -1023,13 +1453,14 @@ function RunList({
 function RunDetail({ run }: { run: RegistryRun }) {
   return (
     <div className="run-detail">
-      <RunRow run={run} />
       <div className="progress-track">
         <div style={{ width: `${run.progress}%` }} />
       </div>
-      <RunLogs lines={run.logs} />
+      <RunNote note={run.config.note} />
+      <RunLogs run={run} />
       <InfoSection
         dataset={run.config.dataset}
+        datasetStats={resolveDatasetStats(run.config.dataset, run.config.datasetStats ?? run.datasetStats)}
         sourceWeights={run.config.sourceWeights}
         accelerator={`Colab ${run.config.colabAccelerator}`}
         classes={run.config.classes}
@@ -1039,7 +1470,19 @@ function RunDetail({ run }: { run: RegistryRun }) {
   );
 }
 
-function RunLogs({ lines }: { lines: string[] }) {
+function RunNote({ note }: { note?: string }) {
+  const trimmed = (note ?? "").trim();
+  if (!trimmed) return null;
+  return (
+    <section className="run-note-block" aria-label="Run note">
+      <span className="run-note-label">Note</span>
+      <p className="run-note-text">{trimmed}</p>
+    </section>
+  );
+}
+
+function RunLogs({ run }: { run: RegistryRun }) {
+  const lines = expertLogLines(run);
   const empty = lines.length === 0;
   return (
     <section className="run-logs" aria-label="Run logs">
@@ -1054,26 +1497,105 @@ function RunLogs({ lines }: { lines: string[] }) {
   );
 }
 
+function DescriptionSection({ version, isAdmin }: { version: RegistryVersion; isAdmin: boolean }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(version.description ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    setEditing(false);
+    setDraft(version.description ?? "");
+    setError(null);
+  }, [version.id, version.description]);
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      await store.updateVersionDescription(version.id, draft);
+      setEditing(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div>
+      <div className="description-header">
+        <SectionMiniHeading
+          title="Description"
+          hint="Free-form note describing this model version — use it for change-log entries, evaluation context, or operational reminders."
+        />
+        {!editing && isAdmin && (
+          <button
+            type="button"
+            className="ghost-button compact"
+            onClick={() => setEditing(true)}
+          >
+            <Pencil size={12} aria-hidden="true" /> {version.description ? "Edit" : "Add note"}
+          </button>
+        )}
+      </div>
+      {editing ? (
+        <>
+          <textarea
+            className="dna-textarea"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            rows={4}
+            disabled={busy}
+            autoFocus
+            placeholder="Notes about this version — purpose, validation context, anything worth remembering."
+          />
+          <div className="description-actions">
+            <button type="button" className="primary-button compact" onClick={() => void save()} disabled={busy}>
+              {busy ? "Saving…" : "Save"}
+            </button>
+            <button
+              type="button"
+              className="ghost-button compact"
+              disabled={busy}
+              onClick={() => {
+                setEditing(false);
+                setDraft(version.description ?? "");
+                setError(null);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+          {error && <p className="form-error">{error}</p>}
+        </>
+      ) : (
+        <p className={version.description ? "description-text" : "description-empty"}>
+          {version.description || "No description yet."}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function InfoSection({
   dataset,
+  datasetStats,
   sourceWeights,
   accelerator,
   classes,
   hyperParameters,
-  datasetCount,
 }: {
   dataset: string;
+  datasetStats?: DatasetStats;
   sourceWeights: string;
   accelerator?: string;
   classes: string[];
   hyperParameters: TrainConfig["hyperParameters"];
-  datasetCount?: number;
 }) {
   const hpEntries = Object.entries(hyperParameters);
+  const resolvedStats = resolveDatasetStats(dataset, datasetStats);
   return (
     <div className="info-section">
       <div className="info-block">
-        <h3>Training config</h3>
+        <SectionMiniHeading title="Training config" hint="Dataset source, checkpoint, accelerator, and image size used when this run or model version was created." />
         <dl className="info-grid">
           <dt>Dataset</dt>
           <dd className="mono">{dataset || "—"}</dd>
@@ -1085,23 +1607,24 @@ function InfoSection({
         </dl>
       </div>
       <div className="info-block">
-        <h3>Dataset</h3>
+        <SectionMiniHeading title="Dataset" hint="Dataset composition from the YAML and known split counts. Train, validation, and testing splits should match the dataset config used by YOLO." />
         <dl className="info-grid">
           <dt>Config</dt>
           <dd className="mono">{dataset || "—"}</dd>
           <dt>Classes</dt>
           <dd>{classes.length} total</dd>
-          {typeof datasetCount === "number" && (
+          {typeof resolvedStats?.total === "number" && (
             <>
               <dt>Records</dt>
-              <dd>{datasetCount.toLocaleString()}</dd>
+              <dd>{resolvedStats.total.toLocaleString()}</dd>
             </>
           )}
         </dl>
+        <DatasetSplitScroller stats={resolvedStats} />
         <div className="chip-list">{classes.map((name) => <span key={name}>{name}</span>)}</div>
       </div>
       <div className="info-block">
-        <h3>Hyperparameters</h3>
+        <SectionMiniHeading title="Hyperparameters" hint="Core YOLO training knobs recorded with the run, including epochs, image size, patience, learning rate, and augmentation settings." />
         <dl className="info-grid two-col">
           {hpEntries.map(([key, value]) => (
             <Fragment key={key}>
@@ -1133,7 +1656,7 @@ function RunRow({
         <span>{run.id}</span>
       </div>
       <div className="run-metrics">
-        <span>{run.status}</span>
+        <span className={`run-status-pill status-pill ${run.status}`}>{run.status}</span>
         <span>{run.progress}%</span>
         <span>{run.map50 === null ? "mAP pending" : `${pct(run.map50)} mAP50`}</span>
         <span>{run.maskMap === null ? "mask pending" : `${pct(run.maskMap)} mask`}</span>
@@ -1237,7 +1760,7 @@ function sectionTitle(section: Section) {
   return {
     overview: "Model operations",
     train: "Train pipeline",
-    models: "Model CRUD",
+    models: "Model lifecycle",
     storage: "Storage control",
   }[section];
 }

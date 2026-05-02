@@ -10,7 +10,7 @@ export function createRegistryStore(): RegistryStore {
   const url = import.meta.env.VITE_SUPABASE_URL;
   const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
   const slug = import.meta.env.VITE_MODEL_LINE_SLUG ?? "seeds-poc";
-  const quotaMb = Number(import.meta.env.VITE_STORAGE_QUOTA_MB ?? 32);
+  const quotaMb = Number(import.meta.env.VITE_STORAGE_QUOTA_MB ?? 512);
   if (url && key) {
     return createSupabaseStore({ supabaseUrl: url, supabaseAnonKey: key, modelLineSlug: slug, quotaMb });
   }

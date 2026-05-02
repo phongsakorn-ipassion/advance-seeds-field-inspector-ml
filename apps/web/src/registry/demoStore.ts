@@ -2,6 +2,7 @@ import type { RegistryStore } from "./api";
 import type {
   AuthSession,
   ChannelName,
+  DatasetStats,
   RegistryRun,
   RegistrySnapshot,
   TrainConfig,
@@ -12,11 +13,32 @@ export const demoAdmin = {
   password: "demo-admin",
 };
 
+const seedsV2Stats: DatasetStats = {
+  total: 1841,
+  train: 1473,
+  validation: 276,
+  testing: 92,
+  trainPath: "data/processed/seeds-v2/images/train",
+  validationPath: "data/processed/seeds-v2/images/val",
+  testingPath: "data/processed/seeds-v2/images/test",
+};
+
+const seedsV1Stats: DatasetStats = {
+  total: 1216,
+  train: 973,
+  validation: 182,
+  testing: 61,
+  trainPath: "data/processed/seeds-v1/images/train",
+  validationPath: "data/processed/seeds-v1/images/val",
+  testingPath: "data/processed/seeds-v1/images/test",
+};
+
 export const defaultConfig: TrainConfig = {
   modelLine: "seeds-poc",
-  dataset: "configs/dataset.banana-v2.yaml",
+  dataset: "",
+  datasetStats: undefined,
   sourceWeights: "yolo26n-seg.pt",
-  classes: ["apple", "apple_spot", "banana", "banana_spot", "orange", "orange_spot"],
+  classes: [],
   hyperParameters: {
     epochs: 50,
     imgsz: 640,
@@ -29,21 +51,23 @@ export const defaultConfig: TrainConfig = {
     copyPaste: 0.1,
   },
   colabAccelerator: "T4",
+  note: "",
 };
 
 const initialSnapshot: RegistrySnapshot = {
-  quotaMb: 32,
+  quotaMb: 512,
   channels: [
-    { name: "staging", versionId: "version-banana-v2-100", updatedAt: "2026-05-02 11:18", updatedBy: "training-sdk" },
-    { name: "production", versionId: "version-banana-v1-092", updatedAt: "2026-05-01 18:42", updatedBy: "operator" },
+    { name: "staging", versionId: "version-seeds-v2-100", updatedAt: "2026-05-02 11:18", updatedBy: "training-sdk" },
+    { name: "production", versionId: "version-seeds-v1-092", updatedAt: "2026-05-01 18:42", updatedBy: "operator" },
   ],
   runs: [
     {
-      id: "run-banana-v2-041",
-      name: "banana-v2-poc",
+      id: "run-seeds-v2-041",
+      name: "seeds-v2-poc",
       status: "succeeded",
       modelLine: "seeds-poc",
-      dataset: "configs/dataset.banana-v2.yaml",
+      dataset: "configs/dataset.seeds-v2.yaml",
+      datasetStats: seedsV2Stats,
       hardware: "Colab T4",
       startedAt: "2026-05-02 09:12",
       finishedAt: "2026-05-02 10:47",
@@ -51,15 +75,16 @@ const initialSnapshot: RegistrySnapshot = {
       map50: 0.88,
       maskMap: 0.82,
       config: defaultConfig,
-      colabNotebook: "Colab MCP / banana-v2-poc.ipynb",
-      logs: ["Mounted workspace", "Prepared banana-v2 data", "Epoch 50/50 complete", "Exported TFLite artifact"],
+      colabNotebook: "Colab MCP / seeds-v2-poc.ipynb",
+      logs: ["Mounted workspace", "Prepared dataset images", "Epoch 50/50 complete", "Exported TFLite artifact"],
     },
     {
-      id: "run-banana-v2-042",
-      name: "banana-v2-quantized-check",
+      id: "run-seeds-v2-042",
+      name: "seeds-v2-quantized-check",
       status: "running",
       modelLine: "seeds-poc",
-      dataset: "configs/dataset.banana-v2.yaml",
+      dataset: "configs/dataset.seeds-v2.yaml",
+      datasetStats: seedsV2Stats,
       hardware: "Colab L4",
       startedAt: "2026-05-02 11:28",
       finishedAt: null,
@@ -67,18 +92,19 @@ const initialSnapshot: RegistrySnapshot = {
       map50: 0.84,
       maskMap: 0.78,
       config: { ...defaultConfig, colabAccelerator: "L4" },
-      colabNotebook: "Colab MCP / banana-v2-quantized-check.ipynb",
+      colabNotebook: "Colab MCP / seeds-v2-quantized-check.ipynb",
       logs: ["Runtime set to L4", "Epoch 31/50", "mAP50=0.84 mask_mAP=0.78"],
     },
   ],
   versions: [
     {
-      id: "version-banana-v2-100",
-      semver: "1.0.0-banana-v2",
-      runId: "run-banana-v2-041",
+      id: "version-seeds-v2-100",
+      semver: "1.0.0-seeds-v2",
+      runId: "run-seeds-v2-041",
       state: "staging",
       sourceWeights: "yolo26n-seg.pt",
-      dataset: "configs/dataset.banana-v2.yaml",
+      dataset: "configs/dataset.seeds-v2.yaml",
+      datasetStats: seedsV2Stats,
       classes: defaultConfig.classes,
       hyperParameters: defaultConfig.hyperParameters,
       map50: 0.88,
@@ -89,12 +115,13 @@ const initialSnapshot: RegistrySnapshot = {
       createdAt: "2026-05-02 10:51",
     },
     {
-      id: "version-banana-v1-092",
-      semver: "0.9.2-banana-v1",
-      runId: "run-banana-v1-039",
+      id: "version-seeds-v1-092",
+      semver: "0.9.2-seeds-v1",
+      runId: "run-seeds-v1-039",
       state: "production",
       sourceWeights: "yolo26n-seg.pt",
-      dataset: "configs/dataset.banana-v1.yaml",
+      dataset: "configs/dataset.seeds-v1.yaml",
+      datasetStats: seedsV1Stats,
       classes: defaultConfig.classes,
       hyperParameters: { ...defaultConfig.hyperParameters, epochs: 40, mosaic: 0.5 },
       map50: 0.81,
@@ -110,7 +137,8 @@ const initialSnapshot: RegistrySnapshot = {
       runId: "run-old-070",
       state: "inactive",
       sourceWeights: "yolo26n-seg.pt",
-      dataset: "configs/dataset.banana-v1.yaml",
+      dataset: "configs/dataset.seeds-v1.yaml",
+      datasetStats: seedsV1Stats,
       classes: defaultConfig.classes,
       hyperParameters: { ...defaultConfig.hyperParameters, epochs: 25 },
       map50: 0.74,
@@ -122,18 +150,55 @@ const initialSnapshot: RegistrySnapshot = {
     },
   ],
   storage: [
-    { id: "artifact-v2-tflite", versionId: "version-banana-v2-100", key: "runs/run-banana-v2-041/1.0.0-banana-v2.tflite", kind: "tflite", sizeMb: 12.4, active: true },
-    { id: "artifact-v1-tflite", versionId: "version-banana-v1-092", key: "runs/run-banana-v1-039/0.9.2-banana-v1.tflite", kind: "tflite", sizeMb: 12.1, active: true },
+    { id: "artifact-v2-tflite", versionId: "version-seeds-v2-100", key: "runs/run-seeds-v2-041/1.0.0-seeds-v2.tflite", kind: "tflite", sizeMb: 12.4, active: true },
+    { id: "artifact-v1-tflite", versionId: "version-seeds-v1-092", key: "runs/run-seeds-v1-039/0.9.2-seeds-v1.tflite", kind: "tflite", sizeMb: 12.1, active: true },
     { id: "artifact-old-tflite", versionId: "version-old-v1-070", key: "runs/run-old-070/0.7.0-archive.tflite", kind: "tflite", sizeMb: 10.8, active: false },
   ],
 };
+
+const DEMO_SNAPSHOT_KEY = "advance-seeds:model-registry:demo-snapshot:v2";
 
 function nowStamp() {
   return new Date().toISOString().slice(0, 16).replace("T", " ");
 }
 
+function formatRunTimestamp(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+
+function loadPersistedSnapshot(): RegistrySnapshot | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(DEMO_SNAPSHOT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<RegistrySnapshot>;
+    if (!Array.isArray(parsed.runs) || !Array.isArray(parsed.versions) || !Array.isArray(parsed.channels) || !Array.isArray(parsed.storage)) {
+      return null;
+    }
+    return {
+      quotaMb: initialSnapshot.quotaMb,
+      channels: parsed.channels,
+      runs: parsed.runs,
+      versions: parsed.versions,
+      storage: parsed.storage,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function persistSnapshot(snapshot: RegistrySnapshot) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(DEMO_SNAPSHOT_KEY, JSON.stringify(snapshot));
+  } catch {
+    // Ignore quota/privacy-mode failures; demo mode can still run in memory.
+  }
+}
+
 export function createDemoStore(): RegistryStore {
-  let snapshot: RegistrySnapshot = structuredClone(initialSnapshot);
+  let snapshot: RegistrySnapshot = loadPersistedSnapshot() ?? structuredClone(initialSnapshot);
   let session: AuthSession | null = null;
   const dataListeners = new Set<() => void>();
   const authListeners = new Set<() => void>();
@@ -143,6 +208,7 @@ export function createDemoStore(): RegistryStore {
 
   function setSnapshot(next: RegistrySnapshot) {
     snapshot = next;
+    persistSnapshot(snapshot);
     notifyData();
   }
 
@@ -164,9 +230,11 @@ export function createDemoStore(): RegistryStore {
         completed.push(done);
         return done;
       }
+      const totalEpochs = run.config.hyperParameters.epochs || 1;
+      const epoch = Math.max(1, Math.min(totalEpochs, Math.ceil((progress / 100) * totalEpochs)));
       return {
         ...run, progress, map50, maskMap,
-        logs: [...run.logs.slice(-4), `Epoch progress ${progress}% / mAP50=${map50.toFixed(2)} mask=${maskMap.toFixed(2)}`],
+        logs: [...run.logs.slice(-49), `Epoch ${epoch}/${totalEpochs} (${progress}%) / mAP50=${map50.toFixed(2)} mask=${maskMap.toFixed(2)}`],
       };
     });
     if (!changed) return;
@@ -183,6 +251,7 @@ export function createDemoStore(): RegistryStore {
         state: "candidate" as const,
         sourceWeights: run.config.sourceWeights,
         dataset: run.config.dataset,
+        datasetStats: run.config.datasetStats,
         classes: run.config.classes,
         hyperParameters: run.config.hyperParameters,
         map50: run.map50 ?? 0,
@@ -191,6 +260,8 @@ export function createDemoStore(): RegistryStore {
         contentHash: `sha256:${run.id.slice(-8)}...`,
         compatSignature: "0256a143...a5f1a28d1",
         createdAt: nowStamp(),
+        description: "",
+        originalSemver: semver,
       };
     });
     setSnapshot({
@@ -243,12 +314,14 @@ export function createDemoStore(): RegistryStore {
     async startTraining(config) {
       const now = new Date();
       const id = `run-${now.getTime()}`;
+      const stamp = formatRunTimestamp(now);
       const run: RegistryRun = {
         id,
-        name: `${config.dataset.split("/").pop()?.replace(".yaml", "") ?? "model"}-${now.getHours()}${now.getMinutes()}`,
+        name: `${config.dataset.split("/").pop()?.replace(".yaml", "") ?? "model"}-${stamp}`,
         status: "running",
         modelLine: config.modelLine,
         dataset: config.dataset,
+        datasetStats: config.datasetStats,
         hardware: `Colab ${config.colabAccelerator}`,
         startedAt: nowStamp(),
         finishedAt: null,
@@ -294,8 +367,43 @@ export function createDemoStore(): RegistryStore {
         ),
       });
     },
+    async updateVersionDescription(versionId, description) {
+      setSnapshot({
+        ...snapshot,
+        versions: snapshot.versions.map((v) => (v.id === versionId ? { ...v, description } : v)),
+      });
+    },
+    async renameVersion(versionId, semver) {
+      const next = semver.trim();
+      if (!next) throw new Error("Version name cannot be empty.");
+      if (snapshot.versions.some((v) => v.id !== versionId && v.semver === next)) {
+        throw new Error(`Version "${next}" already exists.`);
+      }
+      setSnapshot({
+        ...snapshot,
+        versions: snapshot.versions.map((v) =>
+          v.id === versionId
+            ? { ...v, semver: next, originalSemver: v.originalSemver ?? v.semver }
+            : v,
+        ),
+        storage: snapshot.storage.map((s) =>
+          s.versionId === versionId
+            ? { ...s, key: s.key.replace(/[^/]+(\.[^/.]+)?$/, `${next}$1`) }
+            : s,
+        ),
+      });
+    },
     async deleteInactiveArtifact(storageId) {
-      setSnapshot({ ...snapshot, storage: snapshot.storage.filter((it) => it.id !== storageId) });
+      const item = snapshot.storage.find((it) => it.id === storageId);
+      if (!item || item.active) return;
+      setSnapshot({
+        ...snapshot,
+        channels: snapshot.channels.map((channel) =>
+          channel.versionId === item.versionId ? { ...channel, versionId: null, updatedAt: nowStamp(), updatedBy: session?.email ?? "demo-admin" } : channel,
+        ),
+        versions: snapshot.versions.filter((version) => version.id !== item.versionId),
+        storage: snapshot.storage.filter((artifact) => artifact.versionId !== item.versionId),
+      });
     },
     async uploadDataset(file, modelLineSlug) {
       const stamp = new Date().toISOString().replace(/[:.]/g, "-");
