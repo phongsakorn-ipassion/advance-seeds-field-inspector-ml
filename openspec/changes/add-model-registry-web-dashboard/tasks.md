@@ -17,3 +17,13 @@
 - [x] 3.3 Start local dev server and inspect the dashboard.
 - [x] 3.4 Run `openspec validate --all --strict`.
 - [x] 3.5 Commit the dashboard slice.
+
+## 4. Full Demo Workflow
+
+- [x] 4.1 Add admin login gate with demo admin role.
+- [x] 4.2 Add model detail view with metrics, classes, config, and artifact state.
+- [x] 4.3 Add training workflow form with default classes and hyperparameters.
+- [x] 4.4 Add simulated live training progress and Colab handoff context.
+- [x] 4.5 Add deploy, undeploy, and inactive artifact deletion actions.
+- [x] 4.6 Add storage quota usage, warnings, and cleanup affordances.
+- [x] 4.7 Run web build, Python tests, OpenSpec validation, and browser inspection.
