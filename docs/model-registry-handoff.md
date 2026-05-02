@@ -12,7 +12,9 @@
 
 This covers the Supabase + Cloudflare R2 backend that all other plans depend on: database schema, row-level security, two Edge Functions (OTA resolution and artifact upload), a shared TypeScript utility layer, CI, and local dev docs.
 
-Nothing from the web dashboard, Python SDK, or mobile client has been built yet.
+**Plan 2 — Python Registry SDK** is now partially implemented: core SDK methods
+and opt-in training lifecycle reporting are present. Web dashboard and mobile
+client work have not been built yet.
 
 ---
 
@@ -51,8 +53,12 @@ supabase/
   config.toml                           Supabase project config
 .github/workflows/backend.yml           CI: migrations + SQL tests + Edge Function tests
 docs/backend-setup.md                   operator guide for local dev and cloud deploy
+src/advance_seeds_ml/registry/          Python SDK for registry writes/uploads
+tests/test_registry.py                  SDK unit tests with fake transport
 openspec/changes/add-model-registry-backend/
   specs/model-registry/spec.md          capability spec (channels, versions, OTA, RLS)
+openspec/changes/add-python-registry-sdk/
+  specs/python-registry-sdk/spec.md     active SDK change spec
 docs/superpowers/specs/
   2026-05-02-model-registry-web-app-design.md  full design document
 docs/superpowers/plans/
@@ -120,6 +126,53 @@ Full operator guide: [docs/backend-setup.md](docs/backend-setup.md)
 
 ---
 
+## Python Registry SDK Usage
+
+The SDK reads trusted training credentials from environment variables:
+
+```bash
+export MODEL_REGISTRY_URL="http://127.0.0.1:54321"
+export MODEL_REGISTRY_SERVICE_ROLE_KEY="<local or cloud service-role key>"
+```
+
+Example direct SDK usage:
+
+```python
+from advance_seeds_ml.registry import RegistryClient, RegistryConfig
+
+client = RegistryClient(RegistryConfig.from_env())
+run = client.create_run(
+    model_line_id="<model_lines.id>",
+    config_yaml={"epochs": 3},
+)
+client.log_metrics(run["id"], [{"step": 1, "epoch": 1, "name": "metrics/mAP50", "value": 0.81}])
+uploaded = client.upload_artifact("models/yolo11n-seeds.tflite", kind="tflite", run_id=run["id"], semver="1.0.0")
+client.create_version(
+    run_id=run["id"],
+    model_line_id="<model_lines.id>",
+    semver="1.0.0",
+    metadata={"class_names": ["banana"], "input_size": 640, "output_kind": "end2end_nms_free", "task": "segment"},
+    tflite_r2_key=uploaded.r2_key,
+    size_bytes=uploaded.size_bytes,
+    content_hash=uploaded.content_hash,
+)
+client.finalize_run(run["id"], "succeeded")
+```
+
+Training script opt-in lifecycle reporting:
+
+```bash
+python scripts/train_yolo26n_seg.py \
+  --config configs/train.banana-v2.yaml \
+  --registry-report \
+  --registry-model-line-id "<model_lines.id>"
+```
+
+Dry runs never create the registry client, even if `--registry-report` is
+present.
+
+---
+
 ## Outstanding Items
 
 ### Must do before any plan continues
@@ -134,12 +187,15 @@ The OpenSpec change `add-model-registry-backend` has all tasks marked complete b
 
 ## What Comes Next (Plans 2–4)
 
-These are independent plans that depend on Plan 1's backend being live. They can be executed in any order, though Plan 2 (Python SDK) is the most immediately useful for daily training runs.
+These are independent plans that depend on Plan 1's backend being live. Plan 2
+has a useful first slice, but still has room for richer epoch callback reporting
+and export-script automation.
 
 ### Plan 2 — Python Registry SDK
 
 **Location:** `src/advance_seeds_ml/registry/`  
-**What it does:** Wraps the Supabase API and Edge Functions so that `train_yolo26n_seg.py` can call `Registry.start_run()`, `Registry.log_metrics()`, `Registry.upload_artifact()`, and `Registry.create_version()` without knowing about HTTP or R2.  
+**Current state:** Core client is implemented: env config, run creation, metric logging, finalization, signed artifact upload, version creation, and opt-in `train_yolo26n_seg.py` lifecycle reporting.  
+**Remaining:** Per-epoch Ultralytics callback wiring and export-script automation.  
 **Depends on:** `upload-artifact` Edge Function, `runs` + `run_metrics` tables.
 
 ### Plan 3 — Web Dashboard

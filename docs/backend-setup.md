@@ -38,7 +38,7 @@ deno test supabase/functions/_shared/compat.test.ts --allow-net=false
 
 # Edge functions: load fixture, serve, hit
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
-  -f supabase/tests/fixtures/seed_run_v1.sql
+  -f supabase/fixtures/seed_run_v1.sql
 supabase functions serve --env-file supabase/.env.local &
 deno test supabase/functions --allow-net --allow-env
 kill %1

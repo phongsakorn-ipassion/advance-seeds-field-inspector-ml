@@ -1,6 +1,9 @@
 import sys
 import tempfile
 import unittest
+import importlib.util
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -142,6 +145,141 @@ class TrainingConfigTests(unittest.TestCase):
         for key, value in config.items():
             self.assertEqual(resolved[key], value)
         self.assertEqual(resolved["hardware"]["kind"], "cuda")
+
+
+class TrainingScriptRegistryTests(unittest.TestCase):
+    def test_dry_run_does_not_create_registry_client_when_flag_is_set(self):
+        module = load_training_script()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_path = write_script_fixture_config(root)
+
+            calls = []
+            with redirect_stdout(StringIO()):
+                exit_code = module.main(
+                    ["--config", str(config_path), "--dry-run", "--registry-report", "--no-auto-hardware"],
+                    registry_client_factory=lambda: calls.append("created"),
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(calls, [])
+
+    def test_registry_enabled_finalizes_succeeded_training_run(self):
+        module = load_training_script()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_path = write_script_fixture_config(root)
+            registry = FakeRegistryClient()
+
+            with redirect_stdout(StringIO()):
+                exit_code = module.main(
+                    [
+                        "--config",
+                        str(config_path),
+                        "--registry-report",
+                        "--registry-model-line-id",
+                        "line-1",
+                        "--no-auto-hardware",
+                    ],
+                    registry_client_factory=lambda: registry,
+                    yolo_class=FakeYOLO,
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(registry.created_runs[0]["model_line_id"], "line-1")
+        self.assertEqual(registry.created_runs[0]["config_yaml"]["name"], "demo-run")
+        self.assertEqual(registry.finalized, [("run-1", "succeeded")])
+
+    def test_registry_enabled_finalizes_failed_training_run(self):
+        module = load_training_script()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_path = write_script_fixture_config(root)
+            registry = FakeRegistryClient()
+
+            with self.assertRaisesRegex(RuntimeError, "training failed"):
+                with redirect_stdout(StringIO()):
+                    module.main(
+                        [
+                            "--config",
+                            str(config_path),
+                            "--registry-report",
+                            "--registry-model-line-id",
+                            "line-1",
+                            "--no-auto-hardware",
+                        ],
+                        registry_client_factory=lambda: registry,
+                        yolo_class=FailingYOLO,
+                    )
+
+        self.assertEqual(registry.finalized, [("run-1", "failed")])
+
+
+def load_training_script():
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "train_yolo26n_seg.py"
+    spec = importlib.util.spec_from_file_location("train_yolo26n_seg_for_test", script_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def write_script_fixture_config(root: Path) -> Path:
+    config_dir = root / "configs"
+    config_dir.mkdir()
+    dataset = config_dir / "dataset.yaml"
+    dataset.write_text(
+        "\n".join(
+            [
+                "path: ../data/processed/demo",
+                "train: images/train",
+                "val: images/val",
+                "names:",
+                "  0: banana",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    config = config_dir / "train.yaml"
+    config.write_text(
+        "\n".join(
+            [
+                "model: yolo26n-seg.pt",
+                f"data: {dataset}",
+                f"project: {root / 'runs'}",
+                "name: demo-run",
+                "epochs: 1",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return config
+
+
+class FakeRegistryClient:
+    def __init__(self):
+        self.created_runs = []
+        self.finalized = []
+
+    def create_run(self, **kwargs):
+        self.created_runs.append(kwargs)
+        return {"id": "run-1"}
+
+    def finalize_run(self, run_id, status):
+        self.finalized.append((run_id, status))
+
+
+class FakeYOLO:
+    def __init__(self, model):
+        self.model = model
+
+    def train(self, **kwargs):
+        return {"ok": True, "kwargs": kwargs}
+
+
+class FailingYOLO(FakeYOLO):
+    def train(self, **kwargs):
+        raise RuntimeError("training failed")
 
 
 if __name__ == "__main__":
