@@ -36,6 +36,13 @@
 - [x] 5.3 Delete the R2 object and the `versions` row in a single request.
 - [x] 5.4 Add unit/contract tests using the existing function test harness.
 
+## 5b. Design System Alignment
+
+- [x] 5b.1 Vendor light-mode tokens from the demo (`tokens.css`).
+- [x] 5b.2 Rewrite `styles.css` to use tokens for every color, space, and radius.
+- [x] 5b.3 Replace sidebar shell with a sticky topbar; use `Sprout` brand mark.
+- [x] 5b.4 Update spec with design-DNA requirement scenarios.
+
 ## 6. GitHub Pages Deploy
 
 - [x] 6.1 Add `.github/workflows/pages.yml` that builds `apps/web` and

@@ -1,0 +1,51 @@
+/* Vendored from advance-seeds-field-inspector-demo/packages/tokens.
+   Source of truth: docs/handoff/design-tokens.json (in the demo repo).
+   Light theme only — keep in sync if the demo team rev's the design system. */
+
+:root {
+  --as-brand: #0F6E56;
+  --as-brand-soft: #E1F5EE;
+  --as-brand-deep: #04342C;
+  --as-brand-on: #FFFFFF;
+  --as-bg-primary: #FFFFFF;
+  --as-bg-secondary: #F4F4F1;
+  --as-bg-tertiary: #FAFAF9;
+  --as-text-primary: #1A1A1A;
+  --as-text-secondary: #6B6B68;
+  --as-text-tertiary: #9D9D9A;
+  --as-border-primary: rgba(0, 0, 0, 0.20);
+  --as-border-secondary: rgba(0, 0, 0, 0.12);
+  --as-border-tertiary: rgba(0, 0, 0, 0.06);
+  --as-success-bg: #EAF3DE;
+  --as-success-text: #27500A;
+  --as-warning-bg: #FAEEDA;
+  --as-warning-text: #633806;
+  --as-danger-bg: #FCEBEB;
+  --as-danger-text: #791F1F;
+  --as-info-bg: #E6F1FB;
+  --as-info-text: #0C447C;
+  --as-font-sans: system-ui, -apple-system, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  --as-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --as-space-xs: 4px;
+  --as-space-sm: 8px;
+  --as-space-md: 12px;
+  --as-space-lg: 16px;
+  --as-space-xl: 20px;
+  --as-space-2xl: 24px;
+  --as-space-3xl: 32px;
+  --as-space-4xl: 40px;
+  --as-radius-sm: 6px;
+  --as-radius-md: 10px;
+  --as-radius-lg: 14px;
+  --as-radius-xl: 18px;
+  --as-radius-2xl: 22px;
+  --as-radius-full: 9999px;
+  --as-duration-fast: 120ms;
+  --as-duration-normal: 220ms;
+  --as-duration-slow: 320ms;
+  --as-easing-standard: cubic-bezier(0.4, 0.0, 0.2, 1);
+  --as-easing-decel: cubic-bezier(0.0, 0.0, 0.2, 1);
+  --as-easing-accel: cubic-bezier(0.4, 0.0, 1, 1);
+}
+
+html { color-scheme: light; }

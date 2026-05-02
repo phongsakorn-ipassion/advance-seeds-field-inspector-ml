@@ -88,6 +88,35 @@ the browser bundle.
 - **THEN** the function rejects the request with HTTP 403 and does not touch
   R2 or the database
 
+### Requirement: Dashboard follows the Advance Seeds design system
+The dashboard SHALL adopt the Advance Seeds design DNA used by the field
+inspector demo so the two products feel like one product family.
+
+#### Scenario: Tokens drive every visual value
+- **WHEN** the dashboard renders any color, spacing, radius, font, or motion
+  duration
+- **THEN** the value resolves through a CSS variable defined in the vendored
+  `tokens.css` (mirroring `packages/tokens` from the demo repo)
+- **AND** no hard-coded hex colors, brand values, or spacing literals appear
+  outside `tokens.css`
+
+#### Scenario: Brand identity matches the demo
+- **WHEN** the dashboard renders the brand mark and primary affordances
+- **THEN** the brand color is the demo's deep teal (`--as-brand`)
+- **AND** the brand mark is a `Sprout` icon, not a custom block letter
+
+#### Scenario: Layout matches the demo's topbar shell
+- **WHEN** an authenticated operator views any page
+- **THEN** navigation lives in a sticky topbar (Overview / Train / Models /
+  Storage), not a sidebar
+- **AND** the workspace is centered with a max width consistent with the
+  demo dashboard
+
+#### Scenario: Light mode only
+- **WHEN** the dashboard renders
+- **THEN** only the light token set is active; no dark theme toggle is
+  exposed and the operating system's `prefers-color-scheme` is ignored
+
 ### Requirement: Dashboard publishes to GitHub Pages from CI
 The repository SHALL include a GitHub Actions workflow that builds
 `apps/web` and publishes `apps/web/dist` to GitHub Pages on pushes to the

@@ -1,13 +1,12 @@
 import { FormEvent, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   Activity,
-  CheckCircle2,
   Database,
   GitBranch,
-  History,
   LogOut,
   Rocket,
   ShieldCheck,
+  Sprout,
   Trash2,
   Wand2,
 } from "lucide-react";
@@ -79,47 +78,40 @@ export function App() {
   }
 
   return (
-    <main className="app-shell">
-      <aside className="sidebar" aria-label="Model registry navigation">
-        <div className="brand">
-          <div className="brand-mark">AS</div>
-          <div>
-            <strong>Advance Seeds</strong>
-            <span>Model Registry</span>
+    <div className="app-shell">
+      <header className="app-topbar" aria-label="Model registry navigation">
+        <div className="topbar-inner">
+          <div className="brand">
+            <Sprout size={20} className="brand-icon" aria-hidden="true" />
+            <div>
+              <strong>Advance Seeds</strong>
+              <span>Model Registry</span>
+            </div>
           </div>
+          <nav className="topbar-nav">
+            <button className={section === "overview" ? "active" : ""} onClick={() => setSection("overview")} type="button">Overview</button>
+            <button className={section === "train" ? "active" : ""} onClick={() => setSection("train")} type="button">Train</button>
+            <button className={section === "models" ? "active" : ""} onClick={() => setSection("models")} type="button">Models</button>
+            <button className={section === "storage" ? "active" : ""} onClick={() => setSection("storage")} type="button">Storage</button>
+          </nav>
+          <span className="topbar-spacer" />
+          <span className="topbar-user">
+            <ShieldCheck size={14} aria-hidden="true" />
+            {session.email}
+            <span className="role">· {isAdmin ? "admin" : "read-only"}</span>
+          </span>
+          <button className="ghost-button compact" type="button" onClick={() => void store.signOut()}>
+            <LogOut size={14} /> Sign out
+          </button>
         </div>
-        <nav>
-          <button className={section === "overview" ? "active" : ""} onClick={() => setSection("overview")} type="button">
-            <Activity size={18} /> Overview
-          </button>
-          <button className={section === "train" ? "active" : ""} onClick={() => setSection("train")} type="button">
-            <Wand2 size={18} /> Train
-          </button>
-          <button className={section === "models" ? "active" : ""} onClick={() => setSection("models")} type="button">
-            <GitBranch size={18} /> Models
-          </button>
-          <button className={section === "storage" ? "active" : ""} onClick={() => setSection("storage")} type="button">
-            <Database size={18} /> Storage
-          </button>
-        </nav>
-        <div className="sidebar-footer">
-          <ShieldCheck size={18} />
-          <div>
-            <strong>{session.email}</strong>
-            <span>{isAdmin ? "Admin role" : "Read-only"} · {store.mode} mode</span>
-          </div>
-        </div>
-      </aside>
+      </header>
 
-      <section className="workspace">
-        <header className="topbar">
+      <main className="workspace">
+        <header className="page-header">
           <div>
             <h1>{sectionTitle(section)}</h1>
             <p>{sectionDescription(section)}</p>
           </div>
-          <button className="ghost-button" type="button" onClick={() => void store.signOut()}>
-            <LogOut size={18} /> Sign out
-          </button>
         </header>
 
         {section === "overview" && (
@@ -169,8 +161,8 @@ export function App() {
             isAdmin={isAdmin}
           />
         )}
-      </section>
-    </main>
+      </main>
+    </div>
   );
 }
 
@@ -208,7 +200,7 @@ function LoginScreen({
     <main className="login-shell">
       <div className="login-panel">
         <div className="brand large">
-          <div className="brand-mark">AS</div>
+          <Sprout size={22} className="brand-icon" aria-hidden="true" />
           <div>
             <strong>Advance Seeds</strong>
             <span>Model Registry</span>
