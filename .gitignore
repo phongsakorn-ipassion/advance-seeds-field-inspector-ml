@@ -37,3 +37,8 @@ supabase/.env
 supabase/.env.local
 **/.deno/
 **/node_modules/
+
+# Frontend local outputs
+apps/web/dist/
+*.tsbuildinfo
+.playwright-mcp/
