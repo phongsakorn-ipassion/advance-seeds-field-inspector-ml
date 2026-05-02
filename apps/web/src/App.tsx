@@ -23,6 +23,7 @@ import {
 } from "./registry";
 
 type Section = "overview" | "train" | "models" | "storage";
+type TrainTab = "form" | "live" | "recent";
 
 function Hint({ text }: { text: string }) {
   return (
@@ -247,6 +248,7 @@ export function App() {
   const snapshot = useStoreSnapshot(store);
   const session = useStoreSession(store);
   const [section, setSection] = useState<Section>("overview");
+  const [trainTab, setTrainTab] = useState<TrainTab>("form");
   const [selectedVersionId, setSelectedVersionId] = useState("");
   const [focusedRunId, setFocusedRunId] = useState<string | null>(null);
   const [loginError, setLoginError] = useState("");
@@ -255,6 +257,8 @@ export function App() {
   function openRun(runId: string) {
     setFocusedRunId(runId);
     setSection("train");
+    const run = snapshot.runs.find((r) => r.id === runId);
+    setTrainTab(run?.status === "running" ? "live" : "recent");
   }
 
   useEffect(() => {
@@ -345,6 +349,8 @@ export function App() {
             isAdmin={isAdmin}
             focusedRunId={focusedRunId}
             setFocusedRunId={setFocusedRunId}
+            tab={trainTab}
+            setTab={setTrainTab}
             onStart={() => void store.startTraining(trainConfig)}
           />
         )}
@@ -541,6 +547,8 @@ function TrainWorkflow({
   isAdmin,
   focusedRunId,
   setFocusedRunId,
+  tab,
+  setTab,
   onStart,
 }: {
   config: TrainConfig;
@@ -549,6 +557,8 @@ function TrainWorkflow({
   isAdmin: boolean;
   focusedRunId: string | null;
   setFocusedRunId: (id: string | null) => void;
+  tab: TrainTab;
+  setTab: (tab: TrainTab) => void;
   onStart: () => void;
 }) {
   const runningRuns = runs.filter((r) => r.status === "running");
@@ -556,27 +566,64 @@ function TrainWorkflow({
   const recent = runs.filter((r) => r.status !== "running").slice(0, 6);
   const isFocusedRunning = focused?.status === "running";
   const [howOpen, setHowOpen] = useState(false);
+
+  const detailPanel = (
+    <section className={`panel run-detail-panel ${focused ? "open" : "closed"}`} aria-live="polite">
+      {focused && (
+        <>
+          <div className="run-detail-header">
+            <SectionHeading
+              title={`Run · ${focused.name}`}
+              text={`${focused.id} · ${focused.hardware}${focused.colabNotebook ? ` · ${focused.colabNotebook}` : ""}`}
+            />
+            <button type="button" className="ghost-button compact" onClick={() => setFocusedRunId(null)} aria-label="Close run detail">
+              <X size={14} /> Close
+            </button>
+          </div>
+          {isFocusedRunning && focused.map50 === null && (
+            <div className="track-hint">
+              <Info size={14} aria-hidden="true" />
+              <span>
+                Waiting for the Python SDK to stream <code>run_metrics</code>. Until the
+                training script writes metrics for this run, only the bootstrap log is shown.
+              </span>
+            </div>
+          )}
+          <RunDetail run={focused} />
+        </>
+      )}
+    </section>
+  );
+
   return (
-    <section className="train-layout">
-    <section className="content-grid wide-left">
-      <form
-        className="panel train-form"
-        onSubmit={(event: FormEvent) => {
-          event.preventDefault();
-          if (isAdmin) onStart();
-        }}
-      >
-        <div className="section-heading-row">
-          <SectionHeading title="Train new model" text="Defaults are loaded from the current PoC config. Adjust only what the demo needs." />
-          <button
-            type="button"
-            className="ghost-button compact"
-            onClick={() => setHowOpen(true)}
-            title="How training actually runs"
-          >
-            <Info size={14} aria-hidden="true" /> How training runs
-          </button>
-        </div>
+    <section className="train-layout-2">
+    <aside className="sub-nav" aria-label="Train pipeline navigation">
+      <button className={tab === "form" ? "active" : ""} onClick={() => setTab("form")} type="button">
+        <Wand2 size={16} /> Train new model
+      </button>
+      <button className={tab === "live" ? "active" : ""} onClick={() => setTab("live")} type="button">
+        <Activity size={16} /> Live tracking
+        {runningRuns.length > 0 && <span className="sub-nav-badge">{runningRuns.length}</span>}
+      </button>
+      <button className={tab === "recent" ? "active" : ""} onClick={() => setTab("recent")} type="button">
+        <Database size={16} /> Recent runs
+      </button>
+      <div className="sub-nav-spacer" />
+      <button className="sub-nav-info" onClick={() => setHowOpen(true)} type="button">
+        <Info size={14} /> How training runs
+      </button>
+    </aside>
+
+    <div className="train-content">
+    {tab === "form" && (
+    <form
+      className="panel train-form"
+      onSubmit={(event: FormEvent) => {
+        event.preventDefault();
+        if (isAdmin) onStart();
+      }}
+    >
+      <SectionHeading title="Train new model" text="Defaults are loaded from the current PoC config. Adjust only what the demo needs." />
         <label>
           <span className="label-text">
             Dataset config
@@ -643,71 +690,55 @@ function TrainWorkflow({
             <option value="A100">A100 — overkill, paid</option>
           </select>
         </label>
-        <button className="primary-button" type="submit" disabled={!isAdmin} title={isAdmin ? "" : "Admin role required"}>
-          <Rocket size={18} /> Start Colab MCP training
-        </button>
-      </form>
-      <section className="panel">
-        <SectionHeading
-          title="Live tracking"
-          text={
-            runningRuns.length > 0
-              ? "Click any row to view full detail in the panel below."
-              : "Runs appear here while they are in progress."
-          }
-        />
-        {runningRuns.length > 0 ? (
-          <RunList
-            runs={runningRuns}
-            selectedId={focused?.id ?? null}
-            onSelect={(id) => setFocusedRunId(id)}
+      <button className="primary-button" type="submit" disabled={!isAdmin} title={isAdmin ? "" : "Admin role required"}>
+        <Rocket size={18} /> Start Colab MCP training
+      </button>
+    </form>
+    )}
+
+    {tab === "live" && (
+      <>
+        <section className="panel">
+          <SectionHeading
+            title="Live tracking"
+            text={
+              runningRuns.length > 0
+                ? "Click any row to open full detail below."
+                : "Runs appear here while they are in progress."
+            }
           />
-        ) : (
-          <EmptyState
-            icon={<Wand2 size={24} />}
-            title="No runs in progress"
-            text="Configure the form on the left and start a Colab MCP run to see live metrics here."
-          />
-        )}
-      </section>
-    </section>
-    <section className="panel">
-      <SectionHeading title="Recent training runs" text="History from this model line. Click any row to open its full detail below." />
-      {recent.length > 0 ? (
-        <RunList runs={recent} selectedId={focused?.id ?? null} onSelect={(id) => setFocusedRunId(id)} />
-      ) : (
-        <EmptyState
-          icon={<Activity size={24} />}
-          title="No prior runs"
-          text="Once a run completes it shows up here with its final metrics and Colab notebook context."
-        />
-      )}
-    </section>
-    <section className={`panel run-detail-panel ${focused ? "open" : "closed"}`} aria-live="polite">
-      {focused && (
-        <>
-          <div className="run-detail-header">
-            <SectionHeading
-              title={`Run · ${focused.name}`}
-              text={`${focused.id} · ${focused.hardware}${focused.colabNotebook ? ` · ${focused.colabNotebook}` : ""}`}
+          {runningRuns.length > 0 ? (
+            <RunList runs={runningRuns} selectedId={focused?.id ?? null} onSelect={(id) => setFocusedRunId(id)} />
+          ) : (
+            <EmptyState
+              icon={<Wand2 size={24} />}
+              title="No runs in progress"
+              text="Switch to Train new model to start a Colab MCP run."
             />
-            <button type="button" className="ghost-button compact" onClick={() => setFocusedRunId(null)} aria-label="Close run detail">
-              <X size={14} /> Close
-            </button>
-          </div>
-          {isFocusedRunning && focused.map50 === null && (
-            <div className="track-hint">
-              <Info size={14} aria-hidden="true" />
-              <span>
-                Waiting for the Python SDK to stream <code>run_metrics</code>. Until the
-                training script writes metrics for this run, only the bootstrap log is shown.
-              </span>
-            </div>
           )}
-          <RunDetail run={focused} />
-        </>
-      )}
-    </section>
+        </section>
+        {detailPanel}
+      </>
+    )}
+
+    {tab === "recent" && (
+      <>
+        <section className="panel">
+          <SectionHeading title="Recent training runs" text="History from this model line. Click any row to open full detail below." />
+          {recent.length > 0 ? (
+            <RunList runs={recent} selectedId={focused?.id ?? null} onSelect={(id) => setFocusedRunId(id)} />
+          ) : (
+            <EmptyState
+              icon={<Activity size={24} />}
+              title="No prior runs"
+              text="Once a run completes it shows up here with its final metrics and Colab notebook context."
+            />
+          )}
+        </section>
+        {detailPanel}
+      </>
+    )}
+    </div>
     {howOpen && (
       <Modal title="How training actually runs" onClose={() => setHowOpen(false)}>
         <p>

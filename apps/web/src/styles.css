@@ -712,6 +712,91 @@ button.run-row:hover { background: var(--as-bg-secondary); }
   gap: var(--as-space-xl);
 }
 
+/* Two-column train shell: sub-nav + content */
+.train-layout-2 {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--as-space-xl);
+  align-items: start;
+}
+.sub-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--as-space-md);
+  border: 1px solid var(--as-border-tertiary);
+  border-radius: var(--as-radius-xl);
+  background: var(--as-bg-primary);
+  position: sticky;
+  top: 76px;
+}
+.sub-nav button {
+  display: flex;
+  align-items: center;
+  gap: var(--as-space-sm);
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--as-radius-md);
+  background: transparent;
+  color: var(--as-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--as-duration-fast) var(--as-easing-standard),
+              color var(--as-duration-fast) var(--as-easing-standard);
+}
+.sub-nav button:hover { color: var(--as-text-primary); background: var(--as-bg-secondary); }
+.sub-nav button.active {
+  background: var(--as-brand-soft);
+  color: var(--as-brand-deep);
+}
+.sub-nav-badge {
+  margin-left: auto;
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--as-radius-full);
+  background: var(--as-brand);
+  color: var(--as-brand-on);
+  font-size: 11px;
+  font-weight: 600;
+}
+.sub-nav-spacer { flex: 1; min-height: var(--as-space-md); }
+.sub-nav-info {
+  font-size: 12px !important;
+  color: var(--as-text-tertiary) !important;
+  font-weight: 400 !important;
+  border-top: 1px solid var(--as-border-tertiary) !important;
+  border-radius: 0 !important;
+  margin-top: 4px;
+  padding-top: 12px !important;
+}
+.sub-nav-info:hover {
+  color: var(--as-text-primary) !important;
+  background: transparent !important;
+}
+
+.train-content {
+  display: grid;
+  gap: var(--as-space-xl);
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .train-layout-2 { grid-template-columns: 1fr; }
+  .sub-nav {
+    position: relative;
+    top: auto;
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  .sub-nav-spacer { display: none; }
+  .sub-nav-info { border-top: 0 !important; padding-top: 10px !important; }
+}
+
 /* Section heading + side button row */
 .section-heading-row {
   display: flex;
