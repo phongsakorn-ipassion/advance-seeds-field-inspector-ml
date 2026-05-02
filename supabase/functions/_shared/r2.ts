@@ -2,6 +2,7 @@ import {
   S3Client,
   GetObjectCommand,
   PutObjectCommand,
+  DeleteObjectCommand,
 } from "https://esm.sh/@aws-sdk/client-s3@3.620.0";
 import { getSignedUrl } from "https://esm.sh/@aws-sdk/s3-request-presigner@3.620.0";
 
@@ -27,6 +28,10 @@ export async function presignGet(key: string, expiresIn = 3600): Promise<string>
     new GetObjectCommand({ Bucket: BUCKET(), Key: key }),
     { expiresIn },
   );
+}
+
+export async function deleteObject(key: string): Promise<void> {
+  await client().send(new DeleteObjectCommand({ Bucket: BUCKET(), Key: key }));
 }
 
 export async function presignPut(

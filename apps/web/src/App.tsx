@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   Activity,
   CheckCircle2,
@@ -14,39 +14,68 @@ import {
 import {
   ChannelName,
   defaultConfig,
-  demoAdmin,
-  initialState,
   RegistryRun,
-  RegistryState,
+  RegistryStore,
   RegistryVersion,
   TrainConfig,
-} from "./registryData";
+  createRegistryStore,
+} from "./registry";
 
 type Section = "overview" | "train" | "models" | "storage";
 
+const store = createRegistryStore();
+
+function useStoreSnapshot(s: RegistryStore) {
+  return useSyncExternalStore(
+    (l) => s.subscribe(l),
+    () => s.getSnapshot(),
+    () => s.getSnapshot(),
+  );
+}
+
+function useStoreSession(s: RegistryStore) {
+  return useSyncExternalStore(
+    (l) => s.subscribeAuth(l),
+    () => s.getSession(),
+    () => s.getSession(),
+  );
+}
+
 export function App() {
-  const [state, setState] = useState<RegistryState>(initialState);
+  const snapshot = useStoreSnapshot(store);
+  const session = useStoreSession(store);
   const [section, setSection] = useState<Section>("overview");
-  const [selectedVersionId, setSelectedVersionId] = useState(state.versions[0]?.id ?? "");
+  const [selectedVersionId, setSelectedVersionId] = useState("");
   const [loginError, setLoginError] = useState("");
   const [trainConfig, setTrainConfig] = useState<TrainConfig>(defaultConfig);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      setState((current) => advanceRunningJobs(current));
-    }, 1500);
-    return () => window.clearInterval(timer);
-  }, []);
+    if (!selectedVersionId && snapshot.versions[0]) setSelectedVersionId(snapshot.versions[0].id);
+  }, [snapshot.versions, selectedVersionId]);
 
-  const selectedVersion = state.versions.find((version) => version.id === selectedVersionId) ?? state.versions[0];
-  const storageUsed = state.storage.reduce((sum, item) => sum + item.sizeMb, 0);
-  const storagePercent = Math.round((storageUsed / state.quotaMb) * 100);
-  const storageOverQuota = storageUsed > state.quotaMb;
-  const production = resolveChannel(state, "production");
-  const staging = resolveChannel(state, "staging");
+  const selectedVersion = snapshot.versions.find((v) => v.id === selectedVersionId) ?? snapshot.versions[0];
+  const storageUsed = snapshot.storage.reduce((sum, item) => sum + item.sizeMb, 0);
+  const storagePercent = snapshot.quotaMb > 0 ? Math.round((storageUsed / snapshot.quotaMb) * 100) : 0;
+  const storageOverQuota = storageUsed > snapshot.quotaMb;
+  const production = resolveChannel(snapshot.channels, snapshot.versions, "production");
+  const staging = resolveChannel(snapshot.channels, snapshot.versions, "staging");
+  const isAdmin = !!session?.isAdmin;
 
-  if (!state.adminEmail) {
-    return <LoginScreen onLogin={(email, password) => handleLogin(email, password, setState, setLoginError)} error={loginError} />;
+  if (!session) {
+    return (
+      <LoginScreen
+        mode={store.mode}
+        onLogin={async (email, password) => {
+          try {
+            await store.signIn(email, password);
+            setLoginError("");
+          } catch (err) {
+            setLoginError(err instanceof Error ? err.message : "Login failed.");
+          }
+        }}
+        error={loginError}
+      />
+    );
   }
 
   return (
@@ -61,27 +90,23 @@ export function App() {
         </div>
         <nav>
           <button className={section === "overview" ? "active" : ""} onClick={() => setSection("overview")} type="button">
-            <Activity size={18} />
-            Overview
+            <Activity size={18} /> Overview
           </button>
           <button className={section === "train" ? "active" : ""} onClick={() => setSection("train")} type="button">
-            <Wand2 size={18} />
-            Train
+            <Wand2 size={18} /> Train
           </button>
           <button className={section === "models" ? "active" : ""} onClick={() => setSection("models")} type="button">
-            <GitBranch size={18} />
-            Models
+            <GitBranch size={18} /> Models
           </button>
           <button className={section === "storage" ? "active" : ""} onClick={() => setSection("storage")} type="button">
-            <Database size={18} />
-            Storage
+            <Database size={18} /> Storage
           </button>
         </nav>
         <div className="sidebar-footer">
           <ShieldCheck size={18} />
           <div>
-            <strong>{state.adminEmail}</strong>
-            <span>Pre-created admin role</span>
+            <strong>{session.email}</strong>
+            <span>{isAdmin ? "Admin role" : "Read-only"} · {store.mode} mode</span>
           </div>
         </div>
       </aside>
@@ -92,9 +117,8 @@ export function App() {
             <h1>{sectionTitle(section)}</h1>
             <p>{sectionDescription(section)}</p>
           </div>
-          <button className="ghost-button" type="button" onClick={() => setState((current) => ({ ...current, adminEmail: null }))}>
-            <LogOut size={18} />
-            Sign out
+          <button className="ghost-button" type="button" onClick={() => void store.signOut()}>
+            <LogOut size={18} /> Sign out
           </button>
         </header>
 
@@ -102,9 +126,9 @@ export function App() {
           <Overview
             production={production}
             staging={staging}
-            runs={state.runs}
+            runs={snapshot.runs}
             storageUsed={storageUsed}
-            quota={state.quotaMb}
+            quota={snapshot.quotaMb}
             storagePercent={storagePercent}
             storageOverQuota={storageOverQuota}
             onOpenTrain={() => setSection("train")}
@@ -116,31 +140,33 @@ export function App() {
           <TrainWorkflow
             config={trainConfig}
             setConfig={setTrainConfig}
-            runs={state.runs}
-            onStart={() => {
-              const run = createTrainingRun(trainConfig);
-              setState((current) => ({ ...current, runs: [run, ...current.runs] }));
-            }}
+            runs={snapshot.runs}
+            isAdmin={isAdmin}
+            onStart={() => void store.startTraining(trainConfig)}
           />
         )}
 
         {section === "models" && selectedVersion && (
           <ModelsWorkflow
-            state={state}
+            channels={snapshot.channels}
+            versions={snapshot.versions}
+            runs={snapshot.runs}
             selectedVersion={selectedVersion}
             selectedVersionId={selectedVersionId}
             setSelectedVersionId={setSelectedVersionId}
-            setState={setState}
+            isAdmin={isAdmin}
           />
         )}
 
         {section === "storage" && (
           <StorageWorkflow
-            state={state}
+            quotaMb={snapshot.quotaMb}
+            storage={snapshot.storage}
+            versions={snapshot.versions}
             storageUsed={storageUsed}
             storagePercent={storagePercent}
             storageOverQuota={storageOverQuota}
-            setState={setState}
+            isAdmin={isAdmin}
           />
         )}
       </section>
@@ -148,9 +174,17 @@ export function App() {
   );
 }
 
-function LoginScreen({ onLogin, error }: { onLogin: (email: string, password: string) => void; error: string }) {
-  const [email, setEmail] = useState(demoAdmin.email);
-  const [password, setPassword] = useState(demoAdmin.password);
+function LoginScreen({
+  mode,
+  onLogin,
+  error,
+}: {
+  mode: RegistryStore["mode"];
+  onLogin: (email: string, password: string) => void;
+  error: string;
+}) {
+  const [email, setEmail] = useState(mode === "demo" ? "admin@advance-seeds.demo" : "");
+  const [password, setPassword] = useState(mode === "demo" ? "demo-admin" : "");
 
   return (
     <main className="login-shell">
@@ -170,7 +204,11 @@ function LoginScreen({ onLogin, error }: { onLogin: (email: string, password: st
         </div>
         <div>
           <h1>Admin console</h1>
-          <p>Use the pre-created demo admin role to manage training, deployment, and storage.</p>
+          <p>
+            {mode === "demo"
+              ? "Use the pre-created demo admin role to manage training, deployment, and storage."
+              : "Sign in with your Supabase account. Admin role grants write access; everyone else is read-only."}
+          </p>
         </div>
         <label>
           Email
@@ -183,7 +221,7 @@ function LoginScreen({ onLogin, error }: { onLogin: (email: string, password: st
         {error && <p className="form-error">{error}</p>}
         <button className="primary-button" type="submit">
           <ShieldCheck size={18} />
-          Log in as admin
+          Sign in
         </button>
       </form>
     </main>
@@ -230,16 +268,14 @@ function Overview({
             <Step number="4" title="Clean" text="Watch R2 usage and delete inactive artifacts before quota is exceeded." />
           </div>
           <button className="primary-button" type="button" onClick={onOpenTrain}>
-            <Wand2 size={18} />
-            Start training
+            <Wand2 size={18} /> Start training
           </button>
         </section>
         <section className="panel">
           <SectionHeading title="Live runs" text="Reported by the Python SDK; Colab MCP context is preserved per run." />
           <RunList runs={runs.slice(0, 4)} />
           <button className={storageOverQuota ? "danger-button" : "ghost-button"} type="button" onClick={onOpenStorage}>
-            <Database size={18} />
-            Review storage
+            <Database size={18} /> Review storage
           </button>
         </section>
       </section>
@@ -251,11 +287,13 @@ function TrainWorkflow({
   config,
   setConfig,
   runs,
+  isAdmin,
   onStart,
 }: {
   config: TrainConfig;
   setConfig: (config: TrainConfig) => void;
   runs: RegistryRun[];
+  isAdmin: boolean;
   onStart: () => void;
 }) {
   const latest = runs[0];
@@ -265,7 +303,7 @@ function TrainWorkflow({
         className="panel train-form"
         onSubmit={(event: FormEvent) => {
           event.preventDefault();
-          onStart();
+          if (isAdmin) onStart();
         }}
       >
         <SectionHeading title="Train new model" text="Defaults are loaded from the current PoC config. Adjust only what the demo needs." />
@@ -304,9 +342,8 @@ function TrainWorkflow({
             <option value="A100">A100</option>
           </select>
         </label>
-        <button className="primary-button" type="submit">
-          <Rocket size={18} />
-          Start Colab MCP training
+        <button className="primary-button" type="submit" disabled={!isAdmin} title={isAdmin ? "" : "Admin role required"}>
+          <Rocket size={18} /> Start Colab MCP training
         </button>
       </form>
       <section className="panel">
@@ -318,24 +355,28 @@ function TrainWorkflow({
 }
 
 function ModelsWorkflow({
-  state,
+  channels,
+  versions,
+  runs,
   selectedVersion,
   selectedVersionId,
   setSelectedVersionId,
-  setState,
+  isAdmin,
 }: {
-  state: RegistryState;
+  channels: ReturnType<RegistryStore["getSnapshot"]>["channels"];
+  versions: RegistryVersion[];
+  runs: RegistryRun[];
   selectedVersion: RegistryVersion;
   selectedVersionId: string;
   setSelectedVersionId: (id: string) => void;
-  setState: React.Dispatch<React.SetStateAction<RegistryState>>;
+  isAdmin: boolean;
 }) {
   return (
     <section className="content-grid wide-right">
       <section className="panel">
         <SectionHeading title="Model versions" text="Select a model, then deploy or undeploy channels." />
         <div className="version-list">
-          {state.versions.map((version) => (
+          {versions.map((version) => (
             <button
               className={version.id === selectedVersionId ? "version-card selected" : "version-card"}
               key={version.id}
@@ -354,24 +395,28 @@ function ModelsWorkflow({
       </section>
       <section className="panel detail-panel">
         <SectionHeading title="Model detail" text="Metrics, classes, config, artifact, and deployment state." />
-        <ModelDetail version={selectedVersion} state={state} setState={setState} />
+        <ModelDetail version={selectedVersion} channels={channels} runs={runs} isAdmin={isAdmin} />
       </section>
     </section>
   );
 }
 
 function StorageWorkflow({
-  state,
+  quotaMb,
+  storage,
+  versions,
   storageUsed,
   storagePercent,
   storageOverQuota,
-  setState,
+  isAdmin,
 }: {
-  state: RegistryState;
+  quotaMb: number;
+  storage: ReturnType<RegistryStore["getSnapshot"]>["storage"];
+  versions: RegistryVersion[];
   storageUsed: number;
   storagePercent: number;
   storageOverQuota: boolean;
-  setState: React.Dispatch<React.SetStateAction<RegistryState>>;
+  isAdmin: boolean;
 }) {
   return (
     <section className="panel">
@@ -379,9 +424,7 @@ function StorageWorkflow({
       <div className={storageOverQuota ? "quota-banner danger" : "quota-banner"}>
         <div>
           <strong>{storageUsed.toFixed(1)} MB used</strong>
-          <span>
-            {storagePercent}% of {state.quotaMb} MB demo quota
-          </span>
+          <span>{storagePercent}% of {quotaMb} MB demo quota</span>
         </div>
         {storageOverQuota && <span>Over quota. Delete inactive artifacts.</span>}
       </div>
@@ -389,8 +432,8 @@ function StorageWorkflow({
         <div style={{ width: `${Math.min(storagePercent, 100)}%` }} />
       </div>
       <div className="storage-list">
-        {state.storage.map((item) => {
-          const version = state.versions.find((candidate) => candidate.id === item.versionId);
+        {storage.map((item) => {
+          const version = versions.find((candidate) => candidate.id === item.versionId);
           return (
             <article className="storage-row" key={item.id}>
               <div>
@@ -399,9 +442,14 @@ function StorageWorkflow({
               </div>
               <span>{item.sizeMb.toFixed(1)} MB</span>
               <span className={item.active ? "status-pill production" : "status-pill inactive"}>{item.active ? "active" : "inactive"}</span>
-              <button className="danger-button compact" disabled={item.active} type="button" onClick={() => deleteArtifact(item.id, setState)}>
-                <Trash2 size={16} />
-                Delete
+              <button
+                className="danger-button compact"
+                disabled={item.active || !isAdmin}
+                type="button"
+                onClick={() => void store.deleteInactiveArtifact(item.id)}
+                title={!isAdmin ? "Admin role required" : ""}
+              >
+                <Trash2 size={16} /> Delete
               </button>
             </article>
           );
@@ -413,15 +461,18 @@ function StorageWorkflow({
 
 function ModelDetail({
   version,
-  state,
-  setState,
+  channels,
+  runs,
+  isAdmin,
 }: {
   version: RegistryVersion;
-  state: RegistryState;
-  setState: React.Dispatch<React.SetStateAction<RegistryState>>;
+  channels: ReturnType<RegistryStore["getSnapshot"]>["channels"];
+  runs: RegistryRun[];
+  isAdmin: boolean;
 }) {
-  const run = state.runs.find((candidate) => candidate.id === version.runId);
-  const channelNames = state.channels.filter((channel) => channel.versionId === version.id).map((channel) => channel.name);
+  const run = runs.find((candidate) => candidate.id === version.runId);
+  const channelNames = channels.filter((channel) => channel.versionId === version.id).map((channel) => channel.name);
+  const writeTitle = isAdmin ? "" : "Admin role required";
   return (
     <div className="detail-grid">
       <div className="detail-hero">
@@ -449,14 +500,14 @@ function ModelDetail({
         <p>{run ? `${run.name} / ${run.colabNotebook}` : "No linked run"}</p>
       </div>
       <div className="button-row">
-        <button className="primary-button" type="button" onClick={() => deployVersion(version.id, "production", setState)}>
+        <button className="primary-button" type="button" disabled={!isAdmin} title={writeTitle} onClick={() => void store.deployVersion(version.id, "production")}>
           Deploy production
         </button>
-        <button className="ghost-button" type="button" onClick={() => deployVersion(version.id, "staging", setState)}>
+        <button className="ghost-button" type="button" disabled={!isAdmin} title={writeTitle} onClick={() => void store.deployVersion(version.id, "staging")}>
           Deploy staging
         </button>
         {channelNames.map((name) => (
-          <button className="danger-button" key={name} type="button" onClick={() => undeployChannel(name, setState)}>
+          <button className="danger-button" key={name} type="button" disabled={!isAdmin} title={writeTitle} onClick={() => void store.undeployChannel(name)}>
             Undeploy {name}
           </button>
         ))}
@@ -551,160 +602,13 @@ function NumberField({
   );
 }
 
-function handleLogin(
-  email: string,
-  password: string,
-  setState: React.Dispatch<React.SetStateAction<RegistryState>>,
-  setLoginError: (message: string) => void,
+function resolveChannel(
+  channels: ReturnType<RegistryStore["getSnapshot"]>["channels"],
+  versions: RegistryVersion[],
+  name: ChannelName,
 ) {
-  if (email === demoAdmin.email && password === demoAdmin.password) {
-    setState((current) => ({ ...current, adminEmail: email }));
-    setLoginError("");
-    return;
-  }
-  setLoginError("Invalid demo admin credentials.");
-}
-
-function createTrainingRun(config: TrainConfig): RegistryRun {
-  const now = new Date();
-  const id = `run-${now.getTime()}`;
-  return {
-    id,
-    name: `${config.dataset.split("/").pop()?.replace(".yaml", "") ?? "model"}-${now.getHours()}${now.getMinutes()}`,
-    status: "running",
-    modelLine: config.modelLine,
-    dataset: config.dataset,
-    hardware: `Colab ${config.colabAccelerator}`,
-    startedAt: now.toISOString().slice(0, 16).replace("T", " "),
-    finishedAt: null,
-    progress: 4,
-    map50: 0.35,
-    maskMap: 0.31,
-    config,
-    colabNotebook: `Colab MCP / ${id}.ipynb`,
-    logs: [
-      `Runtime requested: ${config.colabAccelerator}`,
-      "Notebook cells prepared through Colab MCP",
-      "Training command queued",
-    ],
-  };
-}
-
-function advanceRunningJobs(state: RegistryState): RegistryState {
-  let changed = false;
-  const completedRuns: RegistryRun[] = [];
-  const nextRuns = state.runs.map((run) => {
-    if (run.status !== "running") return run;
-    changed = true;
-    const progress = Math.min(100, run.progress + 7);
-    const map50 = Math.min(0.91, (run.map50 ?? 0.35) + 0.025);
-    const maskMap = Math.min(0.84, (run.maskMap ?? 0.31) + 0.022);
-    if (progress >= 100) {
-      const completedRun = {
-        ...run,
-        progress,
-        map50,
-        maskMap,
-        status: "succeeded" as const,
-        finishedAt: new Date().toISOString().slice(0, 16).replace("T", " "),
-        logs: [...run.logs, "Epochs complete", "Artifact uploaded through signed R2 URL"],
-      };
-      completedRuns.push(completedRun);
-      return completedRun;
-    }
-    return {
-      ...run,
-      progress,
-      map50,
-      maskMap,
-      logs: [...run.logs.slice(-4), `Epoch progress ${progress}% / mAP50=${map50.toFixed(2)} mask=${maskMap.toFixed(2)}`],
-    };
-  });
-  if (!changed) return state;
-  if (completedRuns.length === 0) {
-    return { ...state, runs: nextRuns };
-  }
-  const newVersions = completedRuns.map((run) => {
-    const semver = `1.0.${state.versions.length + 1}-${run.id.slice(-4)}`;
-    return {
-      id: `version-${run.id}`,
-      semver,
-      runId: run.id,
-      state: "candidate" as const,
-      sourceWeights: run.config.sourceWeights,
-      dataset: run.config.dataset,
-      classes: run.config.classes,
-      hyperParameters: run.config.hyperParameters,
-      map50: run.map50 ?? 0,
-      maskMap: run.maskMap ?? 0,
-      sizeMb: 12.2,
-      contentHash: `sha256:${run.id.slice(-8)}...`,
-      compatSignature: "0256a143...a5f1a28d1",
-      createdAt: new Date().toISOString().slice(0, 16).replace("T", " "),
-    };
-  });
-  return {
-    ...state,
-    runs: nextRuns,
-    versions: [...newVersions, ...state.versions],
-    storage: [
-      ...newVersions.map((version) => ({
-        id: `artifact-${version.id}`,
-        versionId: version.id,
-        key: `runs/${version.runId}/${version.semver}.tflite`,
-        kind: "tflite" as const,
-        sizeMb: version.sizeMb,
-        active: false,
-      })),
-      ...state.storage,
-    ],
-  };
-}
-
-function deployVersion(
-  versionId: string,
-  channelName: ChannelName,
-  setState: React.Dispatch<React.SetStateAction<RegistryState>>,
-) {
-  setState((current) => ({
-    ...current,
-    channels: current.channels.map((channel) =>
-      channel.name === channelName
-        ? { ...channel, versionId, updatedAt: new Date().toISOString().slice(0, 16).replace("T", " "), updatedBy: "demo-admin" }
-        : channel,
-    ),
-    versions: current.versions.map((version) => ({
-      ...version,
-      state: version.id === versionId ? channelName : version.state === channelName ? "candidate" : version.state,
-    })),
-    storage: current.storage.map((item) => (item.versionId === versionId ? { ...item, active: true } : item)),
-  }));
-}
-
-function undeployChannel(channelName: ChannelName, setState: React.Dispatch<React.SetStateAction<RegistryState>>) {
-  setState((current) => {
-    const oldVersionId = current.channels.find((channel) => channel.name === channelName)?.versionId;
-    return {
-      ...current,
-      channels: current.channels.map((channel) =>
-        channel.name === channelName
-          ? { ...channel, versionId: null, updatedAt: new Date().toISOString().slice(0, 16).replace("T", " "), updatedBy: "demo-admin" }
-          : channel,
-      ),
-      versions: current.versions.map((version) =>
-        version.id === oldVersionId ? { ...version, state: version.state === channelName ? "candidate" : version.state } : version,
-      ),
-    };
-  });
-}
-
-function deleteArtifact(id: string, setState: React.Dispatch<React.SetStateAction<RegistryState>>) {
-  setState((current) => ({ ...current, storage: current.storage.filter((item) => item.id !== id) }));
-}
-
-function resolveChannel(state: RegistryState, name: ChannelName) {
-  const versionId = state.channels.find((channel) => channel.name === name)?.versionId;
-  return state.versions.find((version) => version.id === versionId);
+  const versionId = channels.find((c) => c.name === name)?.versionId;
+  return versions.find((v) => v.id === versionId);
 }
 
 function updateHp<K extends keyof TrainConfig["hyperParameters"]>(
@@ -717,10 +621,7 @@ function updateHp<K extends keyof TrainConfig["hyperParameters"]>(
 }
 
 function splitLines(value: string) {
-  return value
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
+  return value.split("\n").map((line) => line.trim()).filter(Boolean);
 }
 
 function sectionTitle(section: Section) {
