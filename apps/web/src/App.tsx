@@ -591,9 +591,11 @@ function TrainWorkflow({
                 href={colabUrl(focused.id)}
                 target="_blank"
                 rel="noopener noreferrer"
+                title="Opens the training notebook in Colab. After it loads, click Runtime → Run all (Cmd/Ctrl+F9) to start — Colab does not auto-execute."
               >
                 <Notebook size={14} /> Open in Colab <ExternalLink size={12} />
               </a>
+              <Hint text="Colab does NOT auto-run the notebook. Once it opens, click Runtime → Run all (Cmd/Ctrl+F9). The notebook will then prompt for a Supabase service-role key and start training." />
               <button type="button" className="ghost-button compact" onClick={() => setFocusedRunId(null)} aria-label="Close run detail">
                 <X size={14} /> Close
               </button>
