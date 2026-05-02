@@ -16,6 +16,8 @@ jobs:
         with: { deno-version: v1.x }
       - uses: supabase/setup-cli@v1
         with: { version: latest }
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
       - name: Start Supabase
         run: supabase start
       - name: Apply migrations

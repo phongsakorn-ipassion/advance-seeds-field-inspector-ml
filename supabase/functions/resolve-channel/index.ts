@@ -44,7 +44,13 @@ Deno.serve(async (req) => {
   }
   if (currentVersion === v.id) return json({ action: "noop" });
 
-  const modelUrl = await presignGet(v.tflite_r2_key, 3600);
+  let modelUrl: string;
+  try {
+    modelUrl = await presignGet(v.tflite_r2_key, 3600);
+  } catch (e) {
+    console.error("presignGet failed:", e);
+    return json({ error: "artifact unavailable" }, 503);
+  }
   return json({
     action: "update",
     version_id: v.id,

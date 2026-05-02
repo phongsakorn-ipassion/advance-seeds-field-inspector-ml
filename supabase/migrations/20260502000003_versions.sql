@@ -38,14 +38,12 @@ create table public.versions (
 create or replace function public.versions_set_compat_signature()
 returns trigger language plpgsql as $$
 begin
-  if new.compat_signature is null then
-    new.compat_signature := public.compute_compat_signature(
-      array(select jsonb_array_elements_text(new.metadata->'class_names')),
-      (new.metadata->>'input_size')::int,
-      new.metadata->>'output_kind',
-      new.metadata->>'task'
-    );
-  end if;
+  new.compat_signature := public.compute_compat_signature(
+    array(select jsonb_array_elements_text(new.metadata->'class_names')),
+    (new.metadata->>'input_size')::int,
+    new.metadata->>'output_kind',
+    new.metadata->>'task'
+  );
   return new;
 end;
 $$;

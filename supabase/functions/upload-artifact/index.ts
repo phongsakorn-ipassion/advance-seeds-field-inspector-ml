@@ -21,6 +21,10 @@ Deno.serve(async (req) => {
   if (!body.kind || !body.run_id || !body.semver) {
     return json({ error: "kind, run_id, semver required" }, 400);
   }
+  const SAFE_SEGMENT = /^[A-Za-z0-9._-]+$/;
+  if (!SAFE_SEGMENT.test(body.run_id) || !SAFE_SEGMENT.test(body.semver)) {
+    return json({ error: "invalid run_id or semver" }, 400);
+  }
 
   const ext = body.kind === "tflite" ? "tflite" : "mlmodel";
   const r2Key = `runs/${body.run_id}/${body.semver}.${ext}`;
@@ -40,7 +44,9 @@ function roleFromJwt(authHeader: string): string | null {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
   try {
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    const raw = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = raw + "=".repeat((4 - raw.length % 4) % 4);
+    const payload = JSON.parse(atob(padded));
     if (payload.role === "service_role") return "service_role";
     if (payload.app_metadata?.role === "admin") return "admin";
     return payload.role ?? null;
