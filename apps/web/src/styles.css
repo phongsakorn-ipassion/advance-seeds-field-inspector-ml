@@ -72,10 +72,12 @@ button {
   gap: var(--as-space-sm);
   color: var(--as-text-primary);
 }
+.brand > div { display: grid; gap: 2px; line-height: 1.2; }
 .brand .brand-icon { color: var(--as-brand); }
-.brand strong { font-size: 16px; font-weight: 500; }
-.brand span { color: var(--as-text-secondary); font-size: 12px; }
+.brand strong { font-size: 15px; font-weight: 500; }
+.brand span { color: var(--as-text-secondary); font-size: 11px; }
 .brand.large strong { font-size: 18px; }
+.brand.large span { font-size: 12px; }
 
 .admin-card {
   display: flex;
@@ -295,7 +297,7 @@ button {
   border-radius: var(--as-radius-md);
   background: var(--as-bg-tertiary);
 }
-.journey-step > span {
+.journey-step > .step-num {
   display: grid;
   place-items: center;
   width: 28px;
@@ -305,6 +307,17 @@ button {
   color: var(--as-brand-deep);
   font-weight: 500;
   font-size: 13px;
+  flex-shrink: 0;
+}
+.journey-step > .step-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--as-radius-md);
+  background: var(--as-brand-soft);
+  color: var(--as-brand-deep);
+  flex-shrink: 0;
 }
 .journey-step strong {
   display: block;
@@ -376,28 +389,42 @@ button {
 /* ==== Forms ==== */
 
 .train-form { gap: var(--as-space-md); }
-.train-form label {
+.train-form label,
+.manual-login label {
   display: grid;
   gap: 6px;
-  font-size: 13px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: var(--as-text-secondary);
+}
+.train-form .label-text,
+.manual-login .label-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .train-form input,
 .train-form textarea,
 .train-form select,
 .manual-login input {
-  height: 40px;
+  height: 44px;
   width: 100%;
   padding: 0 var(--as-space-md);
   border: 1px solid var(--as-border-secondary);
   border-radius: var(--as-radius-md);
   background: var(--as-bg-primary);
   color: var(--as-text-primary);
-  font: inherit;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
   transition: border-color var(--as-duration-fast) var(--as-easing-standard),
               box-shadow var(--as-duration-fast) var(--as-easing-standard);
 }
-.train-form textarea { height: auto; padding: var(--as-space-md); resize: vertical; }
+.train-form textarea { height: auto; padding: var(--as-space-md); resize: vertical; min-height: 96px; }
 .train-form input:focus,
 .train-form textarea:focus,
 .train-form select:focus,
@@ -405,6 +432,62 @@ button {
   outline: none;
   border-color: var(--as-brand);
   box-shadow: 0 0 0 3px var(--as-brand-soft);
+}
+.train-form input::placeholder,
+.manual-login input::placeholder { color: var(--as-text-tertiary); }
+
+/* Info hint */
+.hint {
+  position: relative;
+  display: inline-flex;
+}
+.hint-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--as-radius-full);
+  background: transparent;
+  color: var(--as-text-tertiary);
+  cursor: help;
+  transition: color var(--as-duration-fast) var(--as-easing-standard),
+              background var(--as-duration-fast) var(--as-easing-standard);
+}
+.hint-trigger:hover, .hint-trigger:focus-visible {
+  color: var(--as-text-primary);
+  background: var(--as-bg-secondary);
+  outline: none;
+}
+.hint-bubble {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: max-content;
+  max-width: 280px;
+  padding: var(--as-space-sm) var(--as-space-md);
+  border-radius: var(--as-radius-md);
+  background: var(--as-text-primary);
+  color: var(--as-bg-primary);
+  font-size: 12px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  line-height: 1.4;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(2px);
+  transition: opacity var(--as-duration-fast) var(--as-easing-standard),
+              transform var(--as-duration-fast) var(--as-easing-standard);
+  z-index: 50;
+}
+.hint:hover .hint-bubble,
+.hint.open .hint-bubble,
+.hint:focus-within .hint-bubble {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .form-grid {

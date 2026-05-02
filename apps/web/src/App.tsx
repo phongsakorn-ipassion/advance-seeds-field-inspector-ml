@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState, useSyncExternalStore } from "r
 import {
   Activity,
   Database,
-  GitBranch,
+  Info,
   LogOut,
   Rocket,
   ShieldCheck,
@@ -21,6 +21,17 @@ import {
 } from "./registry";
 
 type Section = "overview" | "train" | "models" | "storage";
+
+function Hint({ text }: { text: string }) {
+  return (
+    <span className="hint">
+      <button type="button" className="hint-trigger" aria-label={text}>
+        <Info size={13} aria-hidden="true" />
+      </button>
+      <span className="hint-bubble" role="tooltip">{text}</span>
+    </span>
+  );
+}
 
 const store = createRegistryStore();
 
@@ -236,12 +247,24 @@ function LoginScreen({
             }}
           >
             <label>
-              Email
-              <input value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" />
+              <span className="label-text">Email</span>
+              <input
+                type="email"
+                placeholder="you@advanceseeds.com"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                autoComplete="email"
+              />
             </label>
             <label>
-              Password
-              <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" />
+              <span className="label-text">Password</span>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+              />
             </label>
             {visibleError && <p className="form-error">{visibleError}</p>}
             <div className="button-row">
@@ -293,10 +316,10 @@ function Overview({
         <section className="panel">
           <SectionHeading title="Operator journey" text="One path from training config to deployment." />
           <div className="journey-list">
-            <Step number="1" title="Train" text="Define classes and hyperparameters, then create a Colab MCP run." />
-            <Step number="2" title="Track" text="Watch progress, logs, and metrics update while the job runs." />
-            <Step number="3" title="Deploy" text="Promote a validated model to staging or production." />
-            <Step number="4" title="Clean" text="Watch R2 usage and delete inactive artifacts before quota is exceeded." />
+            <Step icon={<Wand2 size={18} />} title="Train" text="Define classes and hyperparameters, then create a Colab MCP run." />
+            <Step icon={<Activity size={18} />} title="Track" text="Watch progress, logs, and metrics update while the job runs." />
+            <Step icon={<Rocket size={18} />} title="Deploy" text="Promote a validated model to staging or production." />
+            <Step icon={<Trash2 size={18} />} title="Clean" text="Watch R2 usage and delete inactive artifacts before quota is exceeded." />
           </div>
           <button className="primary-button" type="button" onClick={onOpenTrain}>
             <Wand2 size={18} /> Start training
@@ -339,15 +362,30 @@ function TrainWorkflow({
       >
         <SectionHeading title="Train new model" text="Defaults are loaded from the current PoC config. Adjust only what the demo needs." />
         <label>
-          Dataset config
+          <span className="label-text">
+            Dataset config
+            <Hint text="Path to the YOLO dataset YAML. Should reference train/val/test splits and class names. Use the latest banana-v2 config for the PoC." />
+          </span>
           <input value={config.dataset} onChange={(event) => setConfig({ ...config, dataset: event.target.value })} />
         </label>
         <label>
-          Source weights
-          <input value={config.sourceWeights} onChange={(event) => setConfig({ ...config, sourceWeights: event.target.value })} />
+          <span className="label-text">
+            Source weights
+            <Hint text="Pretrained YOLO checkpoint to fine-tune. n is fastest and smallest, s is slightly larger but more accurate. Pick n for tight latency budgets, s when you have headroom." />
+          </span>
+          <select
+            value={config.sourceWeights}
+            onChange={(event) => setConfig({ ...config, sourceWeights: event.target.value })}
+          >
+            <option value="yolo26n-seg.pt">yolo26n-seg.pt — nano (fast, smallest)</option>
+            <option value="yolo26s-seg.pt">yolo26s-seg.pt — small (more accurate)</option>
+          </select>
         </label>
         <label>
-          Classes
+          <span className="label-text">
+            Classes
+            <Hint text="One class name per line. Order matters — must match the dataset's class indices. Adding or removing classes invalidates compat with prior versions." />
+          </span>
           <textarea
             value={config.classes.join("\n")}
             onChange={(event) => setConfig({ ...config, classes: splitLines(event.target.value) })}
@@ -355,22 +393,25 @@ function TrainWorkflow({
           />
         </label>
         <div className="form-grid">
-          <NumberField label="Epochs" value={config.hyperParameters.epochs} onChange={(value) => updateHp(config, setConfig, "epochs", value)} />
-          <NumberField label="Image size" value={config.hyperParameters.imgsz} onChange={(value) => updateHp(config, setConfig, "imgsz", value)} />
-          <NumberField label="Patience" value={config.hyperParameters.patience} onChange={(value) => updateHp(config, setConfig, "patience", value)} />
-          <NumberField label="LR0" value={config.hyperParameters.lr0} step="0.0001" onChange={(value) => updateHp(config, setConfig, "lr0", value)} />
-          <NumberField label="Mosaic" value={config.hyperParameters.mosaic} step="0.1" onChange={(value) => updateHp(config, setConfig, "mosaic", value)} />
-          <NumberField label="Mixup" value={config.hyperParameters.mixup} step="0.1" onChange={(value) => updateHp(config, setConfig, "mixup", value)} />
+          <NumberField label="Epochs" value={config.hyperParameters.epochs} onChange={(value) => updateHp(config, setConfig, "epochs", value)} hint="Number of full passes over the dataset. More epochs = more learning, but risk of overfitting. 50 is a sane default for fine-tuning." />
+          <NumberField label="Image size" value={config.hyperParameters.imgsz} onChange={(value) => updateHp(config, setConfig, "imgsz", value)} hint="Input image side length in pixels. Larger = better small-object recall but slower training and inference. 640 is the YOLO default." />
+          <NumberField label="Patience" value={config.hyperParameters.patience} onChange={(value) => updateHp(config, setConfig, "patience", value)} hint="Early-stopping patience: number of epochs with no improvement before the run stops. Set lower to fail fast on bad runs." />
+          <NumberField label="LR0" value={config.hyperParameters.lr0} step="0.0001" onChange={(value) => updateHp(config, setConfig, "lr0", value)} hint="Initial learning rate. Lower = more stable but slower; higher = faster but may diverge. Start at 0.001 for fine-tuning, raise only if loss plateaus." />
+          <NumberField label="Mosaic" value={config.hyperParameters.mosaic} step="0.1" onChange={(value) => updateHp(config, setConfig, "mosaic", value)} hint="Mosaic augmentation probability (0–1). Tiles four images into one for richer context. Helps small-object recall; turn down if memory is tight." />
+          <NumberField label="Mixup" value={config.hyperParameters.mixup} step="0.1" onChange={(value) => updateHp(config, setConfig, "mixup", value)} hint="MixUp augmentation probability (0–1). Blends two images together. Adds regularization; usually low (0.0–0.2) for detection/segmentation." />
         </div>
         <label>
-          Colab accelerator
+          <span className="label-text">
+            Colab accelerator
+            <Hint text="Colab GPU class. T4 is free-tier and fine for YOLO-n. L4 is faster and worth it for longer runs. A100 is overkill for the PoC unless you're benchmarking." />
+          </span>
           <select
             value={config.colabAccelerator}
             onChange={(event) => setConfig({ ...config, colabAccelerator: event.target.value as TrainConfig["colabAccelerator"] })}
           >
-            <option value="T4">T4</option>
-            <option value="L4">L4</option>
-            <option value="A100">A100</option>
+            <option value="T4">T4 — free tier</option>
+            <option value="L4">L4 — faster, paid</option>
+            <option value="A100">A100 — overkill, paid</option>
           </select>
         </label>
         <button className="primary-button" type="submit" disabled={!isAdmin} title={isAdmin ? "" : "Admin role required"}>
@@ -602,10 +643,18 @@ function SectionHeading({ title, text }: { title: string; text: string }) {
   );
 }
 
-function Step({ number, title, text }: { number: string; title: string; text: string }) {
+function Step({
+  icon,
+  title,
+  text,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  text: string;
+}) {
   return (
     <article className="journey-step">
-      <span>{number}</span>
+      <span className="step-icon" aria-hidden="true">{icon}</span>
       <div>
         <strong>{title}</strong>
         <p>{text}</p>
@@ -619,15 +668,20 @@ function NumberField({
   value,
   step = "1",
   onChange,
+  hint,
 }: {
   label: string;
   value: number;
   step?: string;
   onChange: (value: number) => void;
+  hint?: string;
 }) {
   return (
     <label>
-      {label}
+      <span className="label-text">
+        {label}
+        {hint && <Hint text={hint} />}
+      </span>
       <input type="number" step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} />
     </label>
   );

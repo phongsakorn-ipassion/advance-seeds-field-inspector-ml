@@ -54,4 +54,4 @@
 - [x] 7.1 Run `npm run build` in `apps/web`.
 - [x] 7.2 Run `python3 -m unittest discover -s tests`.
 - [x] 7.3 Run `openspec validate --all --strict`.
-- [ ] 7.4 Verify demo mode still works in the browser without env vars.
+- [x] 7.4 Verify demo mode still works in the browser without env vars.
