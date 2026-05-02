@@ -135,7 +135,6 @@ export function App() {
             storagePercent={storagePercent}
             storageOverQuota={storageOverQuota}
             onOpenTrain={() => setSection("train")}
-            onOpenStorage={() => setSection("storage")}
           />
         )}
 
@@ -291,7 +290,6 @@ function Overview({
   storagePercent,
   storageOverQuota,
   onOpenTrain,
-  onOpenStorage,
 }: {
   production?: RegistryVersion;
   staging?: RegistryVersion;
@@ -301,7 +299,6 @@ function Overview({
   storagePercent: number;
   storageOverQuota: boolean;
   onOpenTrain: () => void;
-  onOpenStorage: () => void;
 }) {
   const running = runs.find((run) => run.status === "running");
   return (
@@ -328,9 +325,6 @@ function Overview({
         <section className="panel">
           <SectionHeading title="Live runs" text="Reported by the Python SDK; Colab MCP context is preserved per run." />
           <RunList runs={runs.slice(0, 4)} />
-          <button className={storageOverQuota ? "danger-button" : "ghost-button"} type="button" onClick={onOpenStorage}>
-            <Database size={18} /> Review storage
-          </button>
         </section>
       </section>
     </>
@@ -350,8 +344,12 @@ function TrainWorkflow({
   isAdmin: boolean;
   onStart: () => void;
 }) {
-  const latest = runs[0];
+  const running = runs.find((r) => r.status === "running");
+  const focused = running ?? runs[0];
+  const recent = runs.filter((r) => r.id !== focused?.id).slice(0, 6);
+  const focusedTone = running ? "running" : "recent";
   return (
+    <section className="train-layout">
     <section className="content-grid wide-left">
       <form
         className="panel train-form"
@@ -419,10 +417,57 @@ function TrainWorkflow({
         </button>
       </form>
       <section className="panel">
-        <SectionHeading title="Live tracking" text="This demo simulates the metric stream that the SDK writes to Supabase." />
-        {latest ? <RunDetail run={latest} /> : <p>No training runs yet.</p>}
+        <SectionHeading title="Live tracking" text="Realtime metric stream from the Python SDK to Supabase." />
+        {focused ? (
+          <>
+            <div className="track-banner">
+              <span className={`status-pill ${focusedTone === "running" ? "staging" : "candidate"}`}>
+                {focusedTone === "running" ? "Running now" : "Most recent"}
+              </span>
+              <span className="track-meta">{focused.hardware} · {focused.colabNotebook}</span>
+            </div>
+            <RunDetail run={focused} />
+          </>
+        ) : (
+          <EmptyState
+            icon={<Wand2 size={24} />}
+            title="No training runs yet"
+            text="Configure the form on the left and start a Colab MCP run to see live metrics here."
+          />
+        )}
       </section>
     </section>
+    <section className="panel">
+      <SectionHeading title="Recent training runs" text="History from this model line. Realtime updates flow in as the SDK reports them." />
+      {recent.length > 0 ? (
+        <RunList runs={recent} />
+      ) : (
+        <EmptyState
+          icon={<Activity size={24} />}
+          title="No prior runs"
+          text="Once a run completes it shows up here with its final metrics and Colab notebook context."
+        />
+      )}
+    </section>
+    </section>
+  );
+}
+
+function EmptyState({
+  icon,
+  title,
+  text,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="empty-state">
+      <span className="empty-icon" aria-hidden="true">{icon}</span>
+      <strong>{title}</strong>
+      <p>{text}</p>
+    </div>
   );
 }
 
