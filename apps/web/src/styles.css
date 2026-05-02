@@ -936,6 +936,17 @@ button.run-row:hover { background: var(--as-bg-secondary); }
   gap: var(--as-space-md);
 }
 .run-detail-header .section-heading { flex: 1; }
+.run-detail-actions {
+  display: flex;
+  gap: var(--as-space-sm);
+  flex-wrap: wrap;
+}
+.primary-button.compact {
+  height: 32px;
+  padding: 0 var(--as-space-md);
+  font-size: 13px;
+}
+a.primary-button { text-decoration: none; }
 .boundary-card .boundary-icon { flex-shrink: 0; margin-top: 2px; }
 .boundary-card strong {
   display: block;

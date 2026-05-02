@@ -2,8 +2,10 @@ import { Fragment, FormEvent, useEffect, useState, useSyncExternalStore } from "
 import {
   Activity,
   Database,
+  ExternalLink,
   Info,
   LogOut,
+  Notebook,
   Rocket,
   ShieldCheck,
   Sprout,
@@ -576,9 +578,19 @@ function TrainWorkflow({
               title={`Run · ${focused.name}`}
               text={`${focused.id} · ${focused.hardware}${focused.colabNotebook ? ` · ${focused.colabNotebook}` : ""}`}
             />
-            <button type="button" className="ghost-button compact" onClick={() => setFocusedRunId(null)} aria-label="Close run detail">
-              <X size={14} /> Close
-            </button>
+            <div className="run-detail-actions">
+              <a
+                className="primary-button compact"
+                href={colabUrl(focused.id)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Notebook size={14} /> Open in Colab <ExternalLink size={12} />
+              </a>
+              <button type="button" className="ghost-button compact" onClick={() => setFocusedRunId(null)} aria-label="Close run detail">
+                <X size={14} /> Close
+              </button>
+            </div>
           </div>
           {isFocusedRunning && focused.map50 === null && (
             <div className="track-hint">
@@ -1232,4 +1244,11 @@ function sectionDescription(section: Section) {
 
 function pct(value: number) {
   return `${Math.round(value * 100)}%`;
+}
+
+const COLAB_NOTEBOOK_URL =
+  "https://colab.research.google.com/github/phongsakorn-ipassion/advance-seeds-field-inspector-ml/blob/main/notebooks/train_run.ipynb";
+
+function colabUrl(runId: string) {
+  return `${COLAB_NOTEBOOK_URL}?run_id=${encodeURIComponent(runId)}`;
 }
