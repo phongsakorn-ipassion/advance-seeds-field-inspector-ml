@@ -24,3 +24,6 @@ models/*.mlmodelc/
 # Keep documentation in otherwise local artifact folders
 !data/README.md
 !models/README.md
+
+# Git worktrees
+.worktrees/
