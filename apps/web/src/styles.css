@@ -745,6 +745,56 @@ button {
   overflow: auto;
 }
 
+.run-logs {
+  display: grid;
+  gap: 6px;
+}
+.run-logs header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.run-logs-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--as-text-secondary);
+  font-weight: 500;
+}
+.run-logs-count {
+  font-size: 11px;
+  color: var(--as-text-tertiary);
+  font-family: var(--as-font-mono);
+}
+.run-logs pre {
+  margin: 0;
+  padding: var(--as-space-md);
+  background: var(--as-text-primary);
+  color: var(--as-bg-primary);
+  border-radius: var(--as-radius-md);
+  font-family: var(--as-font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  height: 220px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--as-text-tertiary) transparent;
+}
+.run-logs pre.empty {
+  color: var(--as-text-tertiary);
+  display: grid;
+  place-items: center;
+  font-style: italic;
+}
+.run-logs pre::-webkit-scrollbar { width: 8px; }
+.run-logs pre::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: var(--as-radius-full);
+}
+.run-logs pre::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
+
 .progress-track {
   height: 6px;
   border-radius: var(--as-radius-full);

@@ -672,7 +672,7 @@ function RunDetail({ run }: { run: RegistryRun }) {
       <div className="progress-track">
         <div style={{ width: `${run.progress}%` }} />
       </div>
-      <pre>{run.logs.length ? run.logs.join("\n") : "No logs reported yet."}</pre>
+      <RunLogs lines={run.logs} />
       <InfoSection
         dataset={run.config.dataset}
         sourceWeights={run.config.sourceWeights}
@@ -681,6 +681,21 @@ function RunDetail({ run }: { run: RegistryRun }) {
         hyperParameters={run.config.hyperParameters}
       />
     </div>
+  );
+}
+
+function RunLogs({ lines }: { lines: string[] }) {
+  const empty = lines.length === 0;
+  return (
+    <section className="run-logs" aria-label="Run logs">
+      <header>
+        <span className="run-logs-title">Run logs</span>
+        <span className="run-logs-count">{empty ? "0 lines" : `${lines.length} line${lines.length === 1 ? "" : "s"}`}</span>
+      </header>
+      <pre className={empty ? "empty" : undefined}>
+        {empty ? "No logs reported yet." : lines.join("\n")}
+      </pre>
+    </section>
   );
 }
 
