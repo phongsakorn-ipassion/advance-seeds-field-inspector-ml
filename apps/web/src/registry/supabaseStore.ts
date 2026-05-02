@@ -341,17 +341,30 @@ export function createSupabaseStore(env: Env): RegistryStore {
     async startTraining(config) {
       await adminWrite(async () => {
         const lineId = await resolveModelLine();
+        const runName = `${config.dataset.split("/").pop()?.replace(".yaml", "") ?? "run"}`;
+        const classPreview = config.classes.slice(0, 6).join(", ") + (config.classes.length > 6 ? "…" : "");
+        const bootstrapLogs = [
+          `Run queued by dashboard for model_line=${config.modelLine}`,
+          `Runtime: Colab ${config.colabAccelerator}`,
+          `Source weights: ${config.sourceWeights}`,
+          `Dataset: ${config.dataset}`,
+          `Classes (${config.classes.length}): ${classPreview}`,
+          `Epochs=${config.hyperParameters.epochs} · imgsz=${config.hyperParameters.imgsz} · lr0=${config.hyperParameters.lr0}`,
+          "Awaiting Python SDK / Colab MCP to stream run_metrics…",
+        ];
         const { error } = await client.from("runs").insert({
           model_line_id: lineId,
           status: "running",
           config_yaml: {
-            name: `${config.dataset.split("/").pop()?.replace(".yaml", "") ?? "run"}`,
+            name: runName,
             model_line: config.modelLine,
             dataset: config.dataset,
             source_weights: config.sourceWeights,
             classes: config.classes,
             hyperparameters: config.hyperParameters,
             colab_accelerator: config.colabAccelerator,
+            colab_notebook: `Colab MCP / ${runName}.ipynb (pending)`,
+            logs: bootstrapLogs,
           },
           hardware: { label: `Colab ${config.colabAccelerator}` },
         });

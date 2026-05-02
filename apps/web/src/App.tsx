@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { Fragment, FormEvent, useEffect, useState, useSyncExternalStore } from "react";
 import {
   Activity,
   Database,
@@ -424,8 +424,17 @@ function TrainWorkflow({
               <span className={`status-pill ${focusedTone === "running" ? "staging" : "candidate"}`}>
                 {focusedTone === "running" ? "Running now" : "Most recent"}
               </span>
-              <span className="track-meta">{focused.hardware} · {focused.colabNotebook}</span>
+              <span className="track-meta">{focused.hardware}{focused.colabNotebook ? ` · ${focused.colabNotebook}` : ""}</span>
             </div>
+            {focusedTone === "running" && focused.map50 === null && (
+              <div className="track-hint">
+                <Info size={14} aria-hidden="true" />
+                <span>
+                  Waiting for the Python SDK to stream <code>run_metrics</code>. Until the
+                  training script writes metrics for this run, only the bootstrap log is shown.
+                </span>
+              </div>
+            )}
             <RunDetail run={focused} />
           </>
         ) : (
@@ -604,17 +613,16 @@ function ModelDetail({
         <MetricCard label="Mask mAP" value={pct(version.maskMap)} detail="segmentation metric" />
         <MetricCard label="Artifact" value={`${version.sizeMb.toFixed(1)} MB`} detail={version.contentHash} />
       </div>
-      <div>
-        <h3>Classes</h3>
-        <div className="chip-list">{version.classes.map((name) => <span key={name}>{name}</span>)}</div>
-      </div>
-      <div>
-        <h3>Hyperparameters</h3>
-        <pre>{JSON.stringify(version.hyperParameters, null, 2)}</pre>
-      </div>
+      <InfoSection
+        dataset={version.dataset}
+        sourceWeights={version.sourceWeights}
+        accelerator={run ? `Colab ${run.config.colabAccelerator}` : undefined}
+        classes={version.classes}
+        hyperParameters={version.hyperParameters}
+      />
       <div>
         <h3>Run</h3>
-        <p>{run ? `${run.name} / ${run.colabNotebook}` : "No linked run"}</p>
+        <p className="info-run">{run ? `${run.name} · ${run.colabNotebook || "no notebook recorded"}` : "No linked run"}</p>
       </div>
       <div className="button-row">
         <button className="primary-button" type="button" disabled={!isAdmin} title={writeTitle} onClick={() => void store.deployVersion(version.id, "production")}>
@@ -644,7 +652,75 @@ function RunDetail({ run }: { run: RegistryRun }) {
       <div className="progress-track">
         <div style={{ width: `${run.progress}%` }} />
       </div>
-      <pre>{run.logs.join("\n")}</pre>
+      <pre>{run.logs.length ? run.logs.join("\n") : "No logs reported yet."}</pre>
+      <InfoSection
+        dataset={run.config.dataset}
+        sourceWeights={run.config.sourceWeights}
+        accelerator={`Colab ${run.config.colabAccelerator}`}
+        classes={run.config.classes}
+        hyperParameters={run.config.hyperParameters}
+      />
+    </div>
+  );
+}
+
+function InfoSection({
+  dataset,
+  sourceWeights,
+  accelerator,
+  classes,
+  hyperParameters,
+  datasetCount,
+}: {
+  dataset: string;
+  sourceWeights: string;
+  accelerator?: string;
+  classes: string[];
+  hyperParameters: TrainConfig["hyperParameters"];
+  datasetCount?: number;
+}) {
+  const hpEntries = Object.entries(hyperParameters);
+  return (
+    <div className="info-section">
+      <div className="info-block">
+        <h3>Training config</h3>
+        <dl className="info-grid">
+          <dt>Dataset</dt>
+          <dd className="mono">{dataset || "—"}</dd>
+          <dt>Source weights</dt>
+          <dd className="mono">{sourceWeights || "—"}</dd>
+          {accelerator && <><dt>Accelerator</dt><dd>{accelerator}</dd></>}
+          <dt>Image size</dt>
+          <dd>{hyperParameters.imgsz} px</dd>
+        </dl>
+      </div>
+      <div className="info-block">
+        <h3>Dataset</h3>
+        <dl className="info-grid">
+          <dt>Config</dt>
+          <dd className="mono">{dataset || "—"}</dd>
+          <dt>Classes</dt>
+          <dd>{classes.length} total</dd>
+          {typeof datasetCount === "number" && (
+            <>
+              <dt>Records</dt>
+              <dd>{datasetCount.toLocaleString()}</dd>
+            </>
+          )}
+        </dl>
+        <div className="chip-list">{classes.map((name) => <span key={name}>{name}</span>)}</div>
+      </div>
+      <div className="info-block">
+        <h3>Hyperparameters</h3>
+        <dl className="info-grid two-col">
+          {hpEntries.map(([key, value]) => (
+            <Fragment key={key}>
+              <dt>{key}</dt>
+              <dd className="mono">{String(value)}</dd>
+            </Fragment>
+          ))}
+        </dl>
+      </div>
     </div>
   );
 }
