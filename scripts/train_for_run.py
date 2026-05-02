@@ -36,12 +36,41 @@ def fetch_run(client: RegistryClient, run_id: str) -> dict:
     return rows[0]
 
 
-def build_training_config(run_row: dict, repo_root: Path) -> dict:
+def materialize_dataset_yaml(client: RegistryClient, dataset_ref: str, repo_root: Path) -> str:
+    """If the dataset reference is an R2 key (datasets/...), download the YAML
+    via the download-dataset Edge Function and return the local path. Otherwise
+    return the input unchanged."""
+    if not dataset_ref.startswith("datasets/"):
+        return dataset_ref
+    print(f"Fetching YAML from R2: {dataset_ref}")
+    response = client._json(
+        "POST",
+        "/functions/v1/download-dataset",
+        {"r2_key": dataset_ref},
+    )
+    download_url = response.get("download_url") if isinstance(response, dict) else None
+    if not download_url:
+        raise SystemExit(f"download-dataset returned no download_url: {response!r}")
+    import urllib.request
+    local_dir = repo_root / "configs"
+    local_dir.mkdir(exist_ok=True)
+    local_path = local_dir / Path(dataset_ref).name
+    with urllib.request.urlopen(download_url) as resp:
+        local_path.write_bytes(resp.read())
+    print(f"YAML written to {local_path}")
+    return str(local_path)
+
+
+def build_training_config(run_row: dict, repo_root: Path, client: RegistryClient) -> dict:
     cfg_yaml = run_row.get("config_yaml") or {}
     hp = cfg_yaml.get("hyperparameters") or {}
+    dataset_ref = cfg_yaml.get("dataset") or ""
+    if not dataset_ref:
+        raise SystemExit("Run has no dataset reference in config_yaml.dataset.")
+    dataset_local = materialize_dataset_yaml(client, dataset_ref, repo_root)
     config: dict = {
         "model": cfg_yaml.get("source_weights") or "yolo26n-seg.pt",
-        "data": cfg_yaml.get("dataset") or "",
+        "data": dataset_local,
         "project": "runs",
         "name": cfg_yaml.get("name") or run_row["id"],
         "epochs": int(hp.get("epochs", 1)),
@@ -54,8 +83,6 @@ def build_training_config(run_row: dict, repo_root: Path) -> dict:
         "mixup": float(hp.get("mixup", 0.0)),
         "copy_paste": float(hp.get("copy_paste", hp.get("copyPaste", 0.0))),
     }
-    if not config["data"]:
-        raise SystemExit("Run has no dataset reference in config_yaml.dataset.")
     config = apply_hardware_profile(config, detect_hardware())
     config = resolve_training_paths(config, repo_root)
     config = materialize_ultralytics_dataset_config(config, repo_root / "runs" / "_runtime_datasets")
@@ -72,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
     client = RegistryClient(RegistryConfig.from_env())
 
     run_row = fetch_run(client, args.run_id)
-    config = build_training_config(run_row, repo_root)
+    config = build_training_config(run_row, repo_root, client)
 
     print("Resolved training config:")
     print(json.dumps(config, indent=2, default=str))
