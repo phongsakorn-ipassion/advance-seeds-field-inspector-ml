@@ -1,6 +1,7 @@
-# Banana v1 Training Hyperparameters
+# Banana Training Hyperparameters
 
-This is the default training profile for the first banana/banana_spot PoC.
+This is the default training profile for the banana/banana_spot PoC. New local
+training runs use the banana-v2 dataset by default.
 
 ## Command
 
@@ -19,7 +20,7 @@ python3 scripts/train_yolo26n_seg.py --epochs 3 --name banana-v1-smoke
 PoC run:
 
 ```bash
-python3 scripts/train_yolo26n_seg.py
+python3 scripts/train_yolo26n_seg.py --config configs/train.banana-v2.yaml
 ```
 
 Local machine training launcher:
@@ -35,7 +36,7 @@ under `runs/logs/`, and starts the full configured PoC training run.
 CLI overrides are forwarded to `scripts/train_yolo26n_seg.py`, for example:
 
 ```bash
-scripts/train_local_banana.sh --epochs 3 --name banana-v1-smoke
+scripts/train_local_banana.sh --epochs 3 --name banana-v2-smoke
 ```
 
 ## Defaults
@@ -43,7 +44,7 @@ scripts/train_local_banana.sh --epochs 3 --name banana-v1-smoke
 | Parameter | Value | Rationale |
 | --- | --- | --- |
 | `model` | `yolo26n-seg.pt` | Selected YOLO26 nano segmentation model for mobile-oriented PoC. |
-| `data` | `configs/dataset.banana-v1.yaml` | Processed Roboflow banana dataset remapped to canonical ids. |
+| `data` | `configs/dataset.banana-v2.yaml` | Processed Roboflow banana v2 dataset remapped to canonical ids. |
 | `epochs` | `50` | Small-dataset fine-tuning baseline with early stopping. |
 | `patience` | `20` | Stop if validation does not improve. |
 | `imgsz` | `640` | Matches mobile export contract and YOLO26 default resolution. |

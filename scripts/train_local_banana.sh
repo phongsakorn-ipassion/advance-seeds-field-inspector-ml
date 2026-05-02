@@ -4,7 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="${VENV_DIR:-"$ROOT_DIR/.venv"}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-DATASET_CONFIG="${DATASET_CONFIG:-configs/dataset.banana-v1.yaml}"
+TRAIN_CONFIG="${TRAIN_CONFIG:-configs/train.banana-v2.yaml}"
+DATASET_CONFIG="${DATASET_CONFIG:-configs/dataset.banana-v2.yaml}"
 LOG_DIR="$ROOT_DIR/runs/logs"
 LOG_FILE="$LOG_DIR/train-local-banana-$(date +%Y%m%d-%H%M%S).log"
 
@@ -28,5 +29,5 @@ mkdir -p "$LOG_DIR"
 echo "Training log: $LOG_FILE"
 echo "Starting YOLO26n-seg banana training..."
 
-"$VENV_DIR/bin/python" scripts/train_yolo26n_seg.py "$@" 2>&1 | tee "$LOG_FILE"
+"$VENV_DIR/bin/python" scripts/train_yolo26n_seg.py --config "$TRAIN_CONFIG" "$@" 2>&1 | tee "$LOG_FILE"
 exit "${PIPESTATUS[0]}"

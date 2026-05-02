@@ -10,9 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from advance_seeds_ml.banana_dataset import count_valid_remapped_rows, remap_label_text, write_dataset_yaml
 
-DEFAULT_SOURCE = Path("/Users/ppungpong/Downloads/Advance Seeds.v2-banana-v1.yolo26")
-DEFAULT_DESTINATION = Path("data/processed/advance-seeds-banana-v1")
-DEFAULT_CONFIG = Path("configs/dataset.banana-v1.yaml")
+DEFAULT_SOURCE = Path("/Users/ppungpong/Downloads/Advance Seeds.v3-banana-v2.yolo26")
+DEFAULT_DESTINATION = Path("data/processed/advance-seeds-banana-v2")
+DEFAULT_CONFIG = Path("configs/dataset.banana-v2.yaml")
 
 SPLIT_MAP = {
     "train": "train",
@@ -65,13 +65,14 @@ def prepare_dataset(source: Path, destination: Path, config: Path, overwrite: bo
     for source_split, target_split in SPLIT_MAP.items():
         summary[target_split] = copy_split(source, destination, source_split, target_split)
 
-    write_dataset_yaml(config)
+    dataset_root = Path("..") / destination
+    write_dataset_yaml(config, dataset_root=str(dataset_root))
     return summary
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Prepare the Roboflow banana-v1 dataset for the canonical six-class contract."
+        description="Prepare a Roboflow banana dataset for the canonical six-class contract."
     )
     parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE)
     parser.add_argument("--destination", type=Path, default=DEFAULT_DESTINATION)
