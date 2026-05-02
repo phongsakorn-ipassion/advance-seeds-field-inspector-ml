@@ -174,6 +174,11 @@ export function App() {
   );
 }
 
+const adminPreset = {
+  demo: { email: "admin@advance-seeds.demo", password: "demo-admin" },
+  supabase: { email: "alex@advanceseeds.com", password: "DemoSeeds2026!" },
+} as const;
+
 function LoginScreen({
   mode,
   onLogin,
@@ -183,18 +188,25 @@ function LoginScreen({
   onLogin: (email: string, password: string) => void;
   error: string;
 }) {
-  const [email, setEmail] = useState(mode === "demo" ? "admin@advance-seeds.demo" : "");
-  const [password, setPassword] = useState(mode === "demo" ? "demo-admin" : "");
+  const preset = adminPreset[mode];
+  const [showManual, setShowManual] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const visibleError = showManual ? error : "";
+
+  async function signInAs(e: string, p: string) {
+    setBusy(true);
+    try {
+      await onLogin(e, p);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <main className="login-shell">
-      <form
-        className="login-panel"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onLogin(email, password);
-        }}
-      >
+      <div className="login-panel">
         <div className="brand large">
           <div className="brand-mark">AS</div>
           <div>
@@ -204,26 +216,53 @@ function LoginScreen({
         </div>
         <div>
           <h1>Admin console</h1>
-          <p>
-            {mode === "demo"
-              ? "Use the pre-created demo admin role to manage training, deployment, and storage."
-              : "Sign in with your Supabase account. Admin role grants write access; everyone else is read-only."}
-          </p>
+          <p>One-click sign-in as the pre-created admin. Grants deploy, undeploy, train, and storage cleanup.</p>
         </div>
-        <label>
-          Email
-          <input value={email} onChange={(event) => setEmail(event.target.value)} />
-        </label>
-        <label>
-          Password
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
-        </label>
-        {error && <p className="form-error">{error}</p>}
-        <button className="primary-button" type="submit">
-          <ShieldCheck size={18} />
-          Sign in
+        <button
+          className="admin-card"
+          type="button"
+          disabled={busy}
+          onClick={() => void signInAs(preset.email, preset.password)}
+        >
+          <ShieldCheck size={20} />
+          <div>
+            <strong>Sign in as Admin</strong>
+            <span>{preset.email}</span>
+          </div>
         </button>
-      </form>
+        {!showManual ? (
+          <button className="ghost-button compact" type="button" onClick={() => setShowManual(true)}>
+            Use a different account
+          </button>
+        ) : (
+          <form
+            className="manual-login"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!email || !password) return;
+              void signInAs(email, password);
+            }}
+          >
+            <label>
+              Email
+              <input value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" />
+            </label>
+            <label>
+              Password
+              <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" />
+            </label>
+            {visibleError && <p className="form-error">{visibleError}</p>}
+            <div className="button-row">
+              <button className="primary-button" type="submit" disabled={busy || !email || !password}>
+                Sign in
+              </button>
+              <button className="ghost-button" type="button" onClick={() => setShowManual(false)}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
     </main>
   );
 }

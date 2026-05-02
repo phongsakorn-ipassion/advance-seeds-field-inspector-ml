@@ -48,6 +48,32 @@ button:disabled {
   background: #fff;
 }
 
+.admin-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid #6ba75a;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #b6f069, #8fd450);
+  color: #1f2a14;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.08s ease, box-shadow 0.12s ease;
+}
+.admin-card:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(91, 142, 65, 0.25);
+}
+.admin-card:disabled { opacity: 0.6; cursor: progress; }
+.admin-card div { display: grid; }
+.admin-card strong { font-size: 15px; }
+.admin-card span { font-size: 12px; opacity: 0.75; }
+
+.manual-login { display: grid; gap: 12px; }
+.manual-login .button-row { display: flex; gap: 8px; }
+.ghost-button.compact { padding: 6px 10px; font-size: 13px; justify-self: start; }
+
 .app-shell {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
