@@ -1,28 +1,38 @@
-\set ON_ERROR_STOP on
+BEGIN;
+SELECT plan(4);
 
--- Anon: can SELECT from versions, cannot INSERT.
+-- 1. anon can SELECT from versions
 SET ROLE anon;
-SELECT count(*) >= 0 AS anon_select_versions FROM public.versions;
+SELECT ok(
+  (SELECT count(*) >= 0 FROM public.versions),
+  'anon can SELECT versions'
+);
 
-DO $$ BEGIN
-  INSERT INTO public.versions(model_line_id, semver, metadata, tflite_r2_key,
-                              size_bytes, content_hash)
-  VALUES ((SELECT id FROM public.model_lines WHERE slug='seeds-poc'),
-          'rls-test', '{"class_names":[],"input_size":1,"output_kind":"x","task":"y"}',
-          'k', 1, 'h');
-  RAISE EXCEPTION 'anon should not be able to insert';
-EXCEPTION WHEN insufficient_privilege OR check_violation THEN NULL;
-END $$;
+-- 2. anon cannot INSERT into versions
+SELECT throws_ok(
+  $$INSERT INTO public.versions(model_line_id, semver, metadata, tflite_r2_key, size_bytes, content_hash)
+      VALUES ((SELECT id FROM public.model_lines WHERE slug='seeds-poc'),
+              'rls-anon-test', '{"class_names":[],"input_size":1,"output_kind":"x","task":"y"}',
+              'k', 1, 'h')$$,
+  NULL, NULL,
+  'anon cannot INSERT versions'
+);
 RESET ROLE;
 
--- Authenticated (no admin claim): can SELECT runs, cannot UPDATE channels.
+-- 3. authenticated (no admin claim) can SELECT runs
 SET ROLE authenticated;
-SELECT count(*) >= 0 AS auth_select_runs FROM public.runs;
+SELECT ok(
+  (SELECT count(*) >= 0 FROM public.runs),
+  'authenticated can SELECT runs'
+);
 
-DO $$ BEGIN
-  UPDATE public.channels SET updated_by = gen_random_uuid()
-  WHERE name = 'staging';
-  RAISE EXCEPTION 'authenticated without admin should not be able to update channels';
-EXCEPTION WHEN insufficient_privilege THEN NULL;
-END $$;
+-- 4. authenticated (no admin claim) cannot UPDATE channels
+SELECT throws_ok(
+  $$UPDATE public.channels SET updated_by = gen_random_uuid() WHERE name = 'staging'$$,
+  NULL, NULL,
+  'authenticated without admin cannot UPDATE channels'
+);
 RESET ROLE;
+
+SELECT * FROM finish();
+ROLLBACK;
