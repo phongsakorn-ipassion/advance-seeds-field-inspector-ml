@@ -1,0 +1,54 @@
+name: backend
+
+on:
+  pull_request:
+    paths: [ 'supabase/**', '.github/workflows/backend.yml' ]
+  push:
+    branches: [ main ]
+    paths: [ 'supabase/**', '.github/workflows/backend.yml' ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1
+        with: { deno-version: v1.x }
+      - uses: supabase/setup-cli@v1
+        with: { version: latest }
+      - name: Start Supabase
+        run: supabase start
+      - name: Apply migrations
+        run: supabase db reset
+      - name: SQL tests
+        env:
+          PGURL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: |
+          psql "$PGURL" -f supabase/tests/sql/schema.test.sql
+          psql "$PGURL" -f supabase/tests/sql/compat_signature.test.sql
+          psql "$PGURL" -f supabase/tests/sql/rls.test.sql
+      - name: Compat parity test
+        run: deno test supabase/functions/_shared/compat.test.ts --allow-net=false
+      - name: Edge function tests
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          supabase status -o env > supabase/.env.ci
+          {
+            echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID"
+            echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID"
+            echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY"
+            echo "R2_BUCKET=$R2_BUCKET"
+          } >> supabase/.env.ci
+
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+            -f supabase/tests/fixtures/seed_run_v1.sql
+          supabase functions serve --env-file supabase/.env.ci &
+          SERVE_PID=$!
+          sleep 5
+          set -a; source supabase/.env.ci; set +a
+          deno test supabase/functions --allow-net --allow-env
+          kill $SERVE_PID
