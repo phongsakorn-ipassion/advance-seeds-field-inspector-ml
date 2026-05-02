@@ -25,3 +25,15 @@ ROLLBACK TO SAVEPOINT s1;
 -- run_metrics index exists
 SELECT 1 FROM pg_indexes
 WHERE schemaname='public' AND tablename='run_metrics' AND indexname='run_metrics_run_name_step_idx';
+
+-- Promote: update channels.current_version_id and expect channel_history row.
+WITH ml AS (SELECT id FROM public.model_lines WHERE slug='seeds-poc'),
+     v  AS (SELECT id FROM public.versions WHERE semver='0.0.1-test')
+UPDATE public.channels
+SET current_version_id = (SELECT id FROM v),
+    updated_by = '00000000-0000-0000-0000-000000000000'
+WHERE model_line_id = (SELECT id FROM ml) AND name = 'staging';
+
+SELECT count(*) AS history_rows
+FROM public.channel_history
+WHERE to_version_id = (SELECT id FROM public.versions WHERE semver='0.0.1-test');
