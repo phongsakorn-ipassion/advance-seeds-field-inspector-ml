@@ -116,6 +116,22 @@ def main(argv: list[str] | None = None) -> int:
 
     model = YOLO(config["model"])
 
+    def append_log(line: str) -> None:
+        """Append one line to runs.config_yaml.logs so the dashboard's RUN LOGS
+        panel updates in near-real-time. Read-modify-write on the JSONB column;
+        fine at PoC scale, swap for an append-only run_logs table later."""
+        try:
+            rows = client._json("GET", f"/rest/v1/runs?id=eq.{args.run_id}&select=config_yaml", None)
+            if not rows:
+                return
+            cfg = rows[0].get("config_yaml") or {}
+            logs = list(cfg.get("logs") or [])
+            logs.append(line)
+            cfg["logs"] = logs
+            client._json("PATCH", f"/rest/v1/runs?id=eq.{args.run_id}", {"config_yaml": cfg})
+        except Exception as exc:
+            print(f"[logs] append_log failed: {exc}", file=sys.stderr)
+
     def on_fit_epoch_end(trainer):  # type: ignore[no-untyped-def]
         epoch = int(getattr(trainer, "epoch", 0)) + 1
         rows = []
@@ -130,16 +146,29 @@ def main(argv: list[str] | None = None) -> int:
         if rows:
             try:
                 client.log_metrics(args.run_id, rows)
-            except Exception as exc:  # don't crash training because of metric reporting
+            except Exception as exc:
                 print(f"[metrics] log_metrics failed: {exc}", file=sys.stderr)
+
+        map50 = next((r["value"] for r in rows if r["name"].lower() in {"metrics/map50(b)", "map50"}), None)
+        mask = next((r["value"] for r in rows if r["name"].lower() in {"metrics/map50-95(m)", "mask_map"}), None)
+        bits = [f"Epoch {epoch}/{total_epochs}", f"progress={progress}%"]
+        if map50 is not None: bits.append(f"mAP50={map50:.3f}")
+        if mask is not None: bits.append(f"mask_mAP={mask:.3f}")
+        append_log(" | ".join(bits))
 
     model.add_callback("on_fit_epoch_end", on_fit_epoch_end)
 
+    gpu = config.get("hardware", {}).get("gpu_name") or "unknown GPU"
+    append_log(f"Training started on {gpu}, target epochs={total_epochs}")
+
     try:
         results = model.train(**train_kwargs(config))
-    except Exception:
+    except Exception as exc:
+        append_log(f"Training failed: {exc}")
         client.finalize_run(args.run_id, "failed")
         raise
+
+    append_log("Training finished — exporting tflite and uploading artifact")
 
     save_dir = Path(getattr(results, "save_dir", config.get("project", "runs")))
     best = save_dir / "weights" / "best.pt"
