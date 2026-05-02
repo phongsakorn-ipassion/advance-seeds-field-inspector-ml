@@ -35,19 +35,49 @@ function Hint({ text }: { text: string }) {
   );
 }
 
+function parseYoloClasses(yaml: string): string[] | null {
+  // Supports either:
+  //   names: [apple, banana, ...]
+  //   names:
+  //     - apple
+  //     - banana
+  //   names:
+  //     0: apple
+  //     1: banana
+  const inline = yaml.match(/^\s*names\s*:\s*\[([^\]]*)\]/m);
+  if (inline) {
+    return inline[1].split(",").map((s) => s.trim().replace(/^['"]|['"]$/g, "")).filter(Boolean);
+  }
+  const block = yaml.match(/^\s*names\s*:\s*\n((?:\s+.+\n?)+)/m);
+  if (block) {
+    const lines = block[1].split("\n").map((l) => l.trim()).filter(Boolean);
+    const dict = lines.map((line) => line.match(/^\d+\s*:\s*(.+)$/)).filter(Boolean) as RegExpMatchArray[];
+    if (dict.length === lines.length && dict.length > 0) {
+      return dict.map((m) => m[1].trim().replace(/^['"]|['"]$/g, ""));
+    }
+    const list = lines.map((line) => line.match(/^-\s*(.+)$/)).filter(Boolean) as RegExpMatchArray[];
+    if (list.length === lines.length && list.length > 0) {
+      return list.map((m) => m[1].trim().replace(/^['"]|['"]$/g, ""));
+    }
+  }
+  return null;
+}
+
 function DatasetConfigField({
   value,
   onChange,
   modelLineSlug,
   disabled,
+  onClassesParsed,
 }: {
   value: string;
   onChange: (next: string) => void;
   modelLineSlug: string;
   disabled?: boolean;
+  onClassesParsed?: (classes: string[]) => void;
 }) {
   const [busy, setBusy] = useState(false);
-  const [uploaded, setUploaded] = useState<{ name: string; size: number } | null>(null);
+  const [uploaded, setUploaded] = useState<{ name: string; size: number; classes: number | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function pickFile() {
@@ -61,9 +91,12 @@ function DatasetConfigField({
       if (!file) return;
       setBusy(true);
       try {
+        const text = await file.text();
+        const classes = parseYoloClasses(text);
         const { r2Key } = await store.uploadDataset(file, modelLineSlug || "seeds-poc");
         onChange(r2Key);
-        setUploaded({ name: file.name, size: file.size });
+        if (classes && onClassesParsed) onClassesParsed(classes);
+        setUploaded({ name: file.name, size: file.size, classes: classes?.length ?? null });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Upload failed.");
       } finally {
@@ -93,7 +126,10 @@ function DatasetConfigField({
       </div>
       {uploaded && !error && (
         <p className="dataset-note">
-          Uploaded <code>{uploaded.name}</code> ({(uploaded.size / 1024).toFixed(1)} KB) → reference points to R2 key
+          Uploaded <code>{uploaded.name}</code> ({(uploaded.size / 1024).toFixed(1)} KB)
+          {uploaded.classes !== null
+            ? ` · parsed ${uploaded.classes} class${uploaded.classes === 1 ? "" : "es"} from names:`
+            : " · could not parse names: block, classes left untouched"}
         </p>
       )}
       {error && <p className="form-error">{error}</p>}
@@ -516,33 +552,12 @@ function TrainWorkflow({
   onStart: () => void;
 }) {
   const runningRuns = runs.filter((r) => r.status === "running");
-  const explicit = focusedRunId ? runs.find((r) => r.id === focusedRunId) : undefined;
-  const focused = explicit ?? runningRuns[0] ?? runs[0];
-  const recent = runs.filter((r) => r.id !== focused?.id).slice(0, 6);
+  const focused = focusedRunId ? runs.find((r) => r.id === focusedRunId) : undefined;
+  const recent = runs.filter((r) => r.status !== "running").slice(0, 6);
   const isFocusedRunning = focused?.status === "running";
-  const focusedTone = isFocusedRunning ? "running" : "recent";
+  const [howOpen, setHowOpen] = useState(false);
   return (
     <section className="train-layout">
-    <aside className="boundary-card" role="note">
-      <Info size={18} className="boundary-icon" aria-hidden="true" />
-      <div>
-        <strong>How training actually runs</strong>
-        <p>
-          This dashboard is the <em>registry</em>. Clicking <em>Start Colab MCP training</em>{" "}
-          inserts a <code>runs</code> row in Supabase with the config below — it does
-          not download the dataset or run YOLO. The dataset path (e.g.{" "}
-          <code>configs/dataset.banana-v2.yaml</code>) only resolves on a machine that
-          has the repo and the images on disk.
-        </p>
-        <p>
-          Live metrics appear here when{" "}
-          <code>scripts/train_yolo26n_seg.py</code> is run against this run id with the
-          Python SDK and a service-role key — typically inside a Colab notebook started
-          through the Colab MCP server. Until that script writes to{" "}
-          <code>run_metrics</code>, only the bootstrap log is shown.
-        </p>
-      </div>
-    </aside>
     <section className="content-grid wide-left">
       <form
         className="panel train-form"
@@ -551,7 +566,17 @@ function TrainWorkflow({
           if (isAdmin) onStart();
         }}
       >
-        <SectionHeading title="Train new model" text="Defaults are loaded from the current PoC config. Adjust only what the demo needs." />
+        <div className="section-heading-row">
+          <SectionHeading title="Train new model" text="Defaults are loaded from the current PoC config. Adjust only what the demo needs." />
+          <button
+            type="button"
+            className="ghost-button compact"
+            onClick={() => setHowOpen(true)}
+            title="How training actually runs"
+          >
+            <Info size={14} aria-hidden="true" /> How training runs
+          </button>
+        </div>
         <label>
           <span className="label-text">
             Dataset config
@@ -562,6 +587,7 @@ function TrainWorkflow({
             onChange={(next) => setConfig({ ...config, dataset: next })}
             modelLineSlug={config.modelLine}
             disabled={!isAdmin}
+            onClassesParsed={(classes) => setConfig({ ...config, dataset: config.dataset, classes })}
           />
         </label>
         <label>
@@ -577,18 +603,24 @@ function TrainWorkflow({
             <option value="yolo26s-seg.pt">yolo26s-seg.pt — small (more accurate)</option>
           </select>
         </label>
-        <label>
+        <div className="readonly-field">
           <span className="label-text">
             Classes
-            <Hint text="Type a class name and press Enter or comma to add it as a tag. Order matters — must match the dataset's class indices. Adding or removing classes invalidates compat with prior versions." />
+            <Hint text="Read from the dataset YAML's names: block. Upload a different YAML to change them." />
           </span>
-          <TagInput
-            value={config.classes}
-            onChange={(next) => setConfig({ ...config, classes: next })}
-            placeholder="Type a class (e.g. apple or 0=apple) and press Enter…"
-            numbered
-          />
-        </label>
+          <div className="readonly-classes">
+            {config.classes.length === 0 ? (
+              <span className="readonly-empty">No classes — upload a dataset YAML to populate.</span>
+            ) : (
+              config.classes.map((name, index) => (
+                <span className="tag-chip readonly" key={`${name}-${index}`}>
+                  <span className="tag-index">{index}</span>
+                  <span>{name}</span>
+                </span>
+              ))
+            )}
+          </div>
+        </div>
         <div className="form-grid">
           <NumberField label="Epochs" value={config.hyperParameters.epochs} onChange={(value) => updateHp(config, setConfig, "epochs", value)} hint="Number of full passes over the dataset. More epochs = more learning, but risk of overfitting. 50 is a sane default for fine-tuning." />
           <NumberField label="Image size" value={config.hyperParameters.imgsz} onChange={(value) => updateHp(config, setConfig, "imgsz", value)} hint="Input image side length in pixels. Larger = better small-object recall but slower training and inference. 640 is the YOLO default." />
@@ -619,51 +651,28 @@ function TrainWorkflow({
         <SectionHeading
           title="Live tracking"
           text={
-            runningRuns.length > 1
-              ? `${runningRuns.length} runs in progress. Click a row to inspect its full detail.`
-              : "Realtime metric stream from the Python SDK to Supabase."
+            runningRuns.length > 0
+              ? "Click any row to view full detail in the panel below."
+              : "Runs appear here while they are in progress."
           }
         />
-        {runningRuns.length > 1 && (
-          <div className="track-multi">
-            <span className="track-multi-label">Running now</span>
-            <RunList
-              runs={runningRuns}
-              selectedId={focused?.id ?? null}
-              onSelect={(id) => setFocusedRunId(id)}
-            />
-          </div>
-        )}
-        {focused ? (
-          <>
-            <div className="track-banner">
-              <span className={`status-pill ${focusedTone === "running" ? "staging" : "candidate"}`}>
-                {focusedTone === "running" ? "Running now" : "Most recent"}
-              </span>
-              <span className="track-meta">{focused.hardware}{focused.colabNotebook ? ` · ${focused.colabNotebook}` : ""}</span>
-            </div>
-            {isFocusedRunning && focused.map50 === null && (
-              <div className="track-hint">
-                <Info size={14} aria-hidden="true" />
-                <span>
-                  Waiting for the Python SDK to stream <code>run_metrics</code>. Until the
-                  training script writes metrics for this run, only the bootstrap log is shown.
-                </span>
-              </div>
-            )}
-            <RunDetail run={focused} />
-          </>
+        {runningRuns.length > 0 ? (
+          <RunList
+            runs={runningRuns}
+            selectedId={focused?.id ?? null}
+            onSelect={(id) => setFocusedRunId(id)}
+          />
         ) : (
           <EmptyState
             icon={<Wand2 size={24} />}
-            title="No training runs yet"
+            title="No runs in progress"
             text="Configure the form on the left and start a Colab MCP run to see live metrics here."
           />
         )}
       </section>
     </section>
     <section className="panel">
-      <SectionHeading title="Recent training runs" text="History from this model line. Click a row to open its full detail above." />
+      <SectionHeading title="Recent training runs" text="History from this model line. Click any row to open its full detail below." />
       {recent.length > 0 ? (
         <RunList runs={recent} selectedId={focused?.id ?? null} onSelect={(id) => setFocusedRunId(id)} />
       ) : (
@@ -674,7 +683,86 @@ function TrainWorkflow({
         />
       )}
     </section>
+    <section className={`panel run-detail-panel ${focused ? "open" : "closed"}`} aria-live="polite">
+      {focused && (
+        <>
+          <div className="run-detail-header">
+            <SectionHeading
+              title={`Run · ${focused.name}`}
+              text={`${focused.id} · ${focused.hardware}${focused.colabNotebook ? ` · ${focused.colabNotebook}` : ""}`}
+            />
+            <button type="button" className="ghost-button compact" onClick={() => setFocusedRunId(null)} aria-label="Close run detail">
+              <X size={14} /> Close
+            </button>
+          </div>
+          {isFocusedRunning && focused.map50 === null && (
+            <div className="track-hint">
+              <Info size={14} aria-hidden="true" />
+              <span>
+                Waiting for the Python SDK to stream <code>run_metrics</code>. Until the
+                training script writes metrics for this run, only the bootstrap log is shown.
+              </span>
+            </div>
+          )}
+          <RunDetail run={focused} />
+        </>
+      )}
     </section>
+    {howOpen && (
+      <Modal title="How training actually runs" onClose={() => setHowOpen(false)}>
+        <p>
+          This dashboard is the <em>registry</em>. Clicking <em>Start Colab MCP training</em>{" "}
+          inserts a <code>runs</code> row in Supabase with the config below — it does
+          not download the dataset or run YOLO. The dataset path (e.g.{" "}
+          <code>configs/dataset.banana-v2.yaml</code>) only resolves on a machine that
+          has the repo and the images on disk.
+        </p>
+        <p>
+          Live metrics appear here when{" "}
+          <code>scripts/train_yolo26n_seg.py</code> is run against this run id with the
+          Python SDK and a service-role key — typically inside a Colab notebook started
+          through the Colab MCP server. Until that script writes to{" "}
+          <code>run_metrics</code>, only the bootstrap log is shown.
+        </p>
+        <p>
+          A separate OpenSpec change (<code>wire-dashboard-to-hosted-training</code>)
+          scopes a hosted-GPU path so a stranger with the dashboard URL can start a
+          real run end-to-end without local repo access.
+        </p>
+      </Modal>
+    )}
+    </section>
+  );
+}
+
+function Modal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={title} onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <header className="modal-header">
+          <h2>{title}</h2>
+          <button type="button" className="ghost-button compact" onClick={onClose} aria-label="Close">
+            <X size={14} />
+          </button>
+        </header>
+        <div className="modal-body">{children}</div>
+      </div>
+    </div>
   );
 }
 
