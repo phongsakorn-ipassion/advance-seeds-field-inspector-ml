@@ -9,6 +9,7 @@ import {
   Sprout,
   Trash2,
   Wand2,
+  X,
 } from "lucide-react";
 import {
   ChannelName,
@@ -30,6 +31,83 @@ function Hint({ text }: { text: string }) {
       </button>
       <span className="hint-bubble" role="tooltip">{text}</span>
     </span>
+  );
+}
+
+function TagInput({
+  value,
+  onChange,
+  placeholder = "Add class…",
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+  placeholder?: string;
+}) {
+  const [draft, setDraft] = useState("");
+
+  function commit(raw: string) {
+    const cleaned = raw.trim();
+    if (!cleaned) return;
+    if (value.includes(cleaned)) {
+      setDraft("");
+      return;
+    }
+    onChange([...value, cleaned]);
+    setDraft("");
+  }
+
+  function remove(index: number) {
+    onChange(value.filter((_, i) => i !== index));
+  }
+
+  function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter" || event.key === "," || event.key === "Tab") {
+      if (draft.trim()) {
+        event.preventDefault();
+        commit(draft);
+      }
+    } else if (event.key === "Backspace" && draft === "" && value.length > 0) {
+      event.preventDefault();
+      remove(value.length - 1);
+    }
+  }
+
+  function onPaste(event: React.ClipboardEvent<HTMLInputElement>) {
+    const pasted = event.clipboardData.getData("text");
+    if (/[,\n]/.test(pasted)) {
+      event.preventDefault();
+      const tokens = pasted.split(/[,\n]/).map((t) => t.trim()).filter(Boolean);
+      const merged = Array.from(new Set([...value, ...tokens]));
+      onChange(merged);
+      setDraft("");
+    }
+  }
+
+  return (
+    <div className="tag-input">
+      {value.map((tag, index) => (
+        <span className="tag-chip" key={`${tag}-${index}`}>
+          <span>{tag}</span>
+          <button
+            type="button"
+            className="tag-remove"
+            aria-label={`Remove ${tag}`}
+            onClick={() => remove(index)}
+          >
+            <X size={12} aria-hidden="true" />
+          </button>
+        </span>
+      ))}
+      <input
+        className="tag-field"
+        value={draft}
+        placeholder={value.length === 0 ? placeholder : ""}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={onKeyDown}
+        onPaste={onPaste}
+        onBlur={() => draft.trim() && commit(draft)}
+      />
+    </div>
   );
 }
 
@@ -402,12 +480,12 @@ function TrainWorkflow({
         <label>
           <span className="label-text">
             Classes
-            <Hint text="One class name per line. Order matters — must match the dataset's class indices. Adding or removing classes invalidates compat with prior versions." />
+            <Hint text="Type a class name and press Enter or comma to add it as a tag. Order matters — must match the dataset's class indices. Adding or removing classes invalidates compat with prior versions." />
           </span>
-          <textarea
-            value={config.classes.join("\n")}
-            onChange={(event) => setConfig({ ...config, classes: splitLines(event.target.value) })}
-            rows={6}
+          <TagInput
+            value={config.classes}
+            onChange={(next) => setConfig({ ...config, classes: next })}
+            placeholder="Type a class and press Enter…"
           />
         </label>
         <div className="form-grid">
@@ -859,10 +937,6 @@ function updateHp<K extends keyof TrainConfig["hyperParameters"]>(
   value: TrainConfig["hyperParameters"][K],
 ) {
   setConfig({ ...config, hyperParameters: { ...config.hyperParameters, [key]: value } });
-}
-
-function splitLines(value: string) {
-  return value.split("\n").map((line) => line.trim()).filter(Boolean);
 }
 
 function sectionTitle(section: Section) {

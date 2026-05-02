@@ -437,6 +437,71 @@ button {
 .train-form input::placeholder,
 .manual-login input::placeholder { color: var(--as-text-tertiary); }
 
+/* Tag input */
+.tag-input {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 44px;
+  padding: 6px var(--as-space-sm);
+  border: 1px solid var(--as-border-secondary);
+  border-radius: var(--as-radius-md);
+  background: var(--as-bg-primary);
+  cursor: text;
+  transition: border-color var(--as-duration-fast) var(--as-easing-standard),
+              box-shadow var(--as-duration-fast) var(--as-easing-standard);
+}
+.tag-input:focus-within {
+  border-color: var(--as-brand);
+  box-shadow: 0 0 0 3px var(--as-brand-soft);
+}
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 4px 0 10px;
+  border-radius: var(--as-radius-md);
+  background: var(--as-brand-soft);
+  color: var(--as-brand-deep);
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  font-family: var(--as-font-mono);
+}
+.tag-remove {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin-left: 2px;
+  border: 0;
+  border-radius: var(--as-radius-full);
+  background: transparent;
+  color: var(--as-brand-deep);
+  cursor: pointer;
+  transition: background var(--as-duration-fast) var(--as-easing-standard);
+}
+.tag-remove:hover { background: rgba(0, 0, 0, 0.08); }
+.tag-field {
+  flex: 1;
+  min-width: 140px;
+  height: 28px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--as-text-primary);
+  padding: 0 4px;
+}
+.tag-field::placeholder { color: var(--as-text-tertiary); }
+
 /* Info hint */
 .hint {
   position: relative;
