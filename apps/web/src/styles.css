@@ -579,6 +579,38 @@ button {
   gap: var(--as-space-xl);
 }
 
+.boundary-card {
+  display: flex;
+  gap: var(--as-space-md);
+  padding: var(--as-space-lg) var(--as-space-xl);
+  border: 1px solid var(--as-border-tertiary);
+  border-radius: var(--as-radius-xl);
+  background: var(--as-info-bg);
+  color: var(--as-info-text);
+}
+.boundary-card .boundary-icon { flex-shrink: 0; margin-top: 2px; }
+.boundary-card strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  color: var(--as-info-text);
+}
+.boundary-card p {
+  margin: 0 0 var(--as-space-xs);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--as-info-text);
+}
+.boundary-card p:last-child { margin-bottom: 0; }
+.boundary-card code {
+  font-family: var(--as-font-mono);
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
 .track-banner {
   display: flex;
   align-items: center;

@@ -350,6 +350,26 @@ function TrainWorkflow({
   const focusedTone = running ? "running" : "recent";
   return (
     <section className="train-layout">
+    <aside className="boundary-card" role="note">
+      <Info size={18} className="boundary-icon" aria-hidden="true" />
+      <div>
+        <strong>How training actually runs</strong>
+        <p>
+          This dashboard is the <em>registry</em>. Clicking <em>Start Colab MCP training</em>{" "}
+          inserts a <code>runs</code> row in Supabase with the config below — it does
+          not download the dataset or run YOLO. The dataset path (e.g.{" "}
+          <code>configs/dataset.banana-v2.yaml</code>) only resolves on a machine that
+          has the repo and the images on disk.
+        </p>
+        <p>
+          Live metrics appear here when{" "}
+          <code>scripts/train_yolo26n_seg.py</code> is run against this run id with the
+          Python SDK and a service-role key — typically inside a Colab notebook started
+          through the Colab MCP server. Until that script writes to{" "}
+          <code>run_metrics</code>, only the bootstrap log is shown.
+        </p>
+      </div>
+    </aside>
     <section className="content-grid wide-left">
       <form
         className="panel train-form"
@@ -362,7 +382,7 @@ function TrainWorkflow({
         <label>
           <span className="label-text">
             Dataset config
-            <Hint text="Path to the YOLO dataset YAML. Should reference train/val/test splits and class names. Use the latest banana-v2 config for the PoC." />
+            <Hint text="Path to the YOLO dataset YAML, resolved on the training machine — the dashboard does NOT fetch this file. Whatever runs the SDK (your laptop, a Colab notebook, a worker) must have this file and the referenced images on disk. Use configs/dataset.banana-v2.yaml for the PoC." />
           </span>
           <input value={config.dataset} onChange={(event) => setConfig({ ...config, dataset: event.target.value })} />
         </label>
