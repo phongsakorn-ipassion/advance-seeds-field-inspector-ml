@@ -29,3 +29,11 @@ models/*.mlmodelc/
 
 # Git worktrees
 .worktrees/
+
+# Supabase
+supabase/.branches
+supabase/.temp
+supabase/.env
+supabase/.env.local
+**/.deno/
+**/node_modules/
