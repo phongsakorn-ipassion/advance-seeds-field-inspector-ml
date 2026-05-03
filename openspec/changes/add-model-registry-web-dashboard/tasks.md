@@ -27,3 +27,10 @@
 - [x] 4.5 Add deploy, undeploy, and inactive artifact deletion actions.
 - [x] 4.6 Add storage quota usage, warnings, and cleanup affordances.
 - [x] 4.7 Run web build, Python tests, OpenSpec validation, and browser inspection.
+
+## 5. Lifecycle UI Refinement
+
+- [x] 5.1 Add a designed empty state for Model operations live runs.
+- [x] 5.2 Revise Model detail Performance cards so artifact context covers Android and iOS packages without sha256 body text.
+- [x] 5.3 Revise Deployment Resolve default model non-default state into a compact status label.
+- [x] 5.4 Run web build and OpenSpec validation for the refinements.

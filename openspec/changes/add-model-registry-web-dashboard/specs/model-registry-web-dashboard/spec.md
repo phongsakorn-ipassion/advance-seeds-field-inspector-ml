@@ -77,3 +77,26 @@ is near or over the configured R2 quota.
 - **WHEN** stored model artifacts exceed the configured quota
 - **THEN** the dashboard warns the operator and offers deletion for inactive
   artifacts
+
+### Requirement: Model operations present mobile-ready lifecycle context
+The dashboard SHALL present model lifecycle details in operator-facing layouts
+that are concise, platform-aware, and useful to mobile app developers consuming
+the registry service.
+
+#### Scenario: Model operations has no live runs
+- **WHEN** no training runs are currently live
+- **THEN** the Live runs panel shows a designed empty state that explains Python
+  SDK reporting and links operator intent to the Train pipeline detail view
+
+#### Scenario: Operator reviews model performance artifacts
+- **WHEN** a model version has platform artifacts
+- **THEN** the Performance section shows mAP50, mask mAP, and artifact cards
+  with balanced proportions
+- **AND** the artifact card summarizes Android and iOS package sizes without
+  exposing sha256 details in the card body
+
+#### Scenario: Version is selectable but not default
+- **WHEN** a deployed version is selectable on a channel but is not the default
+  resolved model
+- **THEN** the Deployment section shows a compact status label instead of a
+  plain empty-description paragraph

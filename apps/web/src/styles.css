@@ -480,10 +480,81 @@ button {
 .metric-card.danger strong, .metric-card.danger small { color: var(--as-danger-text); }
 .metric-card.danger span { color: var(--as-danger-text); opacity: 0.7; }
 
+.performance-artifact-card {
+  gap: var(--as-space-sm);
+}
+.performance-artifact-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--as-space-xs);
+  min-width: 0;
+}
+.performance-artifact-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--as-space-xs) var(--as-space-sm);
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--as-border-tertiary);
+  border-radius: var(--as-radius-md);
+  background: var(--as-bg-tertiary);
+}
+.performance-artifact-row.missing {
+  border-style: dashed;
+  color: var(--as-text-tertiary);
+}
+.performance-artifact-row div {
+  display: grid;
+  min-width: 0;
+}
+.performance-artifact-row b {
+  overflow: hidden;
+  color: var(--as-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.performance-artifact-row span {
+  justify-self: end;
+  align-self: start;
+  min-width: 0;
+  overflow: hidden;
+  padding: 2px 6px;
+  border-radius: var(--as-radius-sm);
+  background: var(--as-bg-secondary);
+  color: var(--as-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.performance-artifact-row em {
+  grid-column: 1 / -1;
+  color: var(--as-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.performance-artifact-summary {
+  display: block;
+  color: var(--as-text-tertiary);
+  font-size: 12px;
+}
+
 .metrics-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--as-space-md);
+}
+.performance-metrics-row .metric-card:not(.performance-artifact-card) strong {
+  font-size: 30px;
+  line-height: 1.05;
 }
 
 .platform-grid {
@@ -673,6 +744,24 @@ button {
 }
 .endpoint-group > .status-pill {
   justify-self: start;
+}
+.deployment-default-note {
+  display: grid;
+  gap: var(--as-space-xs);
+  min-width: 0;
+  padding: var(--as-space-sm) var(--as-space-md);
+  border: 1px dashed var(--as-border-secondary);
+  border-radius: var(--as-radius-md);
+  background: var(--as-bg-secondary);
+}
+.deployment-default-note .status-pill {
+  justify-self: start;
+}
+.deployment-default-note p {
+  margin: 0;
+  color: var(--as-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
 }
 .endpoint-row {
   display: grid;

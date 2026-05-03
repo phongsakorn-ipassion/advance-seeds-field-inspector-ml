@@ -917,6 +917,7 @@ function Overview({
   onOpenRun: (runId: string) => void;
 }) {
   const running = runs.find((run) => run.status === "running");
+  const liveRuns = runs.filter((run) => run.status === "running").slice(0, 4);
   return (
     <>
       <section className="summary-grid">
@@ -939,8 +940,16 @@ function Overview({
           </button>
         </section>
         <section className="panel">
-          <SectionHeading title="Live runs" text="Reported by the Python SDK; click any run to open its full detail in the Train pipeline." />
-          <RunList runs={runs.filter((r) => r.status === "running").slice(0, 4)} onSelect={onOpenRun} />
+          <SectionHeading title="Live runs" text={liveRuns.length > 0 ? "Click any run to open its full detail in the Train pipeline." : ""} />
+          {liveRuns.length > 0 ? (
+            <RunList runs={liveRuns} onSelect={onOpenRun} />
+          ) : (
+            <EmptyState
+              icon={<Activity size={24} />}
+              title="No live runs"
+              text="Reported by the Python SDK; click any run to open its full detail in the Train pipeline."
+            />
+          )}
         </section>
       </section>
     </>
@@ -1872,10 +1881,10 @@ function ModelDetail({
       )}
       <div>
         <SectionMiniHeading title="Performance" hint="Final validation metrics and artifact identity for this version. Use mAP50 and mask mAP to compare model quality before promotion." />
-        <div className="metrics-row">
+        <div className="metrics-row performance-metrics-row">
           <MetricCard label="mAP50" value={pct(version.map50)} detail="box metric" />
           <MetricCard label="Mask mAP" value={pct(version.maskMap)} detail="segmentation metric" />
-          <MetricCard label="Artifact" value={`${version.sizeMb.toFixed(1)} MB`} detail={version.contentHash} truncateDetail />
+          <PerformanceArtifactCard version={version} />
         </div>
       </div>
       <PlatformReadiness version={version} store={store} />
@@ -1942,6 +1951,42 @@ function ModelDetail({
         )}
       </div>
     </div>
+  );
+}
+
+function PerformanceArtifactCard({ version }: { version: RegistryVersion }) {
+  const packages = [
+    {
+      platform: "Android",
+      sizeMb: version.sizeMb,
+      ready: Boolean(version.tfliteR2Key),
+    },
+    {
+      platform: "iOS",
+      sizeMb: version.coremlSizeMb,
+      ready: Boolean(version.coremlR2Key),
+    },
+  ];
+  const totalSizeMb = packages.reduce((total, artifact) => total + (typeof artifact.sizeMb === "number" ? artifact.sizeMb : 0), 0);
+  const readyCount = packages.filter((artifact) => artifact.ready).length;
+
+  return (
+    <article className="metric-card performance-artifact-card">
+      <span>Artifact</span>
+      <strong>{totalSizeMb > 0 ? `${totalSizeMb.toFixed(1)} MB` : "—"}</strong>
+      <div className="performance-artifact-list" aria-label="Platform artifacts">
+        {packages.map((artifact) => (
+          <div className={artifact.ready ? "performance-artifact-row ready" : "performance-artifact-row missing"} key={artifact.platform}>
+            <div>
+              <b>{artifact.platform}</b>
+            </div>
+            {!artifact.ready && <span>Missing</span>}
+            <em>{typeof artifact.sizeMb === "number" ? `${artifact.sizeMb.toFixed(1)} MB` : "—"}</em>
+          </div>
+        ))}
+      </div>
+      <small className="performance-artifact-summary">{readyCount}/2 platform packages ready</small>
+    </article>
   );
 }
 
@@ -2114,7 +2159,10 @@ function DeploymentSection({
               <strong>Resolve default model</strong>
               <span>Use at app startup or sync time. It returns update, noop, rebuild_required, or artifact_missing for the channel default.</span>
               {defaultChannels.length === 0 ? (
-                <p className="description-empty">This version is selectable but not the channel default.</p>
+                <div className="deployment-default-note" role="status">
+                  <span className="status-pill inactive">Selectable</span>
+                  <p>This version is selectable but not the channel default.</p>
+                </div>
               ) : defaultChannels.map((channel) => (
                 <div className="endpoint-group" key={`resolve-${channel}`}>
                   <span className={`status-pill ${channel}`}>{channel}</span>
