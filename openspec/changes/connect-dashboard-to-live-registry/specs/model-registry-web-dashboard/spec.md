@@ -63,6 +63,12 @@ once the Python SDK reports them.
 - **THEN** the Manual Colab hand-off section SHALL show a concise checklist
 - **AND** the run id SHALL have a copy icon action
 
+#### Scenario: Active run Colab checklist is scannable
+- **WHEN** a run is still active or waiting for Colab
+- **THEN** each Manual Colab hand-off step SHALL render as collapsed content
+- **AND** step numbering SHALL remain visually aligned with the step summary
+  text and expanded body content
+
 #### Scenario: Succeeded recent run opens trained model
 - **WHEN** a recent training run has status `succeeded`
 - **AND** the registry has a model version linked to that run
@@ -121,6 +127,21 @@ the browser bundle.
 - **AND** the model version metadata SHALL remain visible as an archived
   history record in Model detail
 - **AND** the model version SHALL no longer be available for future deployment
+
+#### Scenario: Admin downloads model artifacts from Model detail
+- **WHEN** an admin views an unarchived model version with Android or iOS
+  artifact keys
+- **THEN** the Platform readiness section SHALL expose per-platform download
+  icon actions
+- **AND** artifact downloads SHALL use an admin-only Edge Function that returns
+  a short-lived signed R2 URL without exposing R2 credentials to the browser
+
+#### Scenario: Model detail explains dataset image splits
+- **WHEN** a model version has dataset image stats from the trainer
+- **THEN** the Dataset images section SHALL show total images plus train,
+  validation, and test split cards with clear proportions and paths
+- **AND** missing counts SHALL render as a waiting state rather than a broken
+  or misleading value
 
 #### Scenario: Non-admin tries to delete
 - **WHEN** a non-admin caller posts to the deletion endpoint

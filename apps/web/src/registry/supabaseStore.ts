@@ -62,6 +62,7 @@ type DbRunMetric = {
   epoch: number | null;
   name: string;
   value: number;
+  recorded_at?: string;
 };
 
 type DbVersion = {
@@ -159,7 +160,14 @@ function latestMetric(metrics: DbRunMetric[], runId: string, names: string[]): n
   const allowed = new Set(names.map(normalizeMetricName));
   const filtered = metrics.filter((m) => m.run_id === runId && allowed.has(normalizeMetricName(m.name)));
   if (filtered.length === 0) return null;
-  return filtered.sort((a, b) => b.step - a.step)[0].value;
+  return filtered.sort(compareMetricRecency)[0].value;
+}
+
+function compareMetricRecency(a: DbRunMetric, b: DbRunMetric): number {
+  const recorded = Date.parse(b.recorded_at ?? "") - Date.parse(a.recorded_at ?? "");
+  if (Number.isFinite(recorded) && recorded !== 0) return recorded;
+  if (b.step !== a.step) return b.step - a.step;
+  return (b.epoch ?? -1) - (a.epoch ?? -1);
 }
 
 function normalizeMetricName(name: string): string {
@@ -329,8 +337,9 @@ export function createSupabaseStore(env: Env): RegistryStore {
     if (runIds.length > 0) {
       const { data: metricRows, error: mErr } = await client
         .from("run_metrics")
-        .select("run_id,step,epoch,name,value")
-        .in("run_id", runIds);
+        .select("run_id,step,epoch,name,value,recorded_at")
+        .in("run_id", runIds)
+        .order("recorded_at", { ascending: false });
       if (mErr) throw mErr;
       metrics = metricRows ?? [];
     }
@@ -369,6 +378,18 @@ export function createSupabaseStore(env: Env): RegistryStore {
       .subscribe();
   }
 
+  function setupActiveRunPolling() {
+    if (typeof window === "undefined") return;
+    window.setInterval(() => {
+      if (snapshot.runs.some((run) => run.status === "running")) {
+        void refresh();
+      }
+    }, 5000);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") void refresh();
+    });
+  }
+
   function applySession(supSession: any) {
     if (!supSession) {
       session = null;
@@ -385,6 +406,7 @@ export function createSupabaseStore(env: Env): RegistryStore {
     applySession(data.session);
     try { await refresh(); } catch { /* ignore until env is configured */ }
     setupRealtime();
+    setupActiveRunPolling();
   })();
 
   client.auth.onAuthStateChange((_event, supSession) => {
@@ -631,6 +653,23 @@ export function createSupabaseStore(env: Env): RegistryStore {
         await archiveVersionById(versionId);
         await refresh();
       });
+    },
+    async downloadArtifact(r2Key) {
+      const token = (await client.auth.getSession()).data.session?.access_token;
+      const res = await fetch(`${env.supabaseUrl}/functions/v1/download-artifact`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: token ? `Bearer ${token}` : "",
+          apikey: env.supabaseAnonKey,
+        },
+        body: JSON.stringify({ r2_key: r2Key }),
+      });
+      const body = await res.json().catch(() => ({})) as { download_url?: string; error?: string };
+      if (!res.ok || !body.download_url) {
+        throw new Error(body.error ?? `Download failed: ${res.status}`);
+      }
+      return { downloadUrl: body.download_url };
     },
     async archiveVersion(versionId) {
       await adminWrite(async () => {

@@ -8,6 +8,7 @@ import {
   Bell,
   Copy,
   Database,
+  Download,
   ExternalLink,
   Info,
   LogOut,
@@ -1275,39 +1276,45 @@ function ColabManualSteps({ runId }: { runId: string }) {
           <Copy size={13} aria-hidden="true" />
         </button>
       </div>
-      <ol>
+      <ol className="manual-step-list">
         <li>
-          <strong>Open notebook</strong>
-          <span>Click <em>Open in Colab</em>. The notebook URL already includes this run id.</span>
+          <details>
+            <summary><span>Open notebook and choose GPU</span></summary>
+            <p>Click <em>Open in Colab</em>. The notebook URL already includes this run id.</p>
+            <p>In Colab, set <em>Runtime, Change runtime type, GPU</em>. T4 is enough for YOLO-n; L4 or A100 is faster.</p>
+          </details>
         </li>
         <li>
-          <strong>Select GPU</strong>
-          <span>In Colab, set <em>Runtime, Change runtime type, GPU</em>. T4 is enough for YOLO-n; L4 or A100 is faster.</span>
+          <details>
+            <summary><span>Run all notebook cells</span></summary>
+            <p>Click <em>Runtime, Run all</em> or press <code>Cmd/Ctrl + F9</code>. Colab does not auto-run on open.</p>
+          </details>
         </li>
         <li>
-          <strong>Run all cells</strong>
-          <span>Click <em>Runtime, Run all</em> or press <code>Cmd/Ctrl + F9</code>. Colab does not auto-run on open.</span>
+          <details>
+            <summary><span>Authenticate the Colab session</span></summary>
+            <p>Cell 7 asks for the Supabase service-role key. Paste it once; it stays inside that Colab session.</p>
+          </details>
         </li>
         <li>
-          <strong>Paste service-role key</strong>
-          <span>Cell 7 asks for the Supabase service-role key. Paste it once; it stays inside that Colab session.</span>
+          <details>
+            <summary><span>Confirm dataset image path</span></summary>
+            <p>Cell 10 fetches the YAML from R2 and prints the resolved image path. If images are missing, mount Drive and unzip the dataset before the training cell.</p>
+            <pre>{`from google.colab import drive\ndrive.mount('/content/drive')\n!unzip -q /content/drive/MyDrive/<your-dataset>.zip -d /content/advance-seeds-field-inspector-ml/data/processed/`}</pre>
+          </details>
         </li>
         <li>
-          <strong>Confirm dataset path</strong>
-          <span>Cell 10 fetches the YAML from R2 and prints the resolved image path. If images are missing, mount Drive and unzip the dataset before the training cell.</span>
-          <pre>{`from google.colab import drive\ndrive.mount('/content/drive')\n!unzip -q /content/drive/MyDrive/<your-dataset>.zip -d /content/advance-seeds-field-inspector-ml/data/processed/`}</pre>
+          <details>
+            <summary><span>Start training</span></summary>
+            <p>Cell 12 runs <code>scripts/train_for_run.py --run-id {runId.slice(0, 8)}...</code>. Per-epoch metrics stream back here.</p>
+          </details>
         </li>
         <li>
-          <strong>Start training</strong>
-          <span>Cell 12 runs <code>scripts/train_for_run.py --run-id {runId.slice(0, 8)}...</code>. Per-epoch metrics stream back here.</span>
-        </li>
-        <li>
-          <strong>Review output</strong>
-          <span>On success, the script exports INT8 TF Lite and optimized Core ML, uploads both to R2, and creates the model version.</span>
-        </li>
-        <li>
-          <strong>Keep Colab open</strong>
-          <span>Closing the Colab tab terminates the runtime and stops training.</span>
+          <details>
+            <summary><span>Review exported artifacts</span></summary>
+            <p>On success, the script exports INT8 TF Lite and optimized Core ML, uploads both to R2, and creates the model version.</p>
+            <p>Closing the Colab tab terminates the runtime and stops training.</p>
+          </details>
         </li>
       </ol>
     </div>
@@ -1324,13 +1331,17 @@ function DatasetSplitScroller({ stats }: { stats?: DatasetStats }) {
   const hasAnyPath = Boolean(stats?.trainPath || stats?.validationPath || stats?.testingPath);
   const hasAnyCount = typeof total === "number";
   const totalDisplay = hasAnyCount ? formatCount(total) : (hasAnyPath ? "—" : "No dataset");
+  const knownTotal = typeof total === "number" && total > 0 ? total : null;
   return (
     <div className="dataset-split-scroller" aria-label="Dataset split summary">
       <div className="dataset-split-total">
-        <span>
-          DATASET IMAGES
-          <Hint text="Paths come from the YOLO YAML's train, val, and test fields. Image counts only appear once the trainer scans the dataset on disk — the browser can't count images in a remote folder." />
-        </span>
+        <div>
+          <span>
+            DATASET IMAGES
+            <Hint text="Paths come from the YOLO YAML's train, val, and test fields. Image counts only appear once the trainer scans the dataset on disk — the browser can't count images in a remote folder." />
+          </span>
+          <small>{hasAnyCount ? "Trainer-scanned image inventory" : hasAnyPath ? "Waiting for trainer-side scan" : "No dataset paths available"}</small>
+        </div>
         <strong>{totalDisplay}</strong>
       </div>
       {hasAnyPath && !hasAnyCount && (
@@ -1341,10 +1352,15 @@ function DatasetSplitScroller({ stats }: { stats?: DatasetStats }) {
       <div className="dataset-split-rail" tabIndex={0}>
         {splits.map((split) => (
           <article className="dataset-split-card" key={split.label}>
-            <span>{split.label}</span>
-            <strong>{typeof split.count === "number" ? formatCount(split.count) : "—"}</strong>
+            <div className="dataset-split-card-head">
+              <span>{split.label}</span>
+              <strong>{typeof split.count === "number" ? formatCount(split.count) : "—"}</strong>
+            </div>
+            <div className="dataset-split-meter" aria-hidden="true">
+              <div style={{ width: `${knownTotal && typeof split.count === "number" ? Math.max(3, Math.round((split.count / knownTotal) * 100)) : 0}%` }} />
+            </div>
             <small>{split.role}</small>
-            <code>{split.path ?? "not in YAML"}</code>
+            <code title={split.path ?? "not in YAML"}>{split.path ?? "not in YAML"}</code>
           </article>
         ))}
       </div>
@@ -1808,7 +1824,7 @@ function ModelDetail({
           <MetricCard label="Artifact" value={`${version.sizeMb.toFixed(1)} MB`} detail={version.contentHash} truncateDetail />
         </div>
       </div>
-      <PlatformReadiness version={version} />
+      <PlatformReadiness version={version} store={store} />
       <DeploymentSection version={version} deployments={deployedRows} />
       <DescriptionSection version={version} isAdmin={isAdmin} />
       <InfoSection
@@ -1875,26 +1891,103 @@ function ModelDetail({
   );
 }
 
-function PlatformReadiness({ version }: { version: RegistryVersion }) {
+function PlatformReadiness({ version, store }: { version: RegistryVersion; store: RegistryStore }) {
   const isArchived = version.state === "archived";
+  const [downloading, setDownloading] = useState<"android" | "ios" | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  async function downloadArtifact(platform: "android" | "ios", r2Key: string | null | undefined) {
+    if (!r2Key || isArchived) return;
+    setDownloading(platform);
+    setDownloadError(null);
+    try {
+      const { downloadUrl } = await store.downloadArtifact(r2Key);
+      window.open(downloadUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDownloading(null);
+    }
+  }
+
   return (
     <div>
       <SectionMiniHeading title="Platform readiness" hint="Native runtime artifacts packaged with this logical model version." />
       <div className="platform-grid">
-        <article className={isArchived ? "platform-card missing" : "platform-card ready"}>
-          <strong>Android TF Lite</strong>
-          <span>{isArchived ? "Archived" : `Ready · ${(version.tflitePrecision ?? "int8").toUpperCase()}`}</span>
-          <code title={version.tfliteR2Key}>{isArchived ? "Artifact deleted" : version.tfliteR2Key}</code>
-        </article>
-        <article className={!isArchived && version.coremlR2Key ? "platform-card ready" : "platform-card missing"}>
-          <strong>iOS Core ML</strong>
-          <span>{isArchived ? "Archived" : version.coremlR2Key ? `Ready · ${(version.coremlPrecision ?? "fp16").toUpperCase()}` : "Missing"}</span>
-          <code title={isArchived ? "Stored Core ML artifact was deleted during archive." : version.coremlR2Key ?? "Core ML export has not been uploaded for this version."}>
-            {isArchived ? "Artifact deleted" : version.coremlR2Key ?? "Core ML artifact missing"}
-          </code>
-        </article>
+        <PlatformArtifactCard
+          icon={<Smartphone size={16} aria-hidden="true" />}
+          title="Android TF Lite"
+          status={isArchived ? "Archived" : `Ready · ${(version.tflitePrecision ?? "int8").toUpperCase()}`}
+          detail={isArchived ? "Artifact deleted" : version.tfliteR2Key}
+          size={`${version.sizeMb.toFixed(1)} MB`}
+          ready={!isArchived}
+          disabled={isArchived || downloading !== null}
+          busy={downloading === "android"}
+          onDownload={() => void downloadArtifact("android", version.tfliteR2Key)}
+        />
+        <PlatformArtifactCard
+          icon={<Apple size={16} aria-hidden="true" />}
+          title="iOS Core ML"
+          status={isArchived ? "Archived" : version.coremlR2Key ? `Ready · ${(version.coremlPrecision ?? "fp16").toUpperCase()}` : "Missing"}
+          detail={isArchived ? "Artifact deleted" : version.coremlR2Key ?? "Core ML artifact missing"}
+          size={version.coremlSizeMb ? `${version.coremlSizeMb.toFixed(1)} MB` : "—"}
+          ready={!isArchived && Boolean(version.coremlR2Key)}
+          disabled={isArchived || !version.coremlR2Key || downloading !== null}
+          busy={downloading === "ios"}
+          onDownload={() => void downloadArtifact("ios", version.coremlR2Key)}
+        />
       </div>
+      {downloadError && <p className="form-error">{downloadError}</p>}
     </div>
+  );
+}
+
+function PlatformArtifactCard({
+  icon,
+  title,
+  status,
+  detail,
+  size,
+  ready,
+  disabled,
+  busy,
+  onDownload,
+}: {
+  icon: ReactNode;
+  title: string;
+  status: string;
+  detail: string;
+  size: string;
+  ready: boolean;
+  disabled: boolean;
+  busy: boolean;
+  onDownload: () => void;
+}) {
+  return (
+    <article className={ready ? "platform-card ready" : "platform-card missing"}>
+      <div className="platform-card-top">
+        <div className="platform-card-title">
+          {icon}
+          <strong>{title}</strong>
+        </div>
+        <button
+          type="button"
+          className="icon-action-button platform-download"
+          disabled={disabled}
+          onClick={onDownload}
+          aria-label={`Download ${title}`}
+          title={disabled ? `${title} is not available to download` : `Download ${title}`}
+        >
+          <Download size={14} aria-hidden="true" />
+        </button>
+      </div>
+      <div className="platform-card-meta">
+        <span>{status}</span>
+        <small>{size}</small>
+      </div>
+      <code title={detail}>{detail}</code>
+      {busy && <small className="platform-download-status">Preparing signed download...</small>}
+    </article>
   );
 }
 

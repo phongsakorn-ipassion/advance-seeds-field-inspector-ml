@@ -71,3 +71,5 @@
       trained model detail.
 - [x] 8.6 Hide Colab hand-off controls for succeeded/failed runs and add a
       copyable run id to the active-run Colab checklist.
+- [x] 8.7 Render active-run Colab steps as collapsed, aligned step content and
+      restyle Model detail artifact readiness plus dataset image summaries.

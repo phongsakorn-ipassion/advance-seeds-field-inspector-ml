@@ -26,6 +26,7 @@ export type RegistryStore = {
   undeployChannel(channel: ChannelName, versionId?: string): Promise<void>;
   archiveVersion(versionId: string): Promise<void>;
   deleteInactiveArtifact(storageId: string): Promise<void>;
+  downloadArtifact(r2Key: string): Promise<{ downloadUrl: string }>;
   renameVersion(versionId: string, semver: string): Promise<void>;
   updateVersionDescription(versionId: string, description: string): Promise<void>;
 

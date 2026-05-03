@@ -461,6 +461,9 @@ export function createDemoStore(): RegistryStore {
         storage: snapshot.storage.filter((artifact) => artifact.versionId !== item.versionId),
       });
     },
+    async downloadArtifact(r2Key) {
+      return { downloadUrl: `https://example.invalid/demo-r2/${encodeURIComponent(r2Key)}` };
+    },
     async archiveVersion(versionId) {
       if (snapshot.channels.some((channel) => channel.versionId === versionId) || snapshot.deployments.some((d) => d.versionId === versionId)) return;
       setSnapshot({
