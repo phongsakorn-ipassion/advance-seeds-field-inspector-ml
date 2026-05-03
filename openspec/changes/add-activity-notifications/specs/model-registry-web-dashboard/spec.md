@@ -27,6 +27,8 @@ notification center without requiring operators to inspect every screen.
 - **THEN** each notification SHALL show whether it is read or unread
 - **AND** clicking a notification record SHALL mark that notification as read
 - **AND** clicking Mark all read SHALL mark all current notifications as read
+- **AND** read state SHALL persist across browser refreshes for that signed-in
+  operator
 - **AND** there SHALL NOT be a separate read/unread checkbox or toggle button
 
 ### Requirement: Live tracking maps Ultralytics metrics

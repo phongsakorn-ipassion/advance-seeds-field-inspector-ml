@@ -248,6 +248,32 @@ function deriveActivityNotifications(snapshot: ReturnType<RegistryStore["getSnap
     .slice(0, 24);
 }
 
+function notificationReadStorageKey(session: { email: string } | null): string | null {
+  if (!session) return null;
+  return `advance-seeds:model-registry:read-activity:${store.mode}:${session.email}`;
+}
+
+function loadStoredReadActivityIds(key: string): Set<string> | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? new Set(parsed.filter((value): value is string => typeof value === "string")) : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistReadActivityIds(key: string | null, ids: Set<string>) {
+  if (!key || typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify([...ids].slice(-200)));
+  } catch {
+    // Ignore quota/privacy-mode failures; notifications still work in memory.
+  }
+}
+
 function DatasetConfigField({
   value,
   onChange,
@@ -440,23 +466,42 @@ export function App() {
   const [trainConfig, setTrainConfig] = useState<TrainConfig>(defaultConfig);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [readActivityIds, setReadActivityIds] = useState<Set<string>>(new Set());
+  const [readStateHydrated, setReadStateHydrated] = useState(false);
   const [toasts, setToasts] = useState<ActivityNotification[]>([]);
   const knownActivityIds = useRef<Set<string> | null>(null);
+  const hasStoredReadState = useRef(false);
   const activities = useMemo(() => deriveActivityNotifications(snapshot), [snapshot]);
+  const readStorageKey = notificationReadStorageKey(session);
   const unreadCount = activities.filter((activity) => !readActivityIds.has(activity.id)).length;
 
   useEffect(() => {
+    if (!readStorageKey) return;
+    setReadStateHydrated(false);
+    const stored = loadStoredReadActivityIds(readStorageKey);
+    hasStoredReadState.current = stored !== null;
+    knownActivityIds.current = null;
+    setReadActivityIds(stored ?? new Set());
+    setReadStateHydrated(true);
+  }, [readStorageKey]);
+
+  useEffect(() => {
+    if (!readStateHydrated) return;
     const current = new Set(activities.map((activity) => activity.id));
     if (knownActivityIds.current === null) {
       knownActivityIds.current = current;
-      setReadActivityIds(current);
+      if (!hasStoredReadState.current) {
+        setReadActivityIds(current);
+        persistReadActivityIds(readStorageKey, current);
+      }
       return;
     }
-    const next = activities.filter((activity) => activity.toast && !knownActivityIds.current?.has(activity.id)).slice(0, 3);
+    const next = activities
+      .filter((activity) => activity.toast && !knownActivityIds.current?.has(activity.id) && !readActivityIds.has(activity.id))
+      .slice(0, 3);
     knownActivityIds.current = current;
     if (next.length === 0) return;
     setToasts((existing) => [...next, ...existing].slice(0, 3));
-  }, [activities]);
+  }, [activities, readActivityIds, readStateHydrated, readStorageKey]);
 
   useEffect(() => {
     if (toasts.length === 0) return;
@@ -483,6 +528,15 @@ export function App() {
   function changeTrainTab(next: TrainTab) {
     setTrainTab(next);
     setFocusedRunId(null);
+  }
+
+  function updateReadActivityIds(updater: (current: Set<string>) => Set<string>) {
+    setReadActivityIds((current) => {
+      const next = updater(current);
+      persistReadActivityIds(readStorageKey, next);
+      hasStoredReadState.current = true;
+      return next;
+    });
   }
 
   useEffect(() => {
@@ -538,10 +592,10 @@ export function App() {
             unreadCount={unreadCount}
             open={notificationsOpen}
             onToggle={() => setNotificationsOpen(!notificationsOpen)}
-            onMarkAllRead={() => setReadActivityIds(new Set(activities.map((activity) => activity.id)))}
+            onMarkAllRead={() => updateReadActivityIds(() => new Set(activities.map((activity) => activity.id)))}
             onOpenActivity={(activity) => {
               setNotificationsOpen(false);
-              setReadActivityIds((current) => new Set(current).add(activity.id));
+              updateReadActivityIds((current) => new Set(current).add(activity.id));
               if (activity.runId) openRun(activity.runId);
               else if (activity.section) setSection(activity.section);
             }}
