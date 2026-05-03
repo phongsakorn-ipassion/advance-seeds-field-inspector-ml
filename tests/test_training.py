@@ -102,6 +102,34 @@ class TrainingConfigTests(unittest.TestCase):
         self.assertIn("2: banana", contents)
         self.assertIn("3: banana_spot", contents)
 
+    def test_materialize_ultralytics_dataset_config_recovers_from_nested_colab_clone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            outer = Path(tmp) / "advance-seeds-field-inspector-ml"
+            nested = outer / "advance-seeds-field-inspector-ml"
+            config_dir = nested / "configs"
+            config_dir.mkdir(parents=True)
+            for split in ("train", "val"):
+                (outer / "data" / "processed" / "images" / split).mkdir(parents=True)
+            data_config = config_dir / "dataset.yaml"
+            data_config.write_text(
+                "\n".join(
+                    [
+                        "path: ../data/processed",
+                        "train: images/train",
+                        "val: images/val",
+                        "names:",
+                        "  0: banana",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            resolved = materialize_ultralytics_dataset_config(
+                {"data": str(data_config), "model": "yolo26n-seg.pt"},
+                nested / "runs" / "_runtime_datasets",
+            )
+            contents = Path(resolved["data"]).read_text(encoding="utf-8")
+        self.assertIn(f"path: {(outer / 'data/processed').resolve()}", contents)
+
     def test_cli_preview_uses_segment_train(self):
         command = cli_preview({"model": "yolo26n-seg.pt", "data": "data.yaml", "epochs": 3})
         self.assertIn("yolo segment train", command)

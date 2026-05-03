@@ -148,6 +148,7 @@ def materialize_ultralytics_dataset_config(config: dict[str, Any], runtime_dir: 
     dataset_root = Path(str(dataset["path"])).expanduser()
     if not dataset_root.is_absolute():
         dataset_root = (data_path.parent / dataset_root).resolve()
+    dataset_root = _resolve_existing_dataset_root(dataset, dataset_root)
     dataset["path"] = str(dataset_root)
 
     output_dir = Path(runtime_dir).expanduser().resolve()
@@ -156,6 +157,37 @@ def materialize_ultralytics_dataset_config(config: dict[str, Any], runtime_dir: 
     output_path.write_text(_dump_simple_yaml(dataset), encoding="utf-8")
     resolved["data"] = str(output_path)
     return resolved
+
+
+def _resolve_existing_dataset_root(dataset: dict[str, Any], dataset_root: Path) -> Path:
+    if _dataset_split_dirs_exist(dataset, dataset_root):
+        return dataset_root
+
+    tail = _dataset_root_tail(dataset_root)
+    if tail is None:
+        return dataset_root
+
+    for anchor in dataset_root.parents:
+        candidate = (anchor / tail).resolve()
+        if candidate == dataset_root:
+            continue
+        if _dataset_split_dirs_exist(dataset, candidate):
+            return candidate
+    return dataset_root
+
+
+def _dataset_root_tail(dataset_root: Path) -> Path | None:
+    parts = dataset_root.parts
+    if "data" not in parts:
+        return None
+    index = parts.index("data")
+    return Path(*parts[index:])
+
+
+def _dataset_split_dirs_exist(dataset: dict[str, Any], dataset_root: Path) -> bool:
+    required = [dataset.get("train"), dataset.get("val") or dataset.get("validation")]
+    split_dirs = [dataset_root / str(split) for split in required if split]
+    return bool(split_dirs) and all(path.exists() for path in split_dirs)
 
 
 def _dump_simple_yaml(mapping: dict[str, Any]) -> str:
