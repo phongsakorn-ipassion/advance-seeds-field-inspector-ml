@@ -53,6 +53,24 @@ once the Python SDK reports them.
 - **THEN** the dashboard moves it from running into the history list and
   surfaces the resulting candidate version
 
+#### Scenario: Completed run hides Colab hand-off
+- **WHEN** a run detail has status `succeeded` or `failed`
+- **THEN** the dashboard SHALL hide the Open in Colab action
+- **AND** the dashboard SHALL hide the Manual Colab hand-off checklist
+
+#### Scenario: Active run exposes copyable Colab run id
+- **WHEN** a run is still active or waiting for Colab
+- **THEN** the Manual Colab hand-off section SHALL show a concise checklist
+- **AND** the run id SHALL have a copy icon action
+
+#### Scenario: Succeeded recent run opens trained model
+- **WHEN** a recent training run has status `succeeded`
+- **AND** the registry has a model version linked to that run
+- **THEN** the Recent training runs row SHALL show a shortcut control to the
+  trained model
+- **AND** selecting the shortcut SHALL open the Models workflow with that
+  version selected
+
 ### Requirement: Channel writes update Supabase
 The dashboard SHALL write deploy and undeploy actions to the `channels` table
 so the registry trigger records an entry in `channel_history`.
@@ -83,10 +101,43 @@ the browser bundle.
 - **THEN** the Edge Function verifies the caller's admin role, removes the
   R2 objects, deletes the version row, and returns the new usage total
 
+#### Scenario: Deleted storage record removes model metadata
+- **WHEN** an admin deletes an inactive storage record from the Storage screen
+- **THEN** the backing model version SHALL be removed from the dashboard's
+  model list as well as from storage usage
+- **AND** stale channel history references SHALL NOT prevent deletion of an
+  inactive version
+
+#### Scenario: Storage deletion requires confirmation
+- **WHEN** an admin clicks Delete model on an inactive storage record
+- **THEN** the dashboard SHALL show a confirmation dialog before deleting the
+  model version and its stored artifacts
+
+#### Scenario: Admin archives an inactive model version
+- **WHEN** an admin archives an inactive model version from Model detail
+- **THEN** the dashboard SHALL ask for confirmation
+- **AND** the system SHALL permanently delete associated storage artifacts
+  through the same admin-only Edge Function
+- **AND** the model version metadata SHALL remain visible as an archived
+  history record in Model detail
+- **AND** the model version SHALL no longer be available for future deployment
+
 #### Scenario: Non-admin tries to delete
 - **WHEN** a non-admin caller posts to the deletion endpoint
 - **THEN** the function rejects the request with HTTP 403 and does not touch
   R2 or the database
+
+### Requirement: Channel deployment writes audit user ids
+The dashboard SHALL write Supabase Auth user ids, not email addresses, into
+channel audit columns so deployment and undeployment updates satisfy the live
+registry schema.
+
+#### Scenario: Admin deploys to staging or production
+- **WHEN** an admin deploys a model version to `staging` or `production`
+- **THEN** the channel update SHALL set `updated_by` to the authenticated
+  user's UUID
+- **AND** deployment failures SHALL be surfaced in the confirmation dialog as
+  human-readable error text
 
 ### Requirement: Dashboard follows the Advance Seeds design system
 The dashboard SHALL adopt the Advance Seeds design DNA used by the field

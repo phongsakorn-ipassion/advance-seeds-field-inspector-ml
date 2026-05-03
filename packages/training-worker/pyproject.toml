@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "advance-seeds-training-worker"
+version = "0.1.0"
+description = "Hosted training worker for the Advance Seeds model registry."
+requires-python = ">=3.10"
+dependencies = [
+  "PyYAML>=6.0.1",
+]
+
+[project.optional-dependencies]
+modal = [
+  "modal>=0.67.0",
+  "fastapi[standard]>=0.115.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

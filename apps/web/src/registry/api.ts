@@ -21,8 +21,10 @@ export type RegistryStore = {
 
   // Writes
   startTraining(config: TrainConfig): Promise<void>;
-  deployVersion(versionId: string, channel: ChannelName): Promise<void>;
-  undeployChannel(channel: ChannelName): Promise<void>;
+  deleteRun(runId: string): Promise<void>;
+  deployVersion(versionId: string, channel: ChannelName, options?: { setDefault?: boolean }): Promise<void>;
+  undeployChannel(channel: ChannelName, versionId?: string): Promise<void>;
+  archiveVersion(versionId: string): Promise<void>;
   deleteInactiveArtifact(storageId: string): Promise<void>;
   renameVersion(versionId: string, semver: string): Promise<void>;
   updateVersionDescription(versionId: string, description: string): Promise<void>;

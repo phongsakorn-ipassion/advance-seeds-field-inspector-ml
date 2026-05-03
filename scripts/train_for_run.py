@@ -2,8 +2,8 @@
 """Train YOLO for an existing dashboard-created run row.
 
 Reads the run row from Supabase, runs Ultralytics training with the run's
-config, streams per-epoch metrics to ``run_metrics``, uploads the exported
-tflite to R2, creates the candidate version, and finalizes the run.
+config, streams per-epoch metrics to ``run_metrics``, uploads optimized
+mobile exports to R2, creates the candidate version, and finalizes the run.
 
 Designed for the Colab "Open in Colab" flow — the dashboard inserts the run
 row, the notebook calls this script with --run-id.
@@ -27,6 +27,85 @@ from advance_seeds_ml.training import (
     resolve_training_paths,
     train_kwargs,
 )
+
+
+def _env_bool(env: dict[str, str], key: str) -> bool:
+    return str(env.get(key, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _quant_fraction(env: dict[str, str]) -> float:
+    raw = str(env.get("ADVANCE_SEEDS_QUANT_FRACTION", "1.0")).strip() or "1.0"
+    try:
+        fraction = float(raw)
+    except ValueError:
+        return 1.0
+    return min(1.0, max(0.01, fraction))
+
+
+def export_kwargs(kind: str, config: dict, env: dict[str, str] | None = None) -> dict:
+    """Return Ultralytics export kwargs for mobile artifacts.
+
+    Android uses calibrated INT8 TFLite because TF Lite has mature post-training
+    integer quantization. iOS uses FP16 Core ML by default for broader Core ML /
+    ANE compatibility; Core ML INT8 can be enabled explicitly for device tests.
+    """
+    source = os.environ if env is None else env
+    imgsz = int(config.get("imgsz", 640))
+    data = str(config.get("data", ""))
+    fraction = _quant_fraction(source)
+    if kind == "tflite":
+        return {
+            "format": "tflite",
+            "int8": True,
+            "data": data,
+            "imgsz": imgsz,
+            "batch": 1,
+            "fraction": fraction,
+        }
+    if kind == "coreml" and _env_bool(source, "ADVANCE_SEEDS_COREML_INT8"):
+        return {
+            "format": "coreml",
+            "int8": True,
+            "data": data,
+            "imgsz": imgsz,
+            "batch": 1,
+            "fraction": fraction,
+        }
+    if kind == "coreml":
+        return {
+            "format": "coreml",
+            "half": True,
+            "imgsz": imgsz,
+        }
+    raise ValueError(f"unsupported export kind: {kind}")
+
+
+def quantization_metadata(kind: str, kwargs: dict) -> dict:
+    if kwargs.get("int8"):
+        return {
+            "precision": "int8",
+            "method": "post_training_static",
+            "calibration": "representative_dataset",
+            "calibration_data": kwargs.get("data"),
+            "calibration_fraction": kwargs.get("fraction"),
+            "batch": kwargs.get("batch"),
+        }
+    if kwargs.get("half"):
+        return {
+            "precision": "fp16",
+            "method": "post_training_weight_quantization",
+            "target": "coreml",
+        }
+    return {"precision": "fp32", "method": "none", "target": kind}
+
+
+def artifact_metadata(*, kind: str, artifact, quantization: dict) -> dict:
+    return {
+        "r2_key": artifact.r2_key,
+        "size_bytes": artifact.size_bytes,
+        "content_hash": artifact.content_hash,
+        "quantization": quantization,
+    }
 
 
 def fetch_run(client: RegistryClient, run_id: str) -> dict:
@@ -225,7 +304,7 @@ def main(argv: list[str] | None = None) -> int:
         client.finalize_run(args.run_id, "failed")
         raise
 
-    append_log("Training finished — exporting TF Lite and Core ML artifacts")
+    append_log("Training finished — exporting quantized mobile artifacts")
 
     save_dir = Path(getattr(results, "save_dir", config.get("project", "runs")))
     best = save_dir / "weights" / "best.pt"
@@ -235,8 +314,14 @@ def main(argv: list[str] | None = None) -> int:
 
     semver = f"1.0.0-{args.run_id[:8]}"
     tflite_path: Path
+    tflite_export_kwargs = export_kwargs("tflite", config)
+    tflite_quantization = quantization_metadata("tflite", tflite_export_kwargs)
     try:
-        export_path = model.export(format="tflite")
+        append_log(
+            "Exporting Android TF Lite with INT8 calibration "
+            f"(fraction={tflite_export_kwargs.get('fraction')}, data={tflite_export_kwargs.get('data')})"
+        )
+        export_path = model.export(**tflite_export_kwargs)
         export_path = export_path[0] if isinstance(export_path, (list, tuple)) else export_path
         tflite_path = Path(export_path) if export_path else best
     except Exception as exc:
@@ -245,8 +330,14 @@ def main(argv: list[str] | None = None) -> int:
         raise
 
     coreml_path: Path | None = None
+    coreml_export_kwargs = export_kwargs("coreml", config)
+    coreml_quantization = quantization_metadata("coreml", coreml_export_kwargs)
     try:
-        export_path = model.export(format="coreml")
+        append_log(
+            "Exporting iOS Core ML with "
+            f"{coreml_quantization.get('precision', 'fp32').upper()} optimization"
+        )
+        export_path = model.export(**coreml_export_kwargs)
         export_path = export_path[0] if isinstance(export_path, (list, tuple)) else export_path
         coreml_path = Path(export_path) if export_path else None
         if not coreml_path or not coreml_path.exists():
@@ -285,15 +376,17 @@ def main(argv: list[str] | None = None) -> int:
                 "mask_map": float(metrics_dict.get("metrics/mAP50-95(M)", 0.0)),
             },
             "artifacts": {
-                "tflite": {
-                    "r2_key": tflite_artifact.r2_key,
-                    "size_bytes": tflite_artifact.size_bytes,
-                    "content_hash": tflite_artifact.content_hash,
-                },
+                "tflite": artifact_metadata(
+                    kind="tflite",
+                    artifact=tflite_artifact,
+                    quantization=tflite_quantization,
+                ),
                 "coreml": {
-                    "r2_key": coreml_artifact.r2_key,
-                    "size_bytes": coreml_artifact.size_bytes,
-                    "content_hash": coreml_artifact.content_hash,
+                    **artifact_metadata(
+                        kind="coreml",
+                        artifact=coreml_artifact,
+                        quantization=coreml_quantization,
+                    ),
                     "packaging": "mlpackage.zip",
                 },
             },

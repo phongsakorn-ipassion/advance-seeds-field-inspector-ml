@@ -60,7 +60,7 @@ The browser only ever sees the function URL; R2 credentials remain in
 VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
 VITE_MODEL_LINE_SLUG=seeds-poc
-VITE_STORAGE_QUOTA_MB=32
+VITE_STORAGE_QUOTA_MB=512
 ```
 
 When `VITE_SUPABASE_URL` is empty, the demo store activates so local browsing

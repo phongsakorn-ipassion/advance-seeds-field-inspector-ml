@@ -1,6 +1,6 @@
 export type ChannelName = "staging" | "production";
 export type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
-export type VersionState = "candidate" | "staging" | "production" | "inactive";
+export type VersionState = "candidate" | "staging" | "production" | "inactive" | "archived";
 
 export type HyperParameters = {
   epochs: number;
@@ -42,6 +42,14 @@ export type RegistryChannel = {
   updatedBy: string;
 };
 
+export type RegistryDeployment = {
+  id: string;
+  channel: ChannelName;
+  versionId: string;
+  isDefault: boolean;
+  deployedAt: string;
+};
+
 export type RegistryRun = {
   id: string;
   name: string;
@@ -74,6 +82,12 @@ export type RegistryVersion = {
   maskMap: number;
   sizeMb: number;
   contentHash: string;
+  tfliteR2Key: string;
+  tflitePrecision?: string | null;
+  coremlR2Key?: string | null;
+  coremlSizeMb?: number | null;
+  coremlContentHash?: string | null;
+  coremlPrecision?: string | null;
   compatSignature: string;
   createdAt: string;
   description?: string;
@@ -91,6 +105,7 @@ export type StorageObject = {
 
 export type RegistrySnapshot = {
   channels: RegistryChannel[];
+  deployments: RegistryDeployment[];
   runs: RegistryRun[];
   versions: RegistryVersion[];
   storage: StorageObject[];
@@ -98,6 +113,7 @@ export type RegistrySnapshot = {
 };
 
 export type AuthSession = {
+  userId?: string;
   email: string;
   isAdmin: boolean;
 };

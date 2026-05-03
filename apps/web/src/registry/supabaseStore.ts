@@ -6,6 +6,7 @@ import type {
   DatasetStats,
   HyperParameters,
   RegistryChannel,
+  RegistryDeployment,
   RegistryRun,
   RegistrySnapshot,
   RegistryVersion,
@@ -86,8 +87,19 @@ type DbChannel = {
   updated_by: string | null;
 };
 
+type DbDeployment = {
+  id: string;
+  model_line_id: string;
+  channel_name: ChannelName;
+  version_id: string;
+  status: "active" | "archived";
+  is_default: boolean;
+  deployed_at: string;
+};
+
 const emptySnapshot = (quotaMb: number): RegistrySnapshot => ({
   channels: [],
+  deployments: [],
   runs: [],
   versions: [],
   storage: [],
@@ -129,7 +141,7 @@ function configFromRun(run: DbRun): TrainConfig {
 // See README for trade-offs — operators may want a different rule.
 function deriveProgress(run: DbRun, metrics: DbRunMetric[]): number {
   if (run.status === "succeeded") return 100;
-  const explicit = metrics.filter((m) => m.run_id === run.id && m.name === "progress");
+  const explicit = metrics.filter((m) => m.run_id === run.id && normalizeMetricName(m.name) === "progress");
   if (explicit.length > 0) {
     return Math.round(Math.max(...explicit.map((m) => m.value)));
   }
@@ -143,10 +155,15 @@ function deriveProgress(run: DbRun, metrics: DbRunMetric[]): number {
   return run.status === "running" ? 0 : 0;
 }
 
-function latestMetric(metrics: DbRunMetric[], runId: string, name: string): number | null {
-  const filtered = metrics.filter((m) => m.run_id === runId && m.name === name);
+function latestMetric(metrics: DbRunMetric[], runId: string, names: string[]): number | null {
+  const allowed = new Set(names.map(normalizeMetricName));
+  const filtered = metrics.filter((m) => m.run_id === runId && allowed.has(normalizeMetricName(m.name)));
   if (filtered.length === 0) return null;
   return filtered.sort((a, b) => b.step - a.step)[0].value;
+}
+
+function normalizeMetricName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, "");
 }
 
 function mapRun(run: DbRun, metrics: DbRunMetric[]): RegistryRun {
@@ -162,8 +179,8 @@ function mapRun(run: DbRun, metrics: DbRunMetric[]): RegistryRun {
     startedAt: fmt(run.started_at),
     finishedAt: run.finished_at ? fmt(run.finished_at) : null,
     progress: deriveProgress(run, metrics),
-    map50: latestMetric(metrics, run.id, "mAP50") ?? latestMetric(metrics, run.id, "map50"),
-    maskMap: latestMetric(metrics, run.id, "mask_mAP") ?? latestMetric(metrics, run.id, "mask_map"),
+    map50: latestMetric(metrics, run.id, ["mAP50", "map50", "metrics/mAP50(B)", "metrics/map50(b)"]),
+    maskMap: latestMetric(metrics, run.id, ["mask_mAP", "mask_map", "metrics/mAP50-95(M)", "metrics/map50-95(m)"]),
     config,
     colabNotebook: run.config_yaml?.colab_notebook ?? "",
     logs: (run.config_yaml?.logs ?? []) as string[],
@@ -173,8 +190,11 @@ function mapRun(run: DbRun, metrics: DbRunMetric[]): RegistryRun {
 function mapVersion(v: DbVersion, channelByVersion: Map<string, ChannelName>): RegistryVersion {
   const md = v.metadata ?? {};
   const hp = md.hyperparameters ?? {};
+  const tfliteArtifact = md.artifacts?.tflite ?? {};
+  const coremlArtifact = md.artifacts?.coreml ?? {};
   const channelName = channelByVersion.get(v.id);
-  const state: VersionState = channelName ?? "inactive";
+  const isArchived = Boolean(md.archived_at ?? md.artifacts_deleted_at ?? md.artifacts_archived_at);
+  const state: VersionState = isArchived ? "archived" : channelName ?? "inactive";
   return {
     id: v.id,
     semver: v.semver,
@@ -199,6 +219,12 @@ function mapVersion(v: DbVersion, channelByVersion: Map<string, ChannelName>): R
     maskMap: md.metrics?.mask_map ?? 0,
     sizeMb: v.size_bytes / (1024 * 1024),
     contentHash: v.content_hash,
+    tfliteR2Key: v.tflite_r2_key,
+    tflitePrecision: typeof tfliteArtifact.quantization?.precision === "string" ? tfliteArtifact.quantization.precision : null,
+    coremlR2Key: v.mlmodel_r2_key,
+    coremlSizeMb: typeof coremlArtifact.size_bytes === "number" ? coremlArtifact.size_bytes / (1024 * 1024) : null,
+    coremlContentHash: typeof coremlArtifact.content_hash === "string" ? coremlArtifact.content_hash : null,
+    coremlPrecision: typeof coremlArtifact.quantization?.precision === "string" ? coremlArtifact.quantization.precision : null,
     compatSignature: v.compat_signature ?? "",
     createdAt: fmt(v.created_at),
     description: typeof md.description === "string" ? md.description : "",
@@ -215,10 +241,25 @@ function mapChannel(c: DbChannel): RegistryChannel {
   };
 }
 
-function storageFromVersions(versions: DbVersion[], channels: DbChannel[]): StorageObject[] {
-  const active = new Set(channels.map((c) => c.current_version_id).filter(Boolean) as string[]);
+function mapDeployment(d: DbDeployment): RegistryDeployment {
+  return {
+    id: d.id,
+    channel: d.channel_name,
+    versionId: d.version_id,
+    isDefault: d.is_default,
+    deployedAt: fmt(d.deployed_at),
+  };
+}
+
+function storageFromVersions(versions: DbVersion[], channels: DbChannel[], deployments: DbDeployment[]): StorageObject[] {
+  const active = new Set([
+    ...channels.map((c) => c.current_version_id).filter(Boolean) as string[],
+    ...deployments.filter((d) => d.status === "active").map((d) => d.version_id),
+  ]);
   const items: StorageObject[] = [];
   for (const v of versions) {
+    const md = v.metadata ?? {};
+    if (md.archived_at || md.artifacts_deleted_at || md.artifacts_archived_at) continue;
     items.push({
       id: `${v.id}-tflite`,
       versionId: v.id,
@@ -228,12 +269,13 @@ function storageFromVersions(versions: DbVersion[], channels: DbChannel[]): Stor
       active: active.has(v.id),
     });
     if (v.mlmodel_r2_key) {
+      const coremlSize = v.metadata?.artifacts?.coreml?.size_bytes;
       items.push({
         id: `${v.id}-coreml`,
         versionId: v.id,
         key: v.mlmodel_r2_key,
         kind: "coreml",
-        sizeMb: v.size_bytes / (1024 * 1024),
+        sizeMb: (typeof coremlSize === "number" ? coremlSize : v.size_bytes) / (1024 * 1024),
         active: active.has(v.id),
       });
     }
@@ -270,14 +312,17 @@ export function createSupabaseStore(env: Env): RegistryStore {
 
   async function refresh() {
     const lineId = await resolveModelLine();
-    const [{ data: runs, error: runErr }, { data: versions, error: vErr }, { data: channels, error: cErr }] = await Promise.all([
+    const [{ data: runs, error: runErr }, { data: versions, error: vErr }, { data: channels, error: cErr }, deploymentResult] = await Promise.all([
       client.from("runs").select("*").eq("model_line_id", lineId).order("started_at", { ascending: false }).limit(50),
       client.from("versions").select("*").eq("model_line_id", lineId).order("created_at", { ascending: false }).limit(100),
       client.from("channels").select("*").eq("model_line_id", lineId),
+      client.from("channel_deployments").select("*").eq("model_line_id", lineId).eq("status", "active"),
     ]);
     if (runErr) throw runErr;
     if (vErr) throw vErr;
     if (cErr) throw cErr;
+    const deployments = deploymentResult.error?.code === "42P01" ? [] : (deploymentResult.data ?? []);
+    if (deploymentResult.error && deploymentResult.error.code !== "42P01") throw deploymentResult.error;
 
     const runIds = (runs ?? []).map((r) => r.id);
     let metrics: DbRunMetric[] = [];
@@ -294,13 +339,17 @@ export function createSupabaseStore(env: Env): RegistryStore {
     for (const ch of channels ?? []) {
       if (ch.current_version_id) channelByVersion.set(ch.current_version_id, ch.name);
     }
+    for (const dep of deployments as DbDeployment[]) {
+      if (!channelByVersion.has(dep.version_id)) channelByVersion.set(dep.version_id, dep.channel_name);
+    }
 
     snapshot = {
       quotaMb: env.quotaMb,
       runs: (runs ?? []).map((r) => mapRun(r as DbRun, metrics)),
       versions: (versions ?? []).map((v) => mapVersion(v as DbVersion, channelByVersion)),
       channels: (channels ?? []).map((c) => mapChannel(c as DbChannel)),
-      storage: storageFromVersions((versions ?? []) as DbVersion[], (channels ?? []) as DbChannel[]),
+      deployments: (deployments as DbDeployment[]).map(mapDeployment),
+      storage: storageFromVersions((versions ?? []) as DbVersion[], (channels ?? []) as DbChannel[], deployments as DbDeployment[]),
     };
     notifyData();
   }
@@ -315,6 +364,7 @@ export function createSupabaseStore(env: Env): RegistryStore {
       .on("postgres_changes", { event: "*", schema: "public", table: "runs" }, () => { void refresh(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "run_metrics" }, () => { void refresh(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "channels" }, () => { void refresh(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "channel_deployments" }, () => { void refresh(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "versions" }, () => { void refresh(); })
       .subscribe();
   }
@@ -324,7 +374,7 @@ export function createSupabaseStore(env: Env): RegistryStore {
       session = null;
     } else {
       const role = supSession.user?.app_metadata?.role;
-      session = { email: supSession.user?.email ?? "", isAdmin: role === "admin" };
+      session = { userId: supSession.user?.id, email: supSession.user?.email ?? "", isAdmin: role === "admin" };
     }
     notifyAuth();
   }
@@ -404,6 +454,21 @@ export function createSupabaseStore(env: Env): RegistryStore {
       authListeners.add(listener);
       return () => authListeners.delete(listener);
     },
+    async deleteRun(runId) {
+      await adminWrite(async () => {
+        // run_metrics is ON DELETE CASCADE on runs(id), so deleting the run row
+        // alone removes its metrics. Skip the explicit metrics delete to avoid
+        // a separate failure mode if something blocks that table.
+        const { error } = await client.from("runs").delete().eq("id", runId);
+        if (error) {
+          const detail = [error.message, error.code && `code=${error.code}`, error.details, error.hint]
+            .filter(Boolean)
+            .join(" · ");
+          throw new Error(`Failed to delete run: ${detail || "unknown error"}`);
+        }
+        await refresh();
+      });
+    },
     async startTraining(config) {
       await adminWrite(async () => {
         const lineId = await resolveModelLine();
@@ -441,27 +506,55 @@ export function createSupabaseStore(env: Env): RegistryStore {
         await refresh();
       });
     },
-    async deployVersion(versionId, channel) {
+    async deployVersion(versionId, channel, options) {
       await adminWrite(async () => {
+        const version = snapshot.versions.find((v) => v.id === versionId);
+        if (version?.state === "archived") {
+          throw new Error("Archived models cannot be deployed.");
+        }
         const lineId = await resolveModelLine();
-        const { error } = await client
-          .from("channels")
-          .update({ current_version_id: versionId, updated_by: session?.email ?? null })
-          .eq("model_line_id", lineId)
-          .eq("name", channel);
-        if (error) throw error;
+        const { error: upsertErr } = await client
+          .from("channel_deployments")
+          .upsert({
+            model_line_id: lineId,
+            channel_name: channel,
+            version_id: versionId,
+            status: "active",
+            is_default: false,
+            deployed_by: session?.userId ?? null,
+            archived_at: null,
+            archived_by: null,
+          }, { onConflict: "model_line_id,channel_name,version_id" });
+        if (upsertErr) throw storeError(`Failed to add deployment to ${channel}`, upsertErr);
+        if (options?.setDefault ?? true) {
+          await setChannelDefault(lineId, channel, versionId);
+        }
         await refresh();
       });
     },
-    async undeployChannel(channel) {
+    async undeployChannel(channel, versionId) {
       await adminWrite(async () => {
         const lineId = await resolveModelLine();
+        const targetVersionId = versionId ?? snapshot.channels.find((ch) => ch.name === channel)?.versionId;
+        if (!targetVersionId) return;
         const { error } = await client
-          .from("channels")
-          .update({ current_version_id: null, updated_by: session?.email ?? null })
+          .from("channel_deployments")
+          .update({
+            status: "archived",
+            is_default: false,
+            archived_at: new Date().toISOString(),
+            archived_by: session?.userId ?? null,
+          })
           .eq("model_line_id", lineId)
-          .eq("name", channel);
-        if (error) throw error;
+          .eq("channel_name", channel)
+          .eq("version_id", targetVersionId);
+        if (error) throw storeError(`Failed to undeploy from ${channel}`, error);
+        if (snapshot.channels.find((ch) => ch.name === channel)?.versionId === targetVersionId) {
+          const replacement = snapshot.deployments.find((dep) =>
+            dep.channel === channel && dep.versionId !== targetVersionId
+          );
+          await setChannelDefault(lineId, channel, replacement?.versionId ?? null);
+        }
         await refresh();
       });
     },
@@ -535,23 +628,66 @@ export function createSupabaseStore(env: Env): RegistryStore {
     async deleteInactiveArtifact(storageId) {
       await adminWrite(async () => {
         const versionId = storageId.replace(/-(tflite|coreml)$/, "");
-        const url = `${env.supabaseUrl}/functions/v1/storage-usage/delete`;
-        const token = (await client.auth.getSession()).data.session?.access_token;
-        const res = await fetch(url, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            authorization: token ? `Bearer ${token}` : "",
-            apikey: env.supabaseAnonKey,
-          },
-          body: JSON.stringify({ version_id: versionId }),
-        });
-        if (!res.ok) {
-          const body = await res.text();
-          throw new Error(`storage-usage/delete failed: ${res.status} ${body}`);
-        }
+        await archiveVersionById(versionId);
+        await refresh();
+      });
+    },
+    async archiveVersion(versionId) {
+      await adminWrite(async () => {
+        await archiveVersionById(versionId, "archive");
         await refresh();
       });
     },
   };
+
+  async function archiveVersionById(versionId: string, action: "delete" | "archive" = "delete"): Promise<void> {
+    const url = `${env.supabaseUrl}/functions/v1/storage-usage/${action}`;
+    const token = (await client.auth.getSession()).data.session?.access_token;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: token ? `Bearer ${token}` : "",
+        apikey: env.supabaseAnonKey,
+      },
+      body: JSON.stringify({ version_id: versionId }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`${action === "archive" ? "Archive" : "Delete"} failed: ${res.status} ${body}`);
+    }
+  }
+
+  async function setChannelDefault(lineId: string, channel: ChannelName, versionId: string | null): Promise<void> {
+    if (versionId) {
+      const { error: clearErr } = await client
+        .from("channel_deployments")
+        .update({ is_default: false })
+        .eq("model_line_id", lineId)
+        .eq("channel_name", channel)
+        .eq("status", "active");
+      if (clearErr && clearErr.code !== "42P01") throw storeError(`Failed to reset ${channel} defaults`, clearErr);
+      const { error: markErr } = await client
+        .from("channel_deployments")
+        .update({ is_default: true })
+        .eq("model_line_id", lineId)
+        .eq("channel_name", channel)
+        .eq("version_id", versionId)
+        .eq("status", "active");
+      if (markErr && markErr.code !== "42P01") throw storeError(`Failed to set ${channel} default`, markErr);
+    }
+    const { error } = await client
+      .from("channels")
+      .update({ current_version_id: versionId, updated_by: session?.userId ?? null })
+      .eq("model_line_id", lineId)
+      .eq("name", channel);
+    if (error) throw storeError(`Failed to set ${channel} default`, error);
+  }
+}
+
+function storeError(prefix: string, error: { message?: string; code?: string; details?: string; hint?: string }): Error {
+  const detail = [error.message, error.code && `code=${error.code}`, error.details, error.hint]
+    .filter(Boolean)
+    .join(" · ");
+  return new Error(`${prefix}: ${detail || "unknown error"}`);
 }

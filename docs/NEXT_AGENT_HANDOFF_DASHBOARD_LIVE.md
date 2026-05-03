@@ -1,8 +1,7 @@
-# Next Agent Hand-off — Dashboard wired to live Supabase + Colab
+# Next Agent Hand-off — Dashboard live, hosted training foundation added
 
 **Date:** 2026-05-02
 **Repo:** `/Users/ppungpong/Github/advance-seeds-field-inspector-ml`
-**Branch:** `main` (in sync with `origin/main`)
 **Live URL:** https://phongsakorn-ipassion.github.io/advance-seeds-field-inspector-ml/
 **Supabase project:** `gqsxiohxokgwwugeoxmy` (shared with `advance-seeds-field-inspector-demo`)
 
@@ -10,192 +9,142 @@
 
 ## Current State
 
-The dashboard now talks to Supabase end-to-end. Anyone hitting the Pages URL
-can sign in and use the registry; the only thing the dashboard cannot do is
-actually run YOLO training (that's the next big change — see Remaining work
-section 1).
+The Advance Seeds model registry dashboard is live on GitHub Pages and wired
+to the shared Supabase project. The browser uses Supabase Auth, the anon key,
+RLS, and Realtime only. Service-role and R2/provider secrets remain outside
+the browser bundle.
 
-### What works in production right now
+The dashboard now includes:
 
-- **One-click admin login** as `alex@advanceseeds.com` / `DemoSeeds2026!` (the
-  shared admin from the demo project; `app_metadata.role = "admin"`).
-- **Train sub-navigation** with three tabs:
-  - *Train new model* — full form with hint icons on every field, dataset
-    YAML upload to R2, source weights select (yolo26n-seg.pt /
-    yolo26s-seg.pt), read-only class chips populated from the uploaded YAML.
-  - *Live tracking* — list of running runs with a count badge.
-  - *Recent runs* — completed/failed history.
-- **Sliding run detail panel** per tab. Click a row → detail slides in below
-  with status banner, scrollable terminal-style log, and Info section
-  (training config + dataset + hyperparameters key/value grid).
-- **Open in Colab** button on the run detail header. Opens
-  `notebooks/train_run.ipynb` with `?run_id=<id>`. The notebook resolves the
-  run id, prompts for a service-role key, clones the repo, and calls
-  `scripts/train_yolo26n_seg.py --run-id ... --report-registry`.
-- **Models screen** — version cards, deploy/undeploy/storage cleanup all
-  through the Supabase store. Channel writes audit into `channel_history`.
-- **Storage screen** — quota banner (512 MB), usage bar, delete-inactive
-  routes through the `storage-usage` Edge Function (admin-gated).
-- **Realtime** — `runs`, `run_metrics`, `channels`, `versions` are in the
-  `supabase_realtime` publication, so the dashboard sees inserts/updates
-  within ~1 second.
-- **Design DNA mirrored from `advance-seeds-field-inspector-demo`** —
-  vendored CSS variables under `apps/web/src/tokens.css`, deep-teal brand,
-  light-mode only, Sprout brand mark, sticky topbar shell.
+- Supabase Auth admin gate via `app_metadata.role = "admin"`.
+- Realtime subscriptions for `runs`, `run_metrics`, `channels`, and
+  `versions`.
+- Train screen with left sub-nav: Train new model, Live tracking, Recent runs.
+- Sliding run detail panel with Colab hand-off steps and an `Open in Colab`
+  button. The button tooltip explains that Colab does not auto-run; the user
+  must click Runtime, Run all and paste the service-role key when prompted.
+- Dataset YAML upload to R2, class parsing from YAML, and dataset split
+  display for training, validation, and testing.
+- Recent training run rows now show run status as a centered status pill,
+  matching the Storage control status style.
+- Model lifecycle screen with:
+  - label revised from `Model CRUD` to `Model lifecycle`;
+  - channel filters without the word `only`;
+  - performance/staging sorting;
+  - dataset totals/splits;
+  - info icons on model detail sections;
+  - compact icon-only lifecycle actions in the model detail header.
+- Storage control with 512 MB quota display, centered status pills, and
+  `Delete model` for inactive records. Deleting an inactive storage record also
+  deletes the associated model version metadata.
+- Demo/local mode persistence via `localStorage`, so CRUD changes survive
+  refresh when Supabase env vars are not configured.
 
-### Backend pieces deployed
-
-- Migrations applied to live DB via psql (the project is shared with the demo
-  app, so we bypass the CLI's migration tracker — see
-  `connect-dashboard-to-live-registry` for the rationale):
-  - `20260502000001_model_lines.sql` … `20260502000007_fix_compat_trigger.sql`
-  - `20260502000008_grant_writes_to_authenticated.sql` — re-grants
-    INSERT/UPDATE/DELETE to the `authenticated` role; without this, RLS still
-    runs but Postgres rejects the verb before RLS sees it (which is what made
-    the first "Start training" click 403).
-  - `20260502000009_realtime_publication.sql` — adds the four registry tables
-    to `supabase_realtime`. The publication is empty by default; without this
-    Realtime subscriptions silently observe nothing.
-- Edge Functions deployed:
-  - `resolve-channel` — public, returns presigned GET URL for a model line's
-    current production tflite.
-  - `upload-artifact` — admin/service-role, returns presigned PUT URL under
-    `runs/{run_id}/{semver}.{ext}`.
-  - `upload-dataset` — admin/service-role, returns presigned PUT URL under
-    `datasets/{slug}/{stamp}/{filename}` for the dataset YAML.
-  - `storage-usage` — `GET` returns `{used_bytes, quota_bytes}`. `POST /delete`
-    requires admin and removes a version's R2 objects + the row.
-- GitHub Pages workflow `.github/workflows/pages.yml` deploys `apps/web/dist`
-  on every push to `main` that touches `apps/web/`.
-
-### Local credentials
-
-`/Users/ppungpong/.env.advance-seeds` (chmod 600, outside the repo) holds:
-- `SUPABASE_URL`, `SUPABASE_PROJECT_REF`, `SUPABASE_ANON_KEY`,
-  `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_PASSWORD`
-- `R2_ACCOUNT_ID_NEEDS_FIX` (intentionally renamed; the value pasted by the
-  user was a Cloudflare API token, not the 32-hex account id — see Remaining
-  work section 2)
-- `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET=advance-seeds-models`,
-  `STORAGE_QUOTA_BYTES=536870912`
-- `ADMIN_EMAIL`, `ADMIN_PASSWORD`
-
-### OpenSpec status
-
-`openspec validate --all --strict` → 18/18 ✓.
-
-| Change | State | Notes |
-|---|---|---|
-| `add-model-registry-backend` | done | applied |
-| `add-python-registry-sdk` | done | |
-| `add-model-registry-web-dashboard` | done | |
-| `connect-dashboard-to-live-registry` | done | all tasks closed (7.4 verified) |
-| `wire-dashboard-to-hosted-training` | **scoped, not implemented** | proposal/design/tasks/spec written, no code |
-
-`openspec archive` is interactive and has not been run. None of the completed
-changes are archived.
+Design DNA remains vendored from `advance-seeds-field-inspector-demo`:
+deep-teal brand, light-mode tokens in `apps/web/src/tokens.css`, sticky topbar
+shell, and Sprout brand mark.
 
 ---
 
-## Remaining Work
+## Hosted Training Foundation
 
-### 1. Implement `wire-dashboard-to-hosted-training` *(highest impact)*
+The `wire-dashboard-to-hosted-training` OpenSpec change is no longer just
+scoped; the foundation is implemented locally.
 
-This is the change that turns the dashboard from a registry into a usable
-self-contained demo. Today, clicking *Start Colab MCP training* inserts a
-`runs` row but no compute fires — the operator has to open the Colab notebook
-and click Run all manually. The scoped change wires up a hosted GPU provider
-(Modal recommended in the design doc; Replicate or Beam are alternatives) so
-the *Start* button actually starts training.
+Implemented:
 
-Read `openspec/changes/wire-dashboard-to-hosted-training/` first:
-- `proposal.md` — why and what
-- `design.md` — provider comparison, edge-function shapes, HMAC callback
-  contract, dataset access options, security boundary, risk register
-- `tasks.md` — 22 unchecked items across 7 sections
-- `specs/hosted-training-trigger/spec.md` — capability requirements
-- `specs/model-registry-web-dashboard/spec.md` — modified scenarios
+- `supabase/migrations/20260502000010_runs_provider_job_id.sql`
+  adds `provider_job_id text` to `public.runs`.
+- `supabase/functions/start-training/`
+  admin-gated Edge Function that inserts a run, calls a provider adapter, and
+  stores `provider_job_id`.
+- `supabase/functions/training-callback/`
+  HMAC-verified callback that handles metric, log, succeeded, and failed
+  events.
+- `packages/training-worker/`
+  Python worker package with Modal-oriented entrypoint, callback client, log
+  streaming, artifact upload, and CPU smoke-test coverage.
+- `docs/hosted-training.md`
+  setup notes for Supabase secrets and the provider adapter contract.
+- `apps/web/src/registry/supabaseStore.ts`
+  `startTraining` now calls the `start-training` Edge Function and surfaces
+  provider errors inline.
 
-The first task is `2.1 Add migration adding provider_job_id text to public.runs`.
-The biggest block is task 4 (the Python worker package).
+Still pending:
 
-### 2. Fix `R2_ACCOUNT_ID`
+- Set Supabase function secrets:
+  - `TRAINING_PROVIDER_API_KEY`
+  - `TRAINING_PROVIDER_BASE_URL`
+  - `TRAINING_CALLBACK_SECRET`
+- Deploy/configure the actual Modal/provider adapter.
+- Trigger a real training job from the deployed dashboard and verify live
+  metrics, final candidate version, and R2 artifact.
+- Extend dataset upload to include image zip/bundle delivery, not only YAML.
 
-The currently-set Supabase secret `R2_ACCOUNT_ID` value is a Cloudflare API
-token (`cfat_…`), not a 32-hex Cloudflare account id. The R2 SDK calls inside
-Edge Functions therefore fail at runtime with
-`R2 env not configured`. Affected:
+---
 
-- `upload-artifact` (signed PUT URL for tflite/mlmodel)
-- `upload-dataset` (signed PUT URL for dataset YAMLs — what the dashboard's
-  Upload .yaml button calls)
-- `storage-usage POST /delete` (R2 object deletion)
+## R2 / Storage Caveat
 
-Reads (`storage-usage GET`) work because they only touch Supabase, not R2.
+The dashboard quota is set to 512 MB (`536870912` bytes). `storage-usage GET`
+works because it reads Supabase metadata.
 
-To fix:
-1. Find the account id in the Cloudflare dashboard (R2 sidebar, top-right
-   "Account ID" — 32 hex chars).
-2. `supabase secrets set R2_ACCOUNT_ID=<32-hex>`.
-3. Verify by clicking *Upload .yaml* in the dashboard with a small test YAML.
+Be careful with R2 runtime writes/deletes:
 
-### 3. Rotate the R2 token *(carry-over from earlier hand-off)*
+- The earlier handoff noted `R2_ACCOUNT_ID` was mis-set to a Cloudflare API
+  token (`cfat_...`) rather than the 32-hex account id. Verify this before
+  relying on `upload-artifact`, `upload-dataset`, or `storage-usage/delete`.
+- Rotate the Cloudflare R2 token before production use; it was never committed
+  but briefly existed in a gitignored local file.
+- `storage-usage/delete` now clears stale `channel_history` references before
+  deleting an inactive `versions` row, so historical audit references should
+  not block inactive model deletion.
 
-During earlier backend work, live R2 credentials briefly sat in a gitignored
-`.env.local` inside a deleted worktree. They were not committed but should be
-rotated in Cloudflare anyway before any production use. Rotate, then update
-`R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` Supabase secrets.
+---
 
-### 4. Wire dataset image data, not just the YAML
+## Important Files
 
-Today the *Upload .yaml* button stores only the YOLO config YAML on R2. The
-actual training images still have to be on whatever machine runs the trainer
-(your laptop, the Colab VM after the clone). To make a stranger-with-just-the-
-URL workflow feasible:
+- `docs/NEXT_AGENT_HANDOFF_DASHBOARD_LIVE.md`
+- `docs/NEXT_AGENT_HANDOFF_MODEL_REGISTRY.md`
+- `docs/hosted-training.md`
+- `apps/web/src/App.tsx`
+- `apps/web/src/styles.css`
+- `apps/web/src/registry/{api,demoStore,supabaseStore,index,types}.ts`
+- `openspec/changes/connect-dashboard-to-live-registry/`
+- `openspec/changes/wire-dashboard-to-hosted-training/`
+- `supabase/functions/{start-training,training-callback,storage-usage,upload-artifact,upload-dataset}/`
+- `supabase/migrations/20260502000008_grant_writes_to_authenticated.sql`
+- `supabase/migrations/20260502000009_realtime_publication.sql`
+- `supabase/migrations/20260502000010_runs_provider_job_id.sql`
+- `packages/training-worker/`
+- `tests/test_training_worker.py`
+- `notebooks/train_run.ipynb`
+- `scripts/train_yolo26n_seg.py`
+- `src/advance_seeds_ml/registry/`
 
-1. Extend `upload-dataset` (or add `upload-dataset-images`) to accept a zip
-   and store at `datasets/{slug}/{stamp}/images.zip`.
-2. Add a *Upload images (.zip)* button in the dashboard next to the YAML one.
-3. Update the Colab notebook's *Pull dataset* cell to fetch the zip via
-   presigned GET, unzip into the path the YAML references.
+---
 
-This is the natural follow-up to section 1 — once a worker is invoked
-server-side, both YAML and images need to be reachable from the worker.
+## Local Credentials
 
-### 5. Make the Colab notebook actually train
+Use `/Users/ppungpong/.env.advance-seeds` (chmod 600). Source it before
+running `supabase`, `psql`, or `gh` commands. Do not commit it or paste its
+contents into docs.
 
-`notebooks/train_run.ipynb` is a working scaffold but the *Pull dataset* cell
-contains a `TODO: fetch from R2 and place at the path YOLO expects` for the
-case when `config.dataset` is an R2 key. Today it works only when the dataset
-reference is a path that already exists in the cloned repo (e.g.
-`configs/dataset.banana-v2.yaml`). Closing this TODO together with item 4
-turns *Open in Colab* into a fully self-contained training launch.
+The Supabase project is shared with `advance-seeds-field-inspector-demo`.
+Apply DB migrations with psql/raw SQL, not the Supabase CLI migration tracker.
 
-### 6. Archive completed OpenSpec changes
+Do not revoke `INSERT/UPDATE/DELETE` from the `authenticated` role on registry
+tables. Migration `20260502000008_grant_writes_to_authenticated.sql` explains
+why: RLS is the gate, but Postgres still needs verb privileges.
 
-Run `openspec archive` for each of:
-
-- `add-model-registry-backend`
-- `add-python-registry-sdk`
-- `add-model-registry-web-dashboard`
-- `connect-dashboard-to-live-registry`
-
-`openspec archive` is interactive — run it locally and confirm each.
-
-### 7. Polish backlog (lower priority)
-
-- Drag-reorder of classes (today: edit order = re-upload YAML).
-- Upload progress indicator for big files (current upload has no progress).
-- Pagination on Recent runs (currently slices to 6).
-- Mobile sub-nav reflow at very narrow widths is functional but cramped.
-- Dataset YAML preview cell — show parsed `train`/`val`/`test` paths after
-  upload to give an extra sanity check.
+Do not remove registry tables from `supabase_realtime`. Migration
+`20260502000009_realtime_publication.sql` fixed the silent-failure mode where
+the dashboard never saw live updates.
 
 ---
 
 ## Validation
 
-From repo root, before any push:
+Before push, run from repo root:
 
 ```bash
 python3 -m unittest discover -s tests
@@ -208,49 +157,98 @@ From `apps/web`:
 npm run build
 ```
 
-Browser smoke test (deployed):
+Useful targeted checks:
+
+```bash
+deno check supabase/functions/storage-usage/index.ts
+deno test supabase/functions/training-callback/callback.test.ts
+```
+
+`supabase/functions/storage-usage/index.test.ts` is an integration test that
+expects local Supabase Functions at `127.0.0.1:54321`; it fails with connection
+refused unless the local Supabase stack is running.
+
+Browser smoke test:
 
 1. Open https://phongsakorn-ipassion.github.io/advance-seeds-field-inspector-ml/
-2. Click *Sign in as Admin* → land on Overview.
-3. Train → form tab → adjust epochs → click *Start Colab MCP training* →
-   Live tracking tab now shows a `1` badge and the new run.
-4. Click the run → detail slides in below.
-5. *Open in Colab* opens the notebook with `?run_id=<id>` in the URL.
-
-Local credentials live in `/Users/ppungpong/.env.advance-seeds`. Source it
-before running `supabase` or `gh` commands that need them.
-
----
-
-## Operational notes
-
-- The Supabase project is **shared with `advance-seeds-field-inspector-demo`**.
-  Migrations were applied via raw `psql` to avoid disrupting the demo's
-  migration history. Future migrations should use the same path. See
-  `connect-dashboard-to-live-registry/design.md` for the rationale.
-- All write privileges (`INSERT/UPDATE/DELETE`) on the registry tables are
-  granted to `authenticated`; row-level access is gated by the `is_admin()`
-  RLS function which reads `app_metadata.role` from the JWT. Don't revoke
-  the verbs without also rewriting the RLS gate.
-- Service-role key is **only** in: Supabase Functions runtime, the local
-  `.env.advance-seeds`, and whoever pastes it into a Colab notebook.
-  It is **never** in the browser bundle. Do not change this.
-- The Pages workflow uses GitHub repo variables (not secrets) for
-  `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` because the anon key is
-  intentionally public — RLS is the security boundary.
+2. Sign in as the admin account.
+3. Overview loads.
+4. Train -> create a training run.
+5. Live tracking / Recent runs show the run.
+6. Click row -> detail slides in.
+7. Confirm `Open in Colab` is present and the manual checklist is visible.
+8. Models -> verify filters/sorts and icon lifecycle buttons.
+9. Storage -> verify status pills are centered and inactive rows say
+   `Delete model`.
 
 ---
 
-## Do not do
+## Highest-impact Remaining Work
 
-- Do not move the service-role key to `VITE_*` variables. RLS is the boundary;
-  putting service-role in the browser would bypass it.
-- Do not revoke `INSERT/UPDATE/DELETE` on the registry tables again — see
-  migration `…008` for the reason.
-- Do not remove the `supabase_realtime` publication entries. The dashboard
-  silently breaks without them and the failure mode is hard to spot.
-- Do not bypass `is_admin()` checks in the Edge Functions. The `roleFromJwt`
-  helper in `_shared/cors.ts` is shared across functions; keep using it.
-- Do not run `openspec archive` non-interactively or in CI. It expects
-  human confirmation per change.
-- Do not commit the contents of `/Users/ppungpong/.env.advance-seeds`.
+1. Configure the hosted training provider secrets and provider adapter, then
+   trigger a real hosted run from the deployed dashboard.
+2. Verify/fix `R2_ACCOUNT_ID` and rotate R2 credentials.
+3. Add dataset image zip/bundle upload and worker/Colab materialization.
+4. Close the `notebooks/train_run.ipynb` TODO for fetching R2 datasets.
+5. Run `openspec archive` interactively for completed changes once the user is
+   ready.
+6. Do a browser QA pass on desktop and mobile after the latest UI refinements.
+
+---
+
+## Pasteable Prompt for the Next AI
+
+```text
+You are working in:
+/Users/ppungpong/Github/advance-seeds-field-inspector-ml
+
+Goal:
+Continue the Advance Seeds model registry web app. Read
+docs/NEXT_AGENT_HANDOFF_DASHBOARD_LIVE.md in full first, then skim
+docs/NEXT_AGENT_HANDOFF_MODEL_REGISTRY.md and the active OpenSpec changes.
+
+Current state:
+The dashboard is live at
+https://phongsakorn-ipassion.github.io/advance-seeds-field-inspector-ml/ and
+uses the shared Supabase project. Auth, RLS, Realtime, deploy/undeploy,
+storage quota, inactive model deletion, dataset YAML upload, demo persistence,
+Train UI guidance, Model lifecycle filters/actions, and Storage UI polish are
+implemented. Hosted training foundation is also implemented locally:
+provider_job_id migration, start-training Edge Function, training-callback Edge
+Function, Python training-worker package, and docs/hosted-training.md.
+
+Highest-impact next work:
+1. Configure and verify hosted training end-to-end:
+   - set TRAINING_PROVIDER_API_KEY, TRAINING_PROVIDER_BASE_URL, and
+     TRAINING_CALLBACK_SECRET as Supabase function secrets;
+   - deploy/configure the Modal/provider adapter;
+   - start a real run from the deployed dashboard and verify live metrics,
+     final version row, and R2 artifact.
+2. Verify/fix R2_ACCOUNT_ID. It may still be a Cloudflare API token instead of
+   the 32-hex account id. Rotate R2 credentials before production use.
+3. Extend dataset upload to include the image zip/bundle, not just YAML, and
+   make both hosted worker and Colab notebook fetch/materialize it.
+4. Close the notebook TODO for R2 dataset fetch.
+5. Browser QA desktop/mobile after the latest UI changes.
+
+Required approach:
+- Follow OpenSpec. Any new behavior should update or add an OpenSpec change
+  with proposal.md, design.md, tasks.md, and requirements spec.
+- Keep service-role, R2, and provider secrets out of the browser bundle.
+- Browser uses anon key + RLS only.
+- The Supabase project is shared with advance-seeds-field-inspector-demo.
+  Apply migrations via psql/raw SQL, not the Supabase CLI migration tracker.
+- Do not revoke authenticated table verbs; RLS is the authorization gate.
+- Do not remove registry tables from supabase_realtime.
+- Do not commit /Users/ppungpong/.env.advance-seeds.
+
+Validation before push:
+From repo root:
+  python3 -m unittest discover -s tests
+  openspec validate --all --strict
+From apps/web:
+  npm run build
+Useful targeted:
+  deno check supabase/functions/storage-usage/index.ts
+  deno test supabase/functions/training-callback/callback.test.ts
+```

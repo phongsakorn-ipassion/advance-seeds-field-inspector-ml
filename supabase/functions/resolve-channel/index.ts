@@ -11,10 +11,12 @@ Deno.serve(async (req) => {
   const lineSlug = url.searchParams.get("model_line") ?? "";
   const currentCompat = url.searchParams.get("current_compat") ?? "";
   const currentVersion = url.searchParams.get("current_version") ?? "";
+  const platform = url.searchParams.get("platform") ?? "android";
 
   if (!channel || !lineSlug) {
     return json({ error: "channel and model_line required" }, 400);
   }
+  if (!["android", "ios"].includes(platform)) return json({ error: "invalid platform" }, 400);
 
   const sb = serviceClient();
   const { data: line } = await sb
@@ -30,7 +32,7 @@ Deno.serve(async (req) => {
 
   const { data: v } = await sb
     .from("versions")
-    .select("id, semver, compat_signature, metadata, tflite_r2_key, content_hash")
+    .select("id, semver, compat_signature, metadata, tflite_r2_key, mlmodel_r2_key, size_bytes, content_hash")
     .eq("id", ch.current_version_id).maybeSingle();
   if (!v) return json({ error: "current_version_id stale" }, 500);
 
@@ -44,9 +46,19 @@ Deno.serve(async (req) => {
   }
   if (currentVersion === v.id) return json({ action: "noop" });
 
+  const r2Key = platform === "ios" ? v.mlmodel_r2_key : v.tflite_r2_key;
+  if (!r2Key) {
+    return json({
+      action: "artifact_missing",
+      platform,
+      version_id: v.id,
+      semver: v.semver,
+      metadata: v.metadata,
+    });
+  }
   let modelUrl: string;
   try {
-    modelUrl = await presignGet(v.tflite_r2_key, 3600);
+    modelUrl = await presignGet(r2Key, 3600);
   } catch (e) {
     console.error("presignGet failed:", e);
     return json({ error: "artifact unavailable" }, 503);
@@ -55,9 +67,12 @@ Deno.serve(async (req) => {
     action: "update",
     version_id: v.id,
     semver: v.semver,
+    platform,
+    artifact_kind: platform === "ios" ? "coreml" : "tflite",
     model_url: modelUrl,
     metadata: v.metadata,
-    content_hash: v.content_hash,
+    content_hash: platform === "ios" ? v.metadata?.artifacts?.coreml?.content_hash ?? null : v.content_hash,
+    size_bytes: platform === "ios" ? v.metadata?.artifacts?.coreml?.size_bytes ?? null : v.size_bytes,
   });
 });
 

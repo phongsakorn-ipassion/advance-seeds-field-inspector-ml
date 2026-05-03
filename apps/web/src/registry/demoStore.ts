@@ -60,6 +60,10 @@ const initialSnapshot: RegistrySnapshot = {
     { name: "staging", versionId: "version-seeds-v2-100", updatedAt: "2026-05-02 11:18", updatedBy: "training-sdk" },
     { name: "production", versionId: "version-seeds-v1-092", updatedAt: "2026-05-01 18:42", updatedBy: "operator" },
   ],
+  deployments: [
+    { id: "deployment-staging-v2", channel: "staging", versionId: "version-seeds-v2-100", isDefault: true, deployedAt: "2026-05-02 11:18" },
+    { id: "deployment-production-v1", channel: "production", versionId: "version-seeds-v1-092", isDefault: true, deployedAt: "2026-05-01 18:42" },
+  ],
   runs: [
     {
       id: "run-seeds-v2-041",
@@ -111,6 +115,12 @@ const initialSnapshot: RegistrySnapshot = {
       maskMap: 0.82,
       sizeMb: 12.4,
       contentHash: "sha256:357e5d6f...",
+      tfliteR2Key: "runs/run-seeds-v2-041/1.0.0-seeds-v2.tflite",
+      tflitePrecision: "int8",
+      coremlR2Key: "runs/run-seeds-v2-041/1.0.0-seeds-v2.mlpackage.zip",
+      coremlSizeMb: 18.7,
+      coremlContentHash: "sha256:coreml357e...",
+      coremlPrecision: "fp16",
       compatSignature: "0256a143...a5f1a28d1",
       createdAt: "2026-05-02 10:51",
     },
@@ -128,6 +138,12 @@ const initialSnapshot: RegistrySnapshot = {
       maskMap: 0.75,
       sizeMb: 12.1,
       contentHash: "sha256:94a772bb...",
+      tfliteR2Key: "runs/run-seeds-v1-039/0.9.2-seeds-v1.tflite",
+      tflitePrecision: "int8",
+      coremlR2Key: null,
+      coremlSizeMb: null,
+      coremlContentHash: null,
+      coremlPrecision: null,
       compatSignature: "0256a143...a5f1a28d1",
       createdAt: "2026-05-01 15:58",
     },
@@ -145,12 +161,19 @@ const initialSnapshot: RegistrySnapshot = {
       maskMap: 0.69,
       sizeMb: 10.8,
       contentHash: "sha256:7110a0ed...",
+      tfliteR2Key: "runs/run-old-070/0.7.0-archive.tflite",
+      tflitePrecision: "int8",
+      coremlR2Key: null,
+      coremlSizeMb: null,
+      coremlContentHash: null,
+      coremlPrecision: null,
       compatSignature: "0256a143...a5f1a28d1",
       createdAt: "2026-04-30 12:22",
     },
   ],
   storage: [
     { id: "artifact-v2-tflite", versionId: "version-seeds-v2-100", key: "runs/run-seeds-v2-041/1.0.0-seeds-v2.tflite", kind: "tflite", sizeMb: 12.4, active: true },
+    { id: "artifact-v2-coreml", versionId: "version-seeds-v2-100", key: "runs/run-seeds-v2-041/1.0.0-seeds-v2.mlpackage.zip", kind: "coreml", sizeMb: 18.7, active: true },
     { id: "artifact-v1-tflite", versionId: "version-seeds-v1-092", key: "runs/run-seeds-v1-039/0.9.2-seeds-v1.tflite", kind: "tflite", sizeMb: 12.1, active: true },
     { id: "artifact-old-tflite", versionId: "version-old-v1-070", key: "runs/run-old-070/0.7.0-archive.tflite", kind: "tflite", sizeMb: 10.8, active: false },
   ],
@@ -181,6 +204,7 @@ function loadPersistedSnapshot(): RegistrySnapshot | null {
       channels: parsed.channels,
       runs: parsed.runs,
       versions: parsed.versions,
+      deployments: parsed.deployments ?? initialSnapshot.deployments,
       storage: parsed.storage,
     };
   } catch {
@@ -258,6 +282,12 @@ export function createDemoStore(): RegistryStore {
         maskMap: run.maskMap ?? 0,
         sizeMb: 12.2,
         contentHash: `sha256:${run.id.slice(-8)}...`,
+        tfliteR2Key: `runs/${run.id}/${semver}.tflite`,
+        tflitePrecision: "int8",
+        coremlR2Key: `runs/${run.id}/${semver}.mlpackage.zip`,
+        coremlSizeMb: 18.4,
+        coremlContentHash: `sha256:coreml-${run.id.slice(-8)}...`,
+        coremlPrecision: "fp16",
         compatSignature: "0256a143...a5f1a28d1",
         createdAt: nowStamp(),
         description: "",
@@ -272,9 +302,17 @@ export function createDemoStore(): RegistryStore {
         ...newVersions.map((v) => ({
           id: `artifact-${v.id}`,
           versionId: v.id,
-          key: `runs/${v.runId}/${v.semver}.tflite`,
+          key: v.tfliteR2Key,
           kind: "tflite" as const,
           sizeMb: v.sizeMb,
+          active: false,
+        })),
+        ...newVersions.map((v) => ({
+          id: `artifact-${v.id}-coreml`,
+          versionId: v.id,
+          key: v.coremlR2Key ?? `runs/${v.runId}/${v.semver}.mlpackage.zip`,
+          kind: "coreml" as const,
+          sizeMb: v.coremlSizeMb ?? 18.4,
           active: false,
         })),
         ...snapshot.storage,
@@ -311,6 +349,12 @@ export function createDemoStore(): RegistryStore {
       authListeners.add(listener);
       return () => authListeners.delete(listener);
     },
+    async deleteRun(runId) {
+      setSnapshot({
+        ...snapshot,
+        runs: snapshot.runs.filter((r) => r.id !== runId),
+      });
+    },
     async startTraining(config) {
       const now = new Date();
       const id = `run-${now.getTime()}`;
@@ -338,14 +382,22 @@ export function createDemoStore(): RegistryStore {
       };
       setSnapshot({ ...snapshot, runs: [run, ...snapshot.runs] });
     },
-    async deployVersion(versionId, channel) {
+    async deployVersion(versionId, channel, options) {
+      const target = snapshot.versions.find((v) => v.id === versionId);
+      if (target?.state === "archived") throw new Error("Archived models cannot be deployed.");
+      const setDefault = options?.setDefault ?? true;
+      const deploymentId = `deployment-${channel}-${versionId}`;
       setSnapshot({
         ...snapshot,
         channels: snapshot.channels.map((c) =>
-          c.name === channel
+          c.name === channel && setDefault
             ? { ...c, versionId, updatedAt: nowStamp(), updatedBy: session?.email ?? "demo-admin" }
             : c,
         ),
+        deployments: [
+          ...snapshot.deployments.filter((d) => !(d.channel === channel && d.versionId === versionId)),
+          { id: deploymentId, channel, versionId, isDefault: setDefault, deployedAt: nowStamp() },
+        ].map((d) => d.channel === channel ? { ...d, isDefault: d.versionId === versionId ? setDefault : false } : d),
         versions: snapshot.versions.map((v) => ({
           ...v,
           state: v.id === versionId ? channel : v.state === channel ? "candidate" : v.state,
@@ -353,15 +405,19 @@ export function createDemoStore(): RegistryStore {
         storage: snapshot.storage.map((it) => (it.versionId === versionId ? { ...it, active: true } : it)),
       });
     },
-    async undeployChannel(channel) {
-      const oldVersionId = snapshot.channels.find((c) => c.name === channel)?.versionId;
+    async undeployChannel(channel, versionId) {
+      const oldVersionId = versionId ?? snapshot.channels.find((c) => c.name === channel)?.versionId;
+      const replacement = snapshot.deployments.find((d) => d.channel === channel && d.versionId !== oldVersionId);
       setSnapshot({
         ...snapshot,
         channels: snapshot.channels.map((c) =>
           c.name === channel
-            ? { ...c, versionId: null, updatedAt: nowStamp(), updatedBy: session?.email ?? "demo-admin" }
+            ? { ...c, versionId: replacement?.versionId ?? null, updatedAt: nowStamp(), updatedBy: session?.email ?? "demo-admin" }
             : c,
         ),
+        deployments: snapshot.deployments
+          .filter((d) => !(d.channel === channel && d.versionId === oldVersionId))
+          .map((d) => d.channel === channel ? { ...d, isDefault: d.versionId === replacement?.versionId } : d),
         versions: snapshot.versions.map((v) =>
           v.id === oldVersionId ? { ...v, state: v.state === channel ? "candidate" : v.state } : v,
         ),
@@ -403,6 +459,14 @@ export function createDemoStore(): RegistryStore {
         ),
         versions: snapshot.versions.filter((version) => version.id !== item.versionId),
         storage: snapshot.storage.filter((artifact) => artifact.versionId !== item.versionId),
+      });
+    },
+    async archiveVersion(versionId) {
+      if (snapshot.channels.some((channel) => channel.versionId === versionId) || snapshot.deployments.some((d) => d.versionId === versionId)) return;
+      setSnapshot({
+        ...snapshot,
+        versions: snapshot.versions.map((version) => (version.id === versionId ? { ...version, state: "archived" } : version)),
+        storage: snapshot.storage.filter((artifact) => artifact.versionId !== versionId),
       });
     },
     async uploadDataset(file, modelLineSlug) {

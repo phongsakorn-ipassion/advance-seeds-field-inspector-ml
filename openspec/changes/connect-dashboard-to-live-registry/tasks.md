@@ -35,6 +35,8 @@
 - [x] 5.2 Verify admin role on the JWT before deleting; return 403 otherwise.
 - [x] 5.3 Delete the R2 object and the `versions` row in a single request.
 - [x] 5.4 Add unit/contract tests using the existing function test harness.
+- [x] 5.5 Ensure inactive storage deletion also removes the model version
+      from live/demo stores and does not fail on stale channel-history refs.
 
 ## 5b. Design System Alignment
 
@@ -55,3 +57,17 @@
 - [x] 7.2 Run `python3 -m unittest discover -s tests`.
 - [x] 7.3 Run `openspec validate --all --strict`.
 - [x] 7.4 Verify demo mode still works in the browser without env vars.
+
+## 8. Lifecycle Archive Follow-up
+
+- [x] 8.1 Add confirmation before deleting inactive storage records.
+- [x] 8.2 Add a Model detail archive action that permanently deletes inactive
+      model artifacts through the storage cleanup Edge Function.
+- [x] 8.3 Write Supabase Auth user ids to channel audit columns during deploy
+      and undeploy actions.
+- [x] 8.4 Keep archived model versions visible as non-deployable Model detail
+      history after deleting their stored artifacts.
+- [x] 8.5 Add a Recent training runs shortcut from succeeded runs to their
+      trained model detail.
+- [x] 8.6 Hide Colab hand-off controls for succeeded/failed runs and add a
+      copyable run id to the active-run Colab checklist.

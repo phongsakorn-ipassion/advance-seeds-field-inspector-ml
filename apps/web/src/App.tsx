@@ -1,6 +1,12 @@
-import { Fragment, FormEvent, useEffect, useState, useSyncExternalStore } from "react";
+import { Fragment, FormEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import type { ReactNode } from "react";
 import {
   Activity,
+  Archive,
+  ArrowUpRight,
+  Apple,
+  Bell,
+  Copy,
   Database,
   ExternalLink,
   Info,
@@ -9,6 +15,7 @@ import {
   Pencil,
   Rocket,
   ShieldCheck,
+  Smartphone,
   Sprout,
   Trash2,
   Upload,
@@ -28,8 +35,19 @@ import {
 
 type Section = "overview" | "train" | "models" | "storage";
 type TrainTab = "form" | "live" | "recent";
-type VersionFilter = "all" | "staging" | "production" | "candidate" | "inactive";
+type VersionFilter = "all" | "staging" | "production" | "candidate" | "inactive" | "archived";
 type VersionSort = "created" | "performance" | "map50" | "maskMap";
+type ActivityTone = "info" | "success" | "danger" | "muted";
+type ActivityNotification = {
+  id: string;
+  title: string;
+  detail: string;
+  tone: ActivityTone;
+  time: string;
+  section?: Section;
+  runId?: string;
+  toast?: boolean;
+};
 
 function Hint({ text }: { text: string }) {
   return (
@@ -142,6 +160,91 @@ function expertLogLines(run: RegistryRun): string[] {
     `[timing] started_at="${run.startedAt || "pending"}" finished_at="${run.finishedAt ?? "running"}" notebook="${run.colabNotebook || "pending"}"`,
     ...run.logs.map((line, index) => `[log ${String(index + 1).padStart(2, "0")}] ${line}`),
   ];
+}
+
+function functionsBaseUrl(): string {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  return supabaseUrl ? `${supabaseUrl.replace(/\/$/, "")}/functions/v1` : "/functions/v1";
+}
+
+function listModelsEndpoint(channel: ChannelName, platform: "android" | "ios"): string {
+  return `${functionsBaseUrl()}/list-deployed-models?model_line=seeds-poc&channel=${channel}&platform=${platform}`;
+}
+
+function resolveChannelEndpoint(channel: ChannelName, platform: "android" | "ios"): string {
+  return `${functionsBaseUrl()}/resolve-channel?model_line=seeds-poc&channel=${channel}&platform=${platform}&current_version={version_id}&current_compat={compat_signature}`;
+}
+
+function deriveActivityNotifications(snapshot: ReturnType<RegistryStore["getSnapshot"]>): ActivityNotification[] {
+  const items: ActivityNotification[] = [];
+  for (const run of snapshot.runs) {
+    const status = displayRunStatus(run);
+    const latestLog = run.logs.length > 0 ? run.logs[run.logs.length - 1] : undefined;
+    const progressBucket = status === "running" ? Math.floor(run.progress / 10) * 10 : run.progress;
+    items.push({
+      id: `run:${run.id}:${status}:${progressBucket}`,
+      title: status === "succeeded" ? "Training finished" : status === "failed" ? "Training failed" : status === "waiting" ? "Training waiting" : "Training running",
+      detail: latestLog ? `${run.name} · ${latestLog}` : `${run.name} · ${run.progress}%`,
+      tone: status === "succeeded" ? "success" : status === "failed" ? "danger" : status === "waiting" ? "muted" : "info",
+      time: run.finishedAt ?? run.startedAt,
+      section: "train",
+      runId: run.id,
+      toast: status === "succeeded" || status === "failed",
+    });
+  }
+  for (const version of snapshot.versions) {
+    items.push({
+      id: `version:${version.id}:${version.state}`,
+      title: version.state === "archived" ? "Model archived" : "Model version ready",
+      detail: `${version.semver} · ${pct(version.map50)} mAP50 · ${pct(version.maskMap)} mask`,
+      tone: version.state === "archived" ? "muted" : "success",
+      time: version.createdAt,
+      section: "models",
+      toast: true,
+    });
+  }
+  for (const deployment of snapshot.deployments) {
+    const version = snapshot.versions.find((candidate) => candidate.id === deployment.versionId);
+    items.push({
+      id: `deployment:${deployment.channel}:${deployment.versionId}:${deployment.isDefault ? "default" : "selectable"}`,
+      title: deployment.isDefault ? `Default ${deployment.channel} model changed` : `Model deployed to ${deployment.channel}`,
+      detail: `${version?.semver ?? deployment.versionId} is ${deployment.isDefault ? "default" : "selectable"}`,
+      tone: "info",
+      time: deployment.deployedAt,
+      section: "models",
+      toast: deployment.isDefault,
+    });
+  }
+  for (const channel of snapshot.channels) {
+    if (!channel.versionId) {
+      items.push({
+        id: `channel:${channel.name}:undeployed:${channel.updatedAt}`,
+        title: `${channel.name} undeployed`,
+        detail: `No default model is assigned to ${channel.name}`,
+        tone: "muted",
+        time: channel.updatedAt,
+        section: "models",
+        toast: true,
+      });
+    }
+  }
+  for (const item of snapshot.storage) {
+    if (!item.active) {
+      const version = snapshot.versions.find((candidate) => candidate.id === item.versionId);
+      items.push({
+        id: `storage:${item.id}:inactive`,
+        title: "Inactive model storage",
+        detail: `${item.key} · ${item.sizeMb.toFixed(1)} MB`,
+        tone: "muted",
+        time: version?.createdAt ?? "",
+        section: "storage",
+      });
+    }
+  }
+  return items
+    .filter((item) => item.time !== "")
+    .sort((a, b) => Date.parse(b.time.replace(" ", "T")) - Date.parse(a.time.replace(" ", "T")))
+    .slice(0, 24);
 }
 
 function DatasetConfigField({
@@ -334,12 +437,44 @@ export function App() {
   const [focusedRunId, setFocusedRunId] = useState<string | null>(null);
   const [loginError, setLoginError] = useState("");
   const [trainConfig, setTrainConfig] = useState<TrainConfig>(defaultConfig);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [readActivityIds, setReadActivityIds] = useState<Set<string>>(new Set());
+  const [toasts, setToasts] = useState<ActivityNotification[]>([]);
+  const knownActivityIds = useRef<Set<string> | null>(null);
+  const activities = useMemo(() => deriveActivityNotifications(snapshot), [snapshot]);
+  const unreadCount = activities.filter((activity) => !readActivityIds.has(activity.id)).length;
+
+  useEffect(() => {
+    const current = new Set(activities.map((activity) => activity.id));
+    if (knownActivityIds.current === null) {
+      knownActivityIds.current = current;
+      setReadActivityIds(current);
+      return;
+    }
+    const next = activities.filter((activity) => activity.toast && !knownActivityIds.current?.has(activity.id)).slice(0, 3);
+    knownActivityIds.current = current;
+    if (next.length === 0) return;
+    setToasts((existing) => [...next, ...existing].slice(0, 3));
+  }, [activities]);
+
+  useEffect(() => {
+    if (toasts.length === 0) return;
+    const timer = window.setTimeout(() => {
+      setToasts((existing) => existing.slice(0, -1));
+    }, 5200);
+    return () => window.clearTimeout(timer);
+  }, [toasts]);
 
   function openRun(runId: string) {
     setFocusedRunId(runId);
     setSection("train");
     const run = snapshot.runs.find((r) => r.id === runId);
     setTrainTab(run?.status === "running" ? "live" : "recent");
+  }
+
+  function openModelVersion(versionId: string) {
+    setSelectedVersionId(versionId);
+    setSection("models");
   }
 
   // Manual sub-nav clicks clear the focused run so the detail panel
@@ -396,14 +531,32 @@ export function App() {
             <button className={section === "storage" ? "active" : ""} onClick={() => setSection("storage")} type="button">Storage</button>
           </nav>
           <span className="topbar-spacer" />
-          <span className="topbar-user">
-            <ShieldCheck size={14} aria-hidden="true" />
-            {session.email}
-            <span className="role">· {isAdmin ? "admin" : "read-only"}</span>
-          </span>
-          <button className="ghost-button compact" type="button" onClick={() => void store.signOut()}>
-            <LogOut size={14} /> Sign out
-          </button>
+          <NotificationCenter
+            activities={activities}
+            readActivityIds={readActivityIds}
+            unreadCount={unreadCount}
+            open={notificationsOpen}
+            onToggle={() => setNotificationsOpen(!notificationsOpen)}
+            onMarkAllRead={() => setReadActivityIds(new Set(activities.map((activity) => activity.id)))}
+            onOpenActivity={(activity) => {
+              setNotificationsOpen(false);
+              setReadActivityIds((current) => new Set(current).add(activity.id));
+              if (activity.runId) openRun(activity.runId);
+              else if (activity.section) setSection(activity.section);
+            }}
+          />
+          <div className="topbar-account-card" aria-label="Signed-in account">
+            <span className="topbar-user">
+              <ShieldCheck size={14} aria-hidden="true" />
+              <span className="topbar-user-copy">
+                <strong>{session.email}</strong>
+                <small>{isAdmin ? "admin" : "read-only"}</small>
+              </span>
+            </span>
+            <button className="account-signout-button" type="button" onClick={() => void store.signOut()} aria-label="Sign out">
+              <LogOut size={14} aria-hidden="true" /> <span>Sign out</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -439,6 +592,8 @@ export function App() {
             setFocusedRunId={setFocusedRunId}
             tab={trainTab}
             setTab={changeTrainTab}
+            versions={snapshot.versions}
+            onOpenModelVersion={openModelVersion}
             onStart={async () => {
               await store.startTraining(trainConfig);
               setTrainConfig(defaultConfig);
@@ -446,9 +601,10 @@ export function App() {
           />
         )}
 
-        {section === "models" && selectedVersion && (
+        {section === "models" && (
           <ModelsWorkflow
             channels={snapshot.channels}
+            deployments={snapshot.deployments}
             versions={snapshot.versions}
             runs={snapshot.runs}
             selectedVersion={selectedVersion}
@@ -470,6 +626,111 @@ export function App() {
           />
         )}
       </main>
+      <ToastStack
+        toasts={toasts}
+        onDismiss={(id) => setToasts((existing) => existing.filter((toast) => toast.id !== id))}
+        onOpen={(toast) => {
+          setToasts((existing) => existing.filter((item) => item.id !== toast.id));
+          if (toast.runId) openRun(toast.runId);
+          else if (toast.section) setSection(toast.section);
+        }}
+      />
+    </div>
+  );
+}
+
+function NotificationCenter({
+  activities,
+  readActivityIds,
+  unreadCount,
+  open,
+  onToggle,
+  onMarkAllRead,
+  onOpenActivity,
+}: {
+  activities: ActivityNotification[];
+  readActivityIds: Set<string>;
+  unreadCount: number;
+  open: boolean;
+  onToggle: () => void;
+  onMarkAllRead: () => void;
+  onOpenActivity: (activity: ActivityNotification) => void;
+}) {
+  return (
+    <div className="notification-center">
+      <button
+        className={open ? "notification-button active" : "notification-button"}
+        type="button"
+        aria-label={`Activity notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
+        aria-expanded={open}
+        onClick={onToggle}
+      >
+        <Bell size={15} aria-hidden="true" />
+        <span>{unreadCount > 99 ? "99+" : unreadCount}</span>
+      </button>
+      {open && (
+        <div className="notification-popover" role="dialog" aria-label="Activity notifications">
+          <header>
+            <div>
+              <strong>Activity</strong>
+              <small>{activities.length === 0 ? "No activity yet" : `${unreadCount} unread · ${activities.length} recent events`}</small>
+            </div>
+            <button
+              type="button"
+              className="notification-mark-read"
+              onClick={onMarkAllRead}
+              disabled={unreadCount === 0}
+            >
+              Mark all read
+            </button>
+          </header>
+          <div className="notification-list">
+            {activities.length === 0 ? (
+              <p>No registry activity has been recorded yet.</p>
+            ) : activities.map((activity) => {
+              const isRead = readActivityIds.has(activity.id);
+              return (
+                <article className={isRead ? "notification-item read" : "notification-item unread"} key={activity.id}>
+                  <button type="button" className="notification-open" onClick={() => onOpenActivity(activity)}>
+                    <span className={`notification-dot ${activity.tone}`} aria-hidden="true" />
+                    <span>
+                      <strong>{activity.title}</strong>
+                      <small>{activity.detail}</small>
+                    </span>
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToastStack({
+  toasts,
+  onDismiss,
+  onOpen,
+}: {
+  toasts: ActivityNotification[];
+  onDismiss: (id: string) => void;
+  onOpen: (toast: ActivityNotification) => void;
+}) {
+  if (toasts.length === 0) return null;
+  return (
+    <div className="toast-stack" aria-live="polite" aria-label="New activity notifications">
+      {toasts.map((toast) => (
+        <article className={`activity-toast ${toast.tone}`} key={toast.id}>
+          <button type="button" className="activity-toast-body" onClick={() => onOpen(toast)}>
+            <strong>{toast.title}</strong>
+            <span>{toast.detail}</span>
+          </button>
+          <button type="button" className="activity-toast-close" aria-label="Dismiss notification" onClick={() => onDismiss(toast.id)}>
+            <X size={14} aria-hidden="true" />
+          </button>
+        </article>
+      ))}
     </div>
   );
 }
@@ -640,6 +901,8 @@ function TrainWorkflow({
   setFocusedRunId,
   tab,
   setTab,
+  versions,
+  onOpenModelVersion,
   onStart,
 }: {
   config: TrainConfig;
@@ -650,25 +913,33 @@ function TrainWorkflow({
   setFocusedRunId: (id: string | null) => void;
   tab: TrainTab;
   setTab: (tab: TrainTab) => void;
+  versions: RegistryVersion[];
+  onOpenModelVersion: (versionId: string) => void;
   onStart: () => Promise<void>;
 }) {
   const runningRuns = runs.filter((r) => r.status === "running");
   const focused = focusedRunId ? runs.find((r) => r.id === focusedRunId) : undefined;
   const recent = runs.filter((r) => r.status !== "running").slice(0, 6);
+  const versionByRunId = useMemo(() => new Map(versions.map((version) => [version.runId, version])), [versions]);
   const isFocusedRunning = focused?.status === "running";
+  const showColabHandoff = focused ? focused.status !== "succeeded" && focused.status !== "failed" : false;
   const [howOpen, setHowOpen] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<RegistryRun | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   async function confirmDelete() {
     if (!pendingDelete) return;
     setDeleteBusy(true);
+    setDeleteError(null);
     try {
       await store.deleteRun(pendingDelete.id);
       if (focusedRunId === pendingDelete.id) setFocusedRunId(null);
+      setPendingDelete(null);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : JSON.stringify(err));
     } finally {
       setDeleteBusy(false);
-      setPendingDelete(null);
     }
   }
 
@@ -682,22 +953,24 @@ function TrainWorkflow({
               text={`${focused.id} · ${focused.hardware}${focused.colabNotebook ? ` · ${focused.colabNotebook}` : ""}`}
             />
             <div className="run-detail-actions">
-              <a
-                className="primary-button compact"
-                href={colabUrl(focused.id)}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Colab does NOT auto-run the notebook. Once it opens, click Runtime, then Run all (Cmd/Ctrl+F9). The notebook will prompt for a Supabase service-role key and start training."
-                aria-label="Open in Colab. Colab does NOT auto-run the notebook. Once it opens, click Runtime, then Run all. The notebook will prompt for a Supabase service-role key and start training."
-              >
-                <Notebook size={14} /> Open in Colab <ExternalLink size={12} />
-              </a>
+              {showColabHandoff && (
+                <a
+                  className="primary-button compact"
+                  href={colabUrl(focused.id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Colab does NOT auto-run the notebook. Once it opens, click Runtime, then Run all (Cmd/Ctrl+F9). The notebook will prompt for a Supabase service-role key and start training."
+                  aria-label="Open in Colab. Colab does NOT auto-run the notebook. Once it opens, click Runtime, then Run all. The notebook will prompt for a Supabase service-role key and start training."
+                >
+                  <Notebook size={14} /> Open in Colab <ExternalLink size={12} />
+                </a>
+              )}
               <button type="button" className="ghost-button compact" onClick={() => setFocusedRunId(null)} aria-label="Close run detail">
                 <X size={14} /> Close
               </button>
             </div>
           </div>
-          <ColabManualSteps runId={focused.id} />
+          {showColabHandoff && <ColabManualSteps runId={focused.id} />}
           {isFocusedRunning && focused.map50 === null && (
             <div className="track-hint">
               <Info size={14} aria-hidden="true" />
@@ -901,13 +1174,14 @@ function TrainWorkflow({
         </section>
         {detailPanel}
         {pendingDelete && (
-          <Modal title="Delete waiting run" onClose={() => (deleteBusy ? undefined : setPendingDelete(null))}>
+          <Modal title="Delete waiting run" onClose={() => (deleteBusy ? undefined : (setPendingDelete(null), setDeleteError(null)))}>
             <p>
               Delete the waiting run <strong>{pendingDelete.name}</strong>? Training has not started yet,
               so no metrics will be lost. This removes the run row and any queued metric data.
             </p>
+            {deleteError && <p className="form-error">{deleteError}</p>}
             <div className="modal-actions">
-              <button type="button" className="ghost-button" onClick={() => setPendingDelete(null)} disabled={deleteBusy}>
+              <button type="button" className="ghost-button" onClick={() => { setPendingDelete(null); setDeleteError(null); }} disabled={deleteBusy}>
                 Cancel
               </button>
               <button type="button" className="danger-button" onClick={() => void confirmDelete()} disabled={deleteBusy}>
@@ -922,9 +1196,15 @@ function TrainWorkflow({
     {tab === "recent" && (
       <>
         <section className="panel">
-          <SectionHeading title="Recent training runs" text="History from this model line. Click any row to open full detail below." />
+          <SectionHeading title="Recent training runs" text="History from this model line. Successful runs with model packages include a shortcut to Model detail." />
           {recent.length > 0 ? (
-            <RunList runs={recent} selectedId={focused?.id ?? null} onSelect={(id) => setFocusedRunId(id)} />
+            <RunList
+              runs={recent}
+              selectedId={focused?.id ?? null}
+              onSelect={(id) => setFocusedRunId(id)}
+              versionByRunId={versionByRunId}
+              onOpenModelVersion={onOpenModelVersion}
+            />
           ) : (
             <EmptyState
               icon={<Activity size={24} />}
@@ -940,22 +1220,20 @@ function TrainWorkflow({
     {howOpen && (
       <Modal title="How training actually runs" onClose={() => setHowOpen(false)}>
         <p>
-          Clicking <em>Start hosted training</em> first asks the Supabase{" "}
-          <code>start-training</code> Edge Function to create the run and dispatch a
-          hosted GPU worker. The worker reports metrics through the signed{" "}
-          <code>training-callback</code> function, so the live panel updates through
-          Realtime.
+          This dashboard is currently optimized for a no-extra-cost manual Colab
+          hand-off. Creating a training run writes the registry row, then the
+          <strong> Open in Colab</strong> button opens the notebook with the run id
+          already attached.
         </p>
         <p>
-          If hosted training is not configured yet, this dashboard creates the
-          <code>runs</code> row only. You must open the notebook, set a GPU runtime,
-          click <em>Runtime, Run all</em>, and paste the service-role key when Colab
-          asks for it. The key stays in that notebook session.
+          In Colab, choose a GPU runtime, click <em>Runtime, Run all</em>, and paste
+          the Supabase service-role key when the notebook asks for it. The key stays
+          inside that Colab session; the browser still only uses the anon key.
         </p>
         <p>
-          Dataset YAML uploads already land in R2. Image zip upload and automatic
-          dataset materialization are the next boundary to close for fully unattended
-          hosted runs.
+          The run remains in Live tracking as waiting until Colab starts writing
+          metrics. Once training begins, progress, logs, metrics, and the final
+          model version stream back through Supabase Realtime.
         </p>
       </Modal>
     )}
@@ -964,44 +1242,72 @@ function TrainWorkflow({
 }
 
 function ColabManualSteps({ runId }: { runId: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copyRunId() {
+    try {
+      await navigator.clipboard.writeText(runId);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
+  }
+
   return (
     <div className="manual-steps" aria-label="Manual Colab steps">
-      <div className="manual-steps-title">
-        <Notebook size={15} aria-hidden="true" />
-        <span>Manual Colab hand-off</span>
+      <header className="manual-steps-header">
+        <div className="manual-steps-title">
+          <Notebook size={15} aria-hidden="true" />
+          <span>Manual Colab hand-off</span>
+        </div>
+        <p>Create the run here, then let Colab do the GPU work. Keep this tab open so Realtime can show progress.</p>
+      </header>
+      <div className="manual-run-id">
+        <span>Run ID</span>
+        <code>{runId}</code>
+        <button
+          type="button"
+          className="icon-action-button manual-run-copy"
+          onClick={() => void copyRunId()}
+          aria-label="Copy run id"
+          title={copied ? "Copied" : "Copy run id"}
+        >
+          <Copy size={13} aria-hidden="true" />
+        </button>
       </div>
       <ol>
         <li>
-          <span>Click <strong>Open in Colab</strong> above. The notebook URL carries this run id:</span>
-          <code>run_id={runId}</code>
+          <strong>Open notebook</strong>
+          <span>Click <em>Open in Colab</em>. The notebook URL already includes this run id.</span>
         </li>
         <li>
-          In Colab, set <strong>Runtime &rarr; Change runtime type &rarr; GPU</strong> (T4 is fine for YOLO-n,
-          L4 or A100 if you need more throughput).
+          <strong>Select GPU</strong>
+          <span>In Colab, set <em>Runtime, Change runtime type, GPU</em>. T4 is enough for YOLO-n; L4 or A100 is faster.</span>
         </li>
         <li>
-          Click <strong>Runtime &rarr; Run all</strong> (or <code>Cmd/Ctrl + F9</code>). Colab does not auto-run on open.
+          <strong>Run all cells</strong>
+          <span>Click <em>Runtime, Run all</em> or press <code>Cmd/Ctrl + F9</code>. Colab does not auto-run on open.</span>
         </li>
         <li>
-          <strong>Cell 7</strong> prompts for your Supabase <em>service-role</em> key (not the anon key). Paste it once;
-          it lives only in this Colab session.
+          <strong>Paste service-role key</strong>
+          <span>Cell 7 asks for the Supabase service-role key. Paste it once; it stays inside that Colab session.</span>
         </li>
         <li>
-          <strong>Cell 10</strong> auto-fetches the dataset YAML from R2 and prints the resolved image path. If it
-          warns <em>train images not found</em>, the trainer can&apos;t see your image folders. Add a cell that mounts
-          Drive and unzips your dataset to the printed path before running cell 12, e.g.:
+          <strong>Confirm dataset path</strong>
+          <span>Cell 10 fetches the YAML from R2 and prints the resolved image path. If images are missing, mount Drive and unzip the dataset before the training cell.</span>
           <pre>{`from google.colab import drive\ndrive.mount('/content/drive')\n!unzip -q /content/drive/MyDrive/<your-dataset>.zip -d /content/advance-seeds-field-inspector-ml/data/processed/`}</pre>
         </li>
         <li>
-          <strong>Cell 12</strong> runs <code>scripts/train_for_run.py --run-id {runId.slice(0, 8)}…</code>. Real
-          training begins; per-epoch metrics stream back here via Realtime.
+          <strong>Start training</strong>
+          <span>Cell 12 runs <code>scripts/train_for_run.py --run-id {runId.slice(0, 8)}...</code>. Per-epoch metrics stream back here.</span>
         </li>
         <li>
-          When training finishes, the script exports tflite, uploads to R2, creates the candidate version, and marks
-          the run <em>succeeded</em>. Switch to <strong>Models</strong> to deploy it.
+          <strong>Review output</strong>
+          <span>On success, the script exports INT8 TF Lite and optimized Core ML, uploads both to R2, and creates the model version.</span>
         </li>
         <li>
-          Leave the Colab tab open while training is running — closing it terminates the runtime and your training.
+          <strong>Keep Colab open</strong>
+          <span>Closing the Colab tab terminates the runtime and stops training.</span>
         </li>
       </ol>
     </div>
@@ -1082,7 +1388,7 @@ function EmptyState({
   title,
   text,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
   text: string;
 }) {
@@ -1097,6 +1403,7 @@ function EmptyState({
 
 function ModelsWorkflow({
   channels,
+  deployments,
   versions,
   runs,
   selectedVersion,
@@ -1105,9 +1412,10 @@ function ModelsWorkflow({
   isAdmin,
 }: {
   channels: ReturnType<RegistryStore["getSnapshot"]>["channels"];
+  deployments: ReturnType<RegistryStore["getSnapshot"]>["deployments"];
   versions: RegistryVersion[];
   runs: RegistryRun[];
-  selectedVersion: RegistryVersion;
+  selectedVersion?: RegistryVersion;
   selectedVersionId: string;
   setSelectedVersionId: (id: string) => void;
   isAdmin: boolean;
@@ -1138,6 +1446,7 @@ function ModelsWorkflow({
               <option value="production">Production</option>
               <option value="candidate">Candidates</option>
               <option value="inactive">Inactive</option>
+              <option value="archived">Archived</option>
             </select>
           </label>
           <label>
@@ -1166,9 +1475,8 @@ function ModelsWorkflow({
               onClick={() => setSelectedVersionId(version.id)}
             >
               <strong>{version.semver}</strong>
-              <span>{version.dataset}</span>
               <small>
-                {pct(version.map50)} mAP50 / {pct(version.maskMap)} mask · {formatCount(resolveDatasetStats(version.dataset, version.datasetStats)?.total)} images
+                {pct(version.map50)} mAP50 / {pct(version.maskMap)} mask · {version.sizeMb.toFixed(1)} MB
               </small>
               <span className={`status-pill ${version.state}`}>{version.state}</span>
             </button>
@@ -1177,7 +1485,15 @@ function ModelsWorkflow({
       </section>
       <section className="panel detail-panel">
         <SectionHeading title="Model detail" text="Metrics, classes, config, artifact, and deployment state." />
-        <ModelDetail version={selectedVersion} channels={channels} runs={runs} isAdmin={isAdmin} />
+        {selectedVersion ? (
+          <ModelDetail version={selectedVersion} channels={channels} deployments={deployments} runs={runs} isAdmin={isAdmin} />
+        ) : (
+          <EmptyState
+            icon={<Database size={24} />}
+            title="No model selected"
+            text="Create or import a model version before reviewing lifecycle detail."
+          />
+        )}
       </section>
     </section>
   );
@@ -1200,9 +1516,44 @@ function StorageWorkflow({
   storageOverQuota: boolean;
   isAdmin: boolean;
 }) {
+  const [pendingDelete, setPendingDelete] = useState<null | { storageId: string; semver: string; key: string }>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      await store.deleteInactiveArtifact(pendingDelete.storageId);
+      setPendingDelete(null);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
   return (
     <section className="panel">
       <SectionHeading title="R2 storage" text="Monitor artifact usage and delete inactive model records before storage exceeds quota." />
+      {pendingDelete && (
+        <Modal title="Delete model storage" onClose={() => (deleteBusy ? undefined : (setPendingDelete(null), setDeleteError(null)))}>
+          <p>
+            Delete the stored artifact for {pendingDelete.semver}. This permanently removes the model version and cannot be undone.
+          </p>
+          <p><code>{pendingDelete.key}</code></p>
+          {deleteError && <p className="form-error">{deleteError}</p>}
+          <div className="modal-actions">
+            <button type="button" className="ghost-button" onClick={() => setPendingDelete(null)} disabled={deleteBusy}>
+              Cancel
+            </button>
+            <button type="button" className="danger-button" onClick={() => void confirmDelete()} disabled={deleteBusy}>
+              {deleteBusy ? "Deleting…" : "Delete model"}
+            </button>
+          </div>
+        </Modal>
+      )}
       <div className={storageOverQuota ? "quota-banner danger" : "quota-banner"}>
         <div>
           <strong>{storageUsed.toFixed(1)} MB used</strong>
@@ -1228,7 +1579,10 @@ function StorageWorkflow({
                 className="danger-button compact"
                 disabled={item.active || !isAdmin}
                 type="button"
-                onClick={() => void store.deleteInactiveArtifact(item.id)}
+                onClick={() => {
+                  setDeleteError(null);
+                  setPendingDelete({ storageId: item.id, semver: version?.semver ?? item.versionId, key: item.key });
+                }}
                 title={!isAdmin ? "Admin role required" : item.active ? "Undeploy this model before deleting it" : "Delete this model record and its stored artifacts"}
               >
                 <Trash2 size={16} /> Delete model
@@ -1244,18 +1598,25 @@ function StorageWorkflow({
 function ModelDetail({
   version,
   channels,
+  deployments,
   runs,
   isAdmin,
 }: {
   version: RegistryVersion;
   channels: ReturnType<RegistryStore["getSnapshot"]>["channels"];
+  deployments: ReturnType<RegistryStore["getSnapshot"]>["deployments"];
   runs: RegistryRun[];
   isAdmin: boolean;
 }) {
   const run = runs.find((candidate) => candidate.id === version.runId);
-  const channelNames = channels.filter((channel) => channel.versionId === version.id).map((channel) => channel.name);
+  const deployedRows = deployments.filter((deployment) => deployment.versionId === version.id);
+  const channelNames = Array.from(new Set([
+    ...channels.filter((channel) => channel.versionId === version.id).map((channel) => channel.name),
+    ...deployedRows.map((deployment) => deployment.channel),
+  ]));
   const writeTitle = isAdmin ? "" : "Admin role required";
   const isActive = channelNames.length > 0;
+  const isArchived = version.state === "archived";
   const inProduction = channelNames.includes("production");
   const inStaging = channelNames.includes("staging");
   const [pending, setPending] = useState<null | {
@@ -1265,6 +1626,7 @@ function ModelDetail({
     danger?: boolean;
     run: () => Promise<void>;
   }>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState(version.semver);
@@ -1293,39 +1655,55 @@ function ModelDetail({
     }
   }
   function askDeploy(channel: ChannelName) {
-    if (!isAdmin) return;
+    if (!isAdmin || isArchived) return;
+    setActionError(null);
     setPending({
       title: `Deploy to ${channel}`,
-      message: `Promote ${version.semver} to ${channel}. Any model currently on ${channel} will be replaced.`,
+      message: `Deploy ${version.semver} to ${channel} and make it the default model for that channel. Other deployed models on ${channel} remain available for mobile selection.`,
       confirmLabel: `Deploy to ${channel}`,
-      run: () => store.deployVersion(version.id, channel),
+      run: () => store.deployVersion(version.id, channel, { setDefault: true }),
     });
   }
   function askUndeploy(channel: ChannelName) {
     if (!isAdmin) return;
+    setActionError(null);
     setPending({
       title: `Undeploy from ${channel}`,
-      message: `Remove ${version.semver} from the ${channel} channel. Inference traffic on ${channel} will fall back to whichever version is deployed next.`,
+      message: `Remove ${version.semver} from the ${channel} deployment set. Other deployed models on ${channel} remain available.`,
       confirmLabel: `Undeploy from ${channel}`,
       danger: true,
-      run: () => store.undeployChannel(channel),
+      run: () => store.undeployChannel(channel, version.id),
+    });
+  }
+  function askArchive() {
+    if (!isAdmin || isActive || isArchived) return;
+    setActionError(null);
+    setPending({
+      title: "Archive model",
+      message: `Archive ${version.semver}. This permanently deletes the stored Android and iOS artifacts, keeps the model metadata as history, and blocks future deployment.`,
+      confirmLabel: "Archive model",
+      danger: true,
+      run: () => store.archiveVersion(version.id),
     });
   }
   async function confirmPending() {
     if (!pending) return;
     setBusy(true);
+    setActionError(null);
     try {
       await pending.run();
+      setPending(null);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
-      setPending(null);
     }
   }
   return (
     <div className="detail-grid">
       <div className="detail-hero">
         <div>
-          <div className="detail-title-row">
+          <div className="detail-title-block">
             {editingName ? (
               <form
                 className="detail-rename-form"
@@ -1366,19 +1744,27 @@ function ModelDetail({
               </form>
             ) : (
               <>
-                <h2>{version.semver}</h2>
-                {isAdmin && (
-                  <button
-                    type="button"
-                    className="icon-action-button"
-                    aria-label="Rename version"
-                    title="Rename this version (used as the public model identifier)"
-                    onClick={() => setEditingName(true)}
-                  >
-                    <Pencil size={14} aria-hidden="true" />
-                  </button>
+                {isArchived && (
+                  <span className="archive-version-label">
+                    <Archive size={12} aria-hidden="true" />
+                    Archived history record
+                  </span>
                 )}
-                <Hint text="This is the selected model package: version tag, dataset lineage, artifact, metrics, and deployment state." />
+                <div className="detail-title-row">
+                  <h2>{version.semver}</h2>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      className="icon-action-button"
+                      aria-label="Rename version"
+                      title="Rename this version (used as the public model identifier)"
+                      onClick={() => setEditingName(true)}
+                    >
+                      <Pencil size={14} aria-hidden="true" />
+                    </button>
+                  )}
+                  <Hint text="This is the selected model package: version tag, dataset lineage, artifact, metrics, and deployment state." />
+                </div>
               </>
             )}
           </div>
@@ -1396,10 +1782,11 @@ function ModelDetail({
         </div>
       </div>
       {pending && (
-        <Modal title={pending.title} onClose={() => (busy ? undefined : setPending(null))}>
+        <Modal title={pending.title} onClose={() => (busy ? undefined : (setPending(null), setActionError(null)))}>
           <p>{pending.message}</p>
+          {actionError && <p className="form-error">{actionError}</p>}
           <div className="modal-actions">
-            <button type="button" className="ghost-button" onClick={() => setPending(null)} disabled={busy}>
+            <button type="button" className="ghost-button" onClick={() => (setPending(null), setActionError(null))} disabled={busy}>
               Cancel
             </button>
             <button
@@ -1418,9 +1805,11 @@ function ModelDetail({
         <div className="metrics-row">
           <MetricCard label="mAP50" value={pct(version.map50)} detail="box metric" />
           <MetricCard label="Mask mAP" value={pct(version.maskMap)} detail="segmentation metric" />
-          <MetricCard label="Artifact" value={`${version.sizeMb.toFixed(1)} MB`} detail={version.contentHash} />
+          <MetricCard label="Artifact" value={`${version.sizeMb.toFixed(1)} MB`} detail={version.contentHash} truncateDetail />
         </div>
       </div>
+      <PlatformReadiness version={version} />
+      <DeploymentSection version={version} deployments={deployedRows} />
       <DescriptionSection version={version} isAdmin={isAdmin} />
       <InfoSection
         dataset={version.dataset}
@@ -1436,23 +1825,23 @@ function ModelDetail({
         <RunNote note={run?.config.note} />
       </div>
       <div className="detail-actions-bar" aria-label="Lifecycle actions">
-        {!inProduction && (
+        {!isArchived && !inProduction && (
           <button
             className="primary-button compact"
             type="button"
-            disabled={!isAdmin}
-            title={isAdmin ? "Deploy this model to production" : writeTitle}
+            disabled={!isAdmin || isArchived}
+            title={!isAdmin ? writeTitle : isArchived ? "Archived models cannot be deployed" : "Deploy this model to production"}
             onClick={() => askDeploy("production")}
           >
             <Rocket size={14} aria-hidden="true" /> Deploy to Prod
           </button>
         )}
-        {!inStaging && (
+        {!isArchived && !inStaging && (
           <button
             className="ghost-button compact"
             type="button"
-            disabled={!isAdmin}
-            title={isAdmin ? "Deploy this model to staging" : writeTitle}
+            disabled={!isAdmin || isArchived}
+            title={!isAdmin ? writeTitle : isArchived ? "Archived models cannot be deployed" : "Deploy this model to staging"}
             onClick={() => askDeploy("staging")}
           >
             <Upload size={14} aria-hidden="true" /> Deploy to Staging
@@ -1470,7 +1859,204 @@ function ModelDetail({
             <LogOut size={14} aria-hidden="true" /> Undeploy {name}
           </button>
         ))}
+        {!isArchived && (
+          <button
+            className="danger-button compact"
+            type="button"
+            disabled={!isAdmin || isActive}
+            title={!isAdmin ? writeTitle : isActive ? "Undeploy this model before archiving it" : "Archive this model, delete stored artifacts, and keep a history record"}
+            onClick={askArchive}
+          >
+            <Archive size={14} aria-hidden="true" /> Archive model
+          </button>
+        )}
       </div>
+    </div>
+  );
+}
+
+function PlatformReadiness({ version }: { version: RegistryVersion }) {
+  const isArchived = version.state === "archived";
+  return (
+    <div>
+      <SectionMiniHeading title="Platform readiness" hint="Native runtime artifacts packaged with this logical model version." />
+      <div className="platform-grid">
+        <article className={isArchived ? "platform-card missing" : "platform-card ready"}>
+          <strong>Android TF Lite</strong>
+          <span>{isArchived ? "Archived" : `Ready · ${(version.tflitePrecision ?? "int8").toUpperCase()}`}</span>
+          <code title={version.tfliteR2Key}>{isArchived ? "Artifact deleted" : version.tfliteR2Key}</code>
+        </article>
+        <article className={!isArchived && version.coremlR2Key ? "platform-card ready" : "platform-card missing"}>
+          <strong>iOS Core ML</strong>
+          <span>{isArchived ? "Archived" : version.coremlR2Key ? `Ready · ${(version.coremlPrecision ?? "fp16").toUpperCase()}` : "Missing"}</span>
+          <code title={isArchived ? "Stored Core ML artifact was deleted during archive." : version.coremlR2Key ?? "Core ML export has not been uploaded for this version."}>
+            {isArchived ? "Artifact deleted" : version.coremlR2Key ?? "Core ML artifact missing"}
+          </code>
+        </article>
+      </div>
+    </div>
+  );
+}
+
+function DeploymentSection({
+  version,
+  deployments,
+}: {
+  version: RegistryVersion;
+  deployments: ReturnType<RegistryStore["getSnapshot"]>["deployments"];
+}) {
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const deployedChannels = Array.from(new Set(deployments.map((deployment) => deployment.channel)));
+  const defaultChannels = Array.from(new Set(deployments.filter((deployment) => deployment.isDefault).map((deployment) => deployment.channel)));
+  const canServeIos = Boolean(version.coremlR2Key);
+
+  async function copyValue(key: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedKey(key);
+      window.setTimeout(() => setCopiedKey((current) => current === key ? null : current), 1400);
+    } catch {
+      setCopiedKey(null);
+    }
+  }
+
+  return (
+    <div className="deployment-section">
+      <SectionMiniHeading title="Deployment" hint="Mobile-facing channels and endpoint contracts for consuming this model from native Android and iOS apps." />
+      {deployments.length === 0 ? (
+        <p className="description-empty">Not deployed to staging or production. Mobile apps cannot list or resolve this model until it is deployed.</p>
+      ) : (
+        <div className="mobile-integration-panel">
+          <div className="mobile-integration-summary">
+            <div>
+              <strong>Mobile consumption</strong>
+              <span>Use list/select for model pickers, or resolve-channel for a default-model update check.</span>
+            </div>
+            <div className="mobile-contract-chips" aria-label="Mobile artifact readiness">
+              <span className="status-pill succeeded"><Smartphone size={12} aria-hidden="true" /> Android ready</span>
+              <span className={canServeIos ? "status-pill succeeded" : "status-pill failed"}>
+                <Apple size={12} aria-hidden="true" /> {canServeIos ? "iOS ready" : "iOS missing"}
+              </span>
+            </div>
+          </div>
+          <div className="mobile-contract-grid">
+            <article className="mobile-contract-card">
+              <strong>List selectable models</strong>
+              <span>Returns all active deployments for a channel, default flags, signed artifact URLs, hashes, size, compat signature, and metadata.</span>
+              {deployedChannels.map((channel) => (
+                <div className="endpoint-group" key={`list-${channel}`}>
+                  <span className={`status-pill ${channel}`}>{channel}</span>
+                  <EndpointRow
+                    icon={<Smartphone size={13} aria-hidden="true" />}
+                    label="Android"
+                    value={listModelsEndpoint(channel, "android")}
+                    copied={copiedKey === `list-${channel}-android`}
+                    onCopy={() => void copyValue(`list-${channel}-android`, listModelsEndpoint(channel, "android"))}
+                  />
+                  <EndpointRow
+                    icon={<Apple size={13} aria-hidden="true" />}
+                    label="iOS"
+                    value={listModelsEndpoint(channel, "ios")}
+                    copied={copiedKey === `list-${channel}-ios`}
+                    onCopy={() => void copyValue(`list-${channel}-ios`, listModelsEndpoint(channel, "ios"))}
+                  />
+                </div>
+              ))}
+            </article>
+            <article className="mobile-contract-card">
+              <strong>Resolve default model</strong>
+              <span>Use at app startup or sync time. It returns update, noop, rebuild_required, or artifact_missing for the channel default.</span>
+              {defaultChannels.length === 0 ? (
+                <p className="description-empty">This version is selectable but not the channel default.</p>
+              ) : defaultChannels.map((channel) => (
+                <div className="endpoint-group" key={`resolve-${channel}`}>
+                  <span className={`status-pill ${channel}`}>{channel}</span>
+                  <EndpointRow
+                    icon={<Smartphone size={13} aria-hidden="true" />}
+                    label="Android"
+                    value={resolveChannelEndpoint(channel, "android")}
+                    copied={copiedKey === `resolve-${channel}-android`}
+                    onCopy={() => void copyValue(`resolve-${channel}-android`, resolveChannelEndpoint(channel, "android"))}
+                  />
+                  <EndpointRow
+                    icon={<Apple size={13} aria-hidden="true" />}
+                    label="iOS"
+                    value={resolveChannelEndpoint(channel, "ios")}
+                    copied={copiedKey === `resolve-${channel}-ios`}
+                    onCopy={() => void copyValue(`resolve-${channel}-ios`, resolveChannelEndpoint(channel, "ios"))}
+                  />
+                </div>
+              ))}
+            </article>
+          </div>
+          <div className="mobile-contract-note">
+            <strong>Response keys to wire into the app</strong>
+            <code>version_id · semver · artifact_url/model_url · content_hash · size_bytes · compat_signature · metadata</code>
+          </div>
+        </div>
+      )}
+      {deployments.length > 0 && (
+        <div className="deployment-list-block">
+          <div className="deployment-list-heading">
+            <div>
+              <strong>Active deployments</strong>
+              <span>Where this version is available to mobile clients.</span>
+            </div>
+          </div>
+          <div className="deployment-list">
+            {deployments.map((deployment) => (
+              <article className="deployment-row" key={deployment.id}>
+                <div className="deployment-row-main">
+                  <span className={`status-pill ${deployment.channel}`}>{deployment.channel}</span>
+                  <div>
+                    <strong>{deployment.isDefault ? "Default model" : "Selectable model"}</strong>
+                    <span>{deployment.deployedAt ? `Deployed ${deployment.deployedAt}` : "Deployed recently"}</span>
+                  </div>
+                </div>
+                <div className="deployment-platforms">
+                  <span className="status-pill succeeded">Android TF Lite</span>
+                  <span className={canServeIos ? "status-pill succeeded" : "status-pill failed"}>
+                    {canServeIos ? "iOS Core ML" : "iOS missing"}
+                  </span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+      {deployments.length > 0 && !version.coremlR2Key && (
+        <p className="form-error">iOS consumers will see this deployment as artifact_missing until Core ML export succeeds.</p>
+      )}
+    </div>
+  );
+}
+
+function EndpointRow({
+  icon,
+  label,
+  value,
+  copied,
+  onCopy,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="endpoint-row">
+      <span className="endpoint-label">{icon}{label}</span>
+      <code title={value}>{value}</code>
+      <button
+        type="button"
+        className={copied ? "icon-action-button endpoint-copy copied" : "icon-action-button endpoint-copy"}
+        onClick={onCopy}
+        aria-label={`Copy ${label} endpoint`}
+        title={copied ? "Copied" : "Copy endpoint"}
+      >
+        <Copy size={13} aria-hidden="true" />
+      </button>
     </div>
   );
 }
@@ -1480,11 +2066,15 @@ function RunList({
   onSelect,
   selectedId,
   onDelete,
+  versionByRunId,
+  onOpenModelVersion,
 }: {
   runs: RegistryRun[];
   onSelect?: (runId: string) => void;
   selectedId?: string | null;
   onDelete?: (run: RegistryRun) => void;
+  versionByRunId?: Map<string, RegistryVersion>;
+  onOpenModelVersion?: (versionId: string) => void;
 }) {
   return (
     <div className="run-list">
@@ -1495,6 +2085,8 @@ function RunList({
           onClick={onSelect ? () => onSelect(run.id) : undefined}
           selected={selectedId === run.id}
           onDelete={onDelete}
+          modelVersion={versionByRunId?.get(run.id)}
+          onOpenModelVersion={onOpenModelVersion}
         />
       ))}
     </div>
@@ -1694,15 +2286,21 @@ function RunRow({
   onClick,
   selected = false,
   onDelete,
+  modelVersion,
+  onOpenModelVersion,
 }: {
   run: RegistryRun;
   onClick?: () => void;
   selected?: boolean;
   onDelete?: (run: RegistryRun) => void;
+  modelVersion?: RegistryVersion;
+  onOpenModelVersion?: (versionId: string) => void;
 }) {
   const cls = ["run-row", onClick ? "clickable" : "", selected ? "selected" : ""].filter(Boolean).join(" ");
   const status = displayRunStatus(run);
   const showDelete = status === "waiting" && Boolean(onDelete);
+  const showModelShortcut = status === "succeeded" && Boolean(modelVersion && onOpenModelVersion);
+  const showActions = showDelete || showModelShortcut;
   const inner = (
     <>
       <div className={`status-dot ${status}`} aria-hidden="true" />
@@ -1720,23 +2318,41 @@ function RunRow({
   );
   if (onClick) {
     return (
-      <div className="run-row-wrapper">
+      <div className={showActions ? "run-row-wrapper has-actions" : "run-row-wrapper"}>
         <button type="button" className={cls} onClick={onClick} aria-pressed={selected}>
           {inner}
         </button>
-        {showDelete && (
-          <button
-            type="button"
-            className="icon-action-button danger run-row-delete"
-            aria-label={`Delete waiting run ${run.name}`}
-            title="Delete this waiting run"
-            onClick={(event) => {
-              event.stopPropagation();
-              onDelete?.(run);
-            }}
-          >
-            <Trash2 size={14} aria-hidden="true" />
-          </button>
+        {showActions && (
+          <div className="run-row-actions">
+            {showModelShortcut && modelVersion && (
+              <button
+                type="button"
+                className="icon-action-button primary run-row-model-shortcut"
+                aria-label={`Open trained model ${modelVersion.semver}`}
+                title={`Open trained model ${modelVersion.semver}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenModelVersion?.(modelVersion.id);
+                }}
+              >
+                <ArrowUpRight size={14} aria-hidden="true" />
+              </button>
+            )}
+            {showDelete && (
+              <button
+                type="button"
+                className="icon-action-button danger run-row-delete"
+                aria-label={`Delete waiting run ${run.name}`}
+                title="Delete this waiting run"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDelete?.(run);
+                }}
+              >
+                <Trash2 size={14} aria-hidden="true" />
+              </button>
+            )}
+          </div>
         )}
       </div>
     );
@@ -1744,12 +2360,24 @@ function RunRow({
   return <article className={cls}>{inner}</article>;
 }
 
-function MetricCard({ label, value, detail, danger = false }: { label: string; value: string; detail: string; danger?: boolean }) {
+function MetricCard({
+  label,
+  value,
+  detail,
+  danger = false,
+  truncateDetail = false,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  danger?: boolean;
+  truncateDetail?: boolean;
+}) {
   return (
     <article className={danger ? "metric-card danger" : "metric-card"}>
       <span>{label}</span>
       <strong>{value}</strong>
-      <small>{detail}</small>
+      <small className={truncateDetail ? "truncate" : undefined} title={truncateDetail ? detail : undefined}>{detail}</small>
     </article>
   );
 }
@@ -1839,7 +2467,7 @@ function sectionTitle(section: Section) {
 function sectionDescription(section: Section) {
   return {
     overview: "Operate the demo registry from login to deployment.",
-    train: "Define classes, tune hyperparameters, and hand the run to Colab MCP.",
+    train: "Define classes, tune hyperparameters, and hand the run to manual Colab.",
     models: "Inspect config and deploy or undeploy trained model versions.",
     storage: "Track R2 quota and delete inactive artifacts safely.",
   }[section];
