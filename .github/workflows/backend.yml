@@ -39,16 +39,20 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
           supabase status -o env > supabase/.env.ci
+          set -a; source supabase/.env.ci; set +a
           {
-            echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID"
-            echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID"
-            echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY"
-            echo "R2_BUCKET=$R2_BUCKET"
+            echo "SUPABASE_URL=$API_URL"
+            echo "SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+            echo "R2_ACCOUNT_ID=${R2_ACCOUNT_ID:-test-account}"
+            echo "R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID:-test-access-key}"
+            echo "R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY:-test-secret-key}"
+            echo "R2_BUCKET=${R2_BUCKET:-advance-seeds-test}"
           } >> supabase/.env.ci
 
           psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
             -f supabase/fixtures/seed_run_v1.sql
-          supabase functions serve --env-file supabase/.env.ci &
+          supabase functions serve --no-verify-jwt --env-file supabase/.env.ci &
           SERVE_PID=$!
           sleep 5
           set -a; source supabase/.env.ci; set +a

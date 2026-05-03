@@ -39,5 +39,6 @@ Deno.test("POST /delete is rejected for anon", async () => {
 
 Deno.test("POST /delete returns 404 for unknown version (service role)", async () => {
   const r = await post("/delete", { version_id: "00000000-0000-0000-0000-000000000000" }, SERVICE);
+  await r.body?.cancel();
   assertEquals(r.status, 404);
 });
