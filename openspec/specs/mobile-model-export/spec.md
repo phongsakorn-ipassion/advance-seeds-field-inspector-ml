@@ -4,9 +4,7 @@
 
 Export model artifacts and metadata in a stable contract consumed by the Advance
 Seeds Field Inspector demo app.
-
 ## Requirements
-
 ### Requirement: Stable TFLite app filename
 The exported Android/cross-platform model SHALL be copied to the app as
 `yolo11n-seeds.tflite` until the consuming app runtime changes its asset path.
@@ -18,8 +16,9 @@ The exported Android/cross-platform model SHALL be copied to the app as
 
 ### Requirement: App-facing metadata
 Every mobile export SHALL include `model-metadata.json` with model name, version,
-source weights, mobile TFLite filename, task, input size, class names, output
-kind, output shape, thresholds, calibration contract, and acceptance targets.
+source weights, mobile TFLite filename, task, input size, canonical PoC
+object/spot class names, output kind, output shape, thresholds, calibration
+contract, and acceptance targets.
 
 #### Scenario: Metadata generation includes calibration contract
 - **WHEN** `scripts/write_model_metadata.py` writes metadata
@@ -90,3 +89,4 @@ browsing, downloading, validation, activation, fallback, and rollback.
 - **THEN** Android TensorFlow Lite loading requirements are described
 - **AND** iOS Core ML package or compiled model loading requirements are described
 - **AND** SHA-256 validation and smoke inference are required before activation
+
