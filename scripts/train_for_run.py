@@ -225,7 +225,7 @@ def main(argv: list[str] | None = None) -> int:
         client.finalize_run(args.run_id, "failed")
         raise
 
-    append_log("Training finished — exporting tflite and uploading artifact")
+    append_log("Training finished — exporting TF Lite and Core ML artifacts")
 
     save_dir = Path(getattr(results, "save_dir", config.get("project", "runs")))
     best = save_dir / "weights" / "best.pt"
@@ -234,19 +234,40 @@ def main(argv: list[str] | None = None) -> int:
         best = save_dir / "weights" / "last.pt"
 
     semver = f"1.0.0-{args.run_id[:8]}"
-    artifact_path = best
+    tflite_path: Path
     try:
         export_path = model.export(format="tflite")
         export_path = export_path[0] if isinstance(export_path, (list, tuple)) else export_path
-        artifact_path = Path(export_path) if export_path else best
+        tflite_path = Path(export_path) if export_path else best
     except Exception as exc:
-        print(f"[export] tflite export failed, uploading .pt instead: {exc}", file=sys.stderr)
+        append_log(f"TF Lite export failed: {exc}")
+        client.finalize_run(args.run_id, "failed")
+        raise
 
-    artifact = client.upload_artifact(
-        artifact_path,
-        kind="tflite" if artifact_path.suffix == ".tflite" else "tflite",
+    coreml_path: Path | None = None
+    try:
+        export_path = model.export(format="coreml")
+        export_path = export_path[0] if isinstance(export_path, (list, tuple)) else export_path
+        coreml_path = Path(export_path) if export_path else None
+        if not coreml_path or not coreml_path.exists():
+            raise FileNotFoundError("Core ML export returned no artifact")
+    except Exception as exc:
+        append_log(f"Core ML export failed: {exc}")
+        client.finalize_run(args.run_id, "failed")
+        raise
+
+    tflite_artifact = client.upload_artifact(
+        tflite_path,
+        kind="tflite",
         run_id=args.run_id,
         semver=semver,
+    )
+    coreml_artifact = client.upload_artifact(
+        coreml_path,
+        kind="coreml",
+        run_id=args.run_id,
+        semver=semver,
+        content_type="application/zip" if coreml_path.is_dir() else None,
     )
 
     metrics_dict = getattr(results, "results_dict", {}) or {}
@@ -263,11 +284,25 @@ def main(argv: list[str] | None = None) -> int:
                 "map50": float(metrics_dict.get("metrics/mAP50(B)", 0.0)),
                 "mask_map": float(metrics_dict.get("metrics/mAP50-95(M)", 0.0)),
             },
+            "artifacts": {
+                "tflite": {
+                    "r2_key": tflite_artifact.r2_key,
+                    "size_bytes": tflite_artifact.size_bytes,
+                    "content_hash": tflite_artifact.content_hash,
+                },
+                "coreml": {
+                    "r2_key": coreml_artifact.r2_key,
+                    "size_bytes": coreml_artifact.size_bytes,
+                    "content_hash": coreml_artifact.content_hash,
+                    "packaging": "mlpackage.zip",
+                },
+            },
             "host": platform.node() or "colab",
         },
-        tflite_r2_key=artifact.r2_key,
-        size_bytes=artifact.size_bytes,
-        content_hash=artifact.content_hash,
+        tflite_r2_key=tflite_artifact.r2_key,
+        mlmodel_r2_key=coreml_artifact.r2_key,
+        size_bytes=tflite_artifact.size_bytes,
+        content_hash=tflite_artifact.content_hash,
     )
 
     client.finalize_run(args.run_id, "succeeded")

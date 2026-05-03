@@ -2,34 +2,41 @@ import { corsHeaders } from "../_shared/cors.ts";
 import { presignPut } from "../_shared/r2.ts";
 
 interface Body {
-  kind: "tflite" | "mlmodel";
+  kind: "tflite" | "mlmodel" | "coreml";
   run_id: string;
   semver: string;
+  content_type?: string;
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
+  try {
+    if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+    if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
 
-  const role = roleFromJwt(req.headers.get("authorization") ?? "");
-  if (role !== "service_role" && role !== "admin") {
-    return json({ error: "unauthorized" }, 401);
-  }
+    const role = roleFromJwt(req.headers.get("authorization") ?? "");
+    if (role !== "service_role" && role !== "admin") {
+      return json({ error: "unauthorized" }, 401);
+    }
 
-  let body: Body;
-  try { body = await req.json(); } catch { return json({ error: "invalid json" }, 400); }
-  if (!body.kind || !body.run_id || !body.semver) {
-    return json({ error: "kind, run_id, semver required" }, 400);
-  }
-  const SAFE_SEGMENT = /^[A-Za-z0-9._-]+$/;
-  if (!SAFE_SEGMENT.test(body.run_id) || !SAFE_SEGMENT.test(body.semver)) {
-    return json({ error: "invalid run_id or semver" }, 400);
-  }
+    let body: Body;
+    try { body = await req.json(); } catch { return json({ error: "invalid json" }, 400); }
+    if (!body.kind || !body.run_id || !body.semver) {
+      return json({ error: "kind, run_id, semver required" }, 400);
+    }
+    const SAFE_SEGMENT = /^[A-Za-z0-9._-]+$/;
+    if (!SAFE_SEGMENT.test(body.run_id) || !SAFE_SEGMENT.test(body.semver)) {
+      return json({ error: "invalid run_id or semver" }, 400);
+    }
 
-  const ext = body.kind === "tflite" ? "tflite" : "mlmodel";
-  const r2Key = `runs/${body.run_id}/${body.semver}.${ext}`;
-  const uploadUrl = await presignPut(r2Key);
-  return json({ upload_url: uploadUrl, r2_key: r2Key });
+    const ext = body.kind === "tflite" ? "tflite" : "mlpackage.zip";
+    const r2Key = `runs/${body.run_id}/${body.semver}.${ext}`;
+    const uploadUrl = await presignPut(r2Key, body.content_type ?? "application/octet-stream");
+    return json({ upload_url: uploadUrl, r2_key: r2Key });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("upload-artifact failed:", message);
+    return json({ error: message }, 500);
+  }
 });
 
 function json(b: unknown, status = 200): Response {

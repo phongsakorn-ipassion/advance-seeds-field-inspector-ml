@@ -4,6 +4,8 @@ import hashlib
 import json
 import mimetypes
 import os
+import shutil
+import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -103,6 +105,11 @@ class RegistryClient:
         content_type: str | None = None,
     ) -> UploadedArtifact:
         artifact_path = Path(path)
+        cleanup: tempfile.TemporaryDirectory[str] | None = None
+        if artifact_path.is_dir():
+            cleanup = tempfile.TemporaryDirectory(prefix="advance-seeds-artifact-")
+            archive_base = Path(cleanup.name) / artifact_path.name
+            artifact_path = Path(shutil.make_archive(str(archive_base), "zip", artifact_path))
         data = artifact_path.read_bytes()
         resolved_content_type = content_type or mimetypes.guess_type(artifact_path.name)[0] or "application/octet-stream"
         sign_response = self._json(
@@ -129,11 +136,14 @@ class RegistryClient:
             data,
             absolute_url=True,
         )
-        return UploadedArtifact(
+        uploaded = UploadedArtifact(
             r2_key=r2_key,
             size_bytes=len(data),
             content_hash=f"sha256:{hashlib.sha256(data).hexdigest()}",
         )
+        if cleanup is not None:
+            cleanup.cleanup()
+        return uploaded
 
     def create_version(
         self,
