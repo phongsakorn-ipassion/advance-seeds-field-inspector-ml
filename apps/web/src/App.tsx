@@ -139,6 +139,12 @@ function displayRunStatus(run: RegistryRun): DisplayStatus {
   return run.status;
 }
 
+function displayColabNotebook(run: RegistryRun): string {
+  const notebook = run.colabNotebook.trim();
+  if (!notebook) return "";
+  return run.status === "running" ? notebook : notebook.replace(/\s+\(pending\)$/i, "");
+}
+
 function compareVersions(a: RegistryVersion, b: RegistryVersion, sort: VersionSort): number {
   if (sort === "performance") {
     return ((b.map50 + b.maskMap) / 2) - ((a.map50 + a.maskMap) / 2);
@@ -158,7 +164,7 @@ function expertLogLines(run: RegistryRun): string[] {
     `[training] epochs=${run.config.hyperParameters.epochs} imgsz=${run.config.hyperParameters.imgsz} batch=${run.config.hyperParameters.batch} patience=${run.config.hyperParameters.patience}`,
     `[augmentation] mosaic=${run.config.hyperParameters.mosaic} mixup=${run.config.hyperParameters.mixup} copyPaste=${run.config.hyperParameters.copyPaste}`,
     `[metrics] mAP50=${map50} mask_mAP=${maskMap} source_weights=${run.config.sourceWeights || "pending"}`,
-    `[timing] started_at="${run.startedAt || "pending"}" finished_at="${run.finishedAt ?? "running"}" notebook="${run.colabNotebook || "pending"}"`,
+    `[timing] started_at="${run.startedAt || "pending"}" finished_at="${run.finishedAt ?? "running"}" notebook="${displayColabNotebook(run) || "pending"}"`,
     ...run.logs.map((line, index) => `[log ${String(index + 1).padStart(2, "0")}] ${line}`),
   ];
 }
@@ -992,6 +998,14 @@ function TrainWorkflow({
   const [pendingDelete, setPendingDelete] = useState<RegistryRun | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!focusedRunId) return;
+    if (!focused || (tab === "live" && focused.status !== "running")) {
+      setFocusedRunId(null);
+    }
+  }, [focused, focusedRunId, setFocusedRunId, tab]);
+
   async function confirmDelete() {
     if (!pendingDelete) return;
     setDeleteBusy(true);
@@ -1014,7 +1028,7 @@ function TrainWorkflow({
           <div className="run-detail-header">
             <SectionHeading
               title={`Run · ${focused.name}`}
-              text={`${focused.id} · ${focused.hardware}${focused.colabNotebook ? ` · ${focused.colabNotebook}` : ""}`}
+              text={`${focused.id} · ${focused.hardware}${displayColabNotebook(focused) ? ` · ${displayColabNotebook(focused)}` : ""}`}
             />
             <div className="run-detail-actions">
               {showColabHandoff && (
@@ -1900,7 +1914,7 @@ function ModelDetail({
       />
       <div>
         <SectionMiniHeading title="Run" hint="Source training run and notebook reference used to produce this model version." />
-        <p className="info-run">{run ? `${run.name} · ${run.colabNotebook || "no notebook recorded"}` : "No linked run"}</p>
+        <p className="info-run">{run ? `${run.name} · ${displayColabNotebook(run) || "no notebook recorded"}` : "No linked run"}</p>
         <RunNote note={run?.config.note} />
       </div>
       <div className="detail-actions-bar" aria-label="Lifecycle actions">
