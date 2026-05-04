@@ -20,6 +20,8 @@ export type TrainConfig = {
   datasetBundle?: string;
   datasetBundleFilename?: string;
   datasetBundleSizeBytes?: number;
+  datasetBundleDeletedAt?: string;
+  datasetBundleDeletedKey?: string;
   datasetStats?: DatasetStats;
   sourceWeights: string;
   classes: string[];

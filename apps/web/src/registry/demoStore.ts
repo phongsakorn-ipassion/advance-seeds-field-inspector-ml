@@ -39,6 +39,8 @@ export const defaultConfig: TrainConfig = {
   datasetBundle: "",
   datasetBundleFilename: "",
   datasetBundleSizeBytes: undefined,
+  datasetBundleDeletedAt: undefined,
+  datasetBundleDeletedKey: undefined,
   datasetStats: undefined,
   sourceWeights: "yolo26n-seg.pt",
   classes: [],

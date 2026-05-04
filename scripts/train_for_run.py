@@ -17,6 +17,7 @@ import platform
 import sys
 import urllib.request
 import zipfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -218,6 +219,35 @@ def _dataset_bundle_extract_target(
     return dataset_root
 
 
+def cleanup_dataset_bundle(client: RegistryClient, run_id: str, append_log) -> None:
+    """Delete the temporary dataset ZIP after the run reaches a terminal state."""
+    try:
+        rows = client._json("GET", f"/rest/v1/runs?id=eq.{run_id}&select=config_yaml", None)
+        if not rows:
+            return
+        cfg = rows[0].get("config_yaml") or {}
+        bundle_ref = str(cfg.get("dataset_bundle") or "")
+        if not bundle_ref:
+            return
+        if cfg.get("dataset_bundle_deleted_at"):
+            return
+        if not bundle_ref.startswith("datasets/"):
+            append_log(f"Dataset bundle cleanup skipped for non-R2 key: {bundle_ref}")
+            return
+        client.delete_dataset_bundle(bundle_ref)
+        cfg["dataset_bundle_deleted_at"] = datetime.now(UTC).isoformat()
+        cfg["dataset_bundle_deleted_key"] = bundle_ref
+        cfg["dataset_bundle"] = None
+        client._json("PATCH", f"/rest/v1/runs?id=eq.{run_id}", {"config_yaml": cfg})
+        append_log(f"Deleted temporary dataset bundle from R2: {bundle_ref}")
+    except Exception as exc:
+        print(f"[dataset_bundle] cleanup failed: {exc}", file=sys.stderr)
+        try:
+            append_log(f"Dataset bundle cleanup failed: {exc}")
+        except Exception:
+            pass
+
+
 def write_dataset_stats(client: RegistryClient, run_id: str, run_row: dict, config: dict) -> None:
     """Walk the resolved train/val/test image dirs from the materialized YAML
     and PATCH runs.config_yaml.dataset_stats with real counts. The dashboard's
@@ -347,6 +377,10 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             print(f"[logs] append_log failed: {exc}", file=sys.stderr)
 
+    def finalize_run(status: str) -> None:
+        cleanup_dataset_bundle(client, args.run_id, append_log)
+        client.finalize_run(args.run_id, status)
+
     def on_fit_epoch_end(trainer):  # type: ignore[no-untyped-def]
         epoch = int(getattr(trainer, "epoch", 0)) + 1
         rows = []
@@ -380,7 +414,7 @@ def main(argv: list[str] | None = None) -> int:
         results = model.train(**train_kwargs(config))
     except Exception as exc:
         append_log(f"Training failed: {exc}")
-        client.finalize_run(args.run_id, "failed")
+        finalize_run("failed")
         raise
 
     append_log("Training finished — exporting quantized mobile artifacts")
@@ -405,7 +439,7 @@ def main(argv: list[str] | None = None) -> int:
         tflite_path = Path(export_path) if export_path else best
     except Exception as exc:
         append_log(f"TF Lite export failed: {exc}")
-        client.finalize_run(args.run_id, "failed")
+        finalize_run("failed")
         raise
 
     coreml_path: Path | None = None
@@ -423,7 +457,7 @@ def main(argv: list[str] | None = None) -> int:
             raise FileNotFoundError("Core ML export returned no artifact")
     except Exception as exc:
         append_log(f"Core ML export failed: {exc}")
-        client.finalize_run(args.run_id, "failed")
+        finalize_run("failed")
         raise
 
     tflite_artifact = client.upload_artifact(
@@ -477,7 +511,7 @@ def main(argv: list[str] | None = None) -> int:
         content_hash=tflite_artifact.content_hash,
     )
 
-    client.finalize_run(args.run_id, "succeeded")
+    finalize_run("succeeded")
     print("Run finalized — switch back to the dashboard.")
     return 0
 

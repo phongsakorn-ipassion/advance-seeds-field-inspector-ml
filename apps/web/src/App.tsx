@@ -435,7 +435,12 @@ function DatasetBundleField({
           {" · Colab will download and unzip it before training."}
         </p>
       )}
-      {!value && !error && (
+      {!value && filename && (
+        <p className="dataset-note">
+          Bundle <code>{filename}</code> was already cleaned up after training.
+        </p>
+      )}
+      {!value && !filename && !error && (
         <p className="dataset-note">Optional. Leave empty only if you will mount or unzip images manually in Colab.</p>
       )}
       {error && <p className="form-error">{error}</p>}

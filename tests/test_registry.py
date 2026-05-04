@@ -108,6 +108,18 @@ class RegistryClientTests(unittest.TestCase):
         self.assertEqual(body["status"], "succeeded")
         self.assertIn("finished_at", body)
 
+    def test_delete_dataset_bundle_calls_edge_function(self):
+        transport = RecordingTransport([{"deleted": "datasets/seeds/x/images.zip"}])
+        client = RegistryClient(RegistryConfig("http://registry.local", "service-key"), transport=transport)
+
+        client.delete_dataset_bundle("datasets/seeds/x/images.zip")
+
+        request = transport.requests[0]
+        self.assertEqual(request["method"], "POST")
+        self.assertEqual(request["url"], "http://registry.local/functions/v1/delete-dataset")
+        body = json.loads(request["body"].decode("utf-8"))
+        self.assertEqual(body, {"r2_key": "datasets/seeds/x/images.zip"})
+
     def test_upload_artifact_requests_signed_url_and_puts_file_bytes(self):
         transport = RecordingTransport(
             [

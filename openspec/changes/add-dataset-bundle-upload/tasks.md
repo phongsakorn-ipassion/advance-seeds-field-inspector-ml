@@ -12,6 +12,7 @@
 
 - [x] 3.1 Download and unzip dataset bundles in `scripts/train_for_run.py` before dataset path materialization.
 - [x] 3.2 Update the Colab notebook/manual hand-off copy to prefer dashboard-uploaded bundles and keep Drive unzip as fallback.
+- [x] 3.3 Delete uploaded dataset ZIP bundles from R2 when training reaches a terminal status.
 
 ## 4. Validation
 

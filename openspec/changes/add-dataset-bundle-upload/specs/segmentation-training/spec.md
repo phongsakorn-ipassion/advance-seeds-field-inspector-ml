@@ -12,3 +12,11 @@ The Colab training flow SHALL automatically download and extract an attached dat
 #### Scenario: Run has no dataset bundle
 - **WHEN** no dataset bundle key exists on the run
 - **THEN** the notebook SHALL continue to present the manual Drive unzip fallback
+
+#### Scenario: Training reaches terminal status with uploaded bundle
+- **WHEN** a run with `runs.config_yaml.dataset_bundle` reaches `succeeded` or
+  `failed`
+- **THEN** the trainer SHALL delete the temporary dataset ZIP from R2 through a
+  service-role Edge Function
+- **AND** the run config SHALL record the deleted bundle key and deletion time
+  so operators can audit the cleanup

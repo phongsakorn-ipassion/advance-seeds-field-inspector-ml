@@ -131,6 +131,8 @@ function configFromRun(run: DbRun): TrainConfig {
     datasetBundle: cfg.dataset_bundle ?? cfg.datasetBundle,
     datasetBundleFilename: cfg.dataset_bundle_filename ?? cfg.datasetBundleFilename,
     datasetBundleSizeBytes: numberOrUndefined(cfg.dataset_bundle_size_bytes ?? cfg.datasetBundleSizeBytes),
+    datasetBundleDeletedAt: cfg.dataset_bundle_deleted_at ?? cfg.datasetBundleDeletedAt,
+    datasetBundleDeletedKey: cfg.dataset_bundle_deleted_key ?? cfg.datasetBundleDeletedKey,
     datasetStats: datasetStatsFrom(cfg),
     sourceWeights: cfg.source_weights ?? cfg.sourceWeights ?? "",
     classes: cfg.classes ?? cfg.class_names ?? [],

@@ -95,6 +95,9 @@ class RegistryClient:
             },
         )
 
+    def delete_dataset_bundle(self, r2_key: str) -> None:
+        self._json("POST", "/functions/v1/delete-dataset", {"r2_key": r2_key})
+
     def upload_artifact(
         self,
         path: str | Path,
