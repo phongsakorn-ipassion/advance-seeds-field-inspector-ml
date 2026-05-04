@@ -24,3 +24,8 @@ The repository SHALL provide Postman-ready instructions for the mobile-facing re
 - **WHEN** a developer imports the Postman collection
 - **THEN** they can call list selectable models and resolve default model using collection variables
 - **AND** the instructions SHALL identify response keys needed by the mobile app
+
+#### Scenario: Mobile developer reviews deployment handoff
+- **WHEN** a deployed model detail renders the Deployment section
+- **THEN** the section SHALL show Postman import, variable setup, and endpoint usage steps
+- **AND** it SHALL link to the Postman guide and collection source

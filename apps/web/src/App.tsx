@@ -50,6 +50,11 @@ type ActivityNotification = {
   toast?: boolean;
 };
 
+const MODEL_REGISTRY_POSTMAN_GUIDE_URL =
+  "https://github.com/phongsakorn-ipassion/advance-seeds-field-inspector-ml/blob/main/docs/model-registry-api-postman.md";
+const MODEL_REGISTRY_POSTMAN_COLLECTION_URL =
+  "https://github.com/phongsakorn-ipassion/advance-seeds-field-inspector-ml/blob/main/docs/model-registry-postman-collection.json";
+
 function Hint({ text }: { text: string }) {
   return (
     <span className="hint">
@@ -2269,6 +2274,36 @@ function DeploymentSection({
               </span>
             </div>
           </div>
+          <article className="postman-handoff-card">
+            <div className="postman-handoff-heading">
+              <div>
+                <strong>How to test with Postman</strong>
+                <span>Use the same mobile-facing services before wiring them into Android or iOS.</span>
+              </div>
+              <div className="postman-handoff-links">
+                <a href={MODEL_REGISTRY_POSTMAN_GUIDE_URL} target="_blank" rel="noreferrer">
+                  Guide <ExternalLink size={12} aria-hidden="true" />
+                </a>
+                <a href={MODEL_REGISTRY_POSTMAN_COLLECTION_URL} target="_blank" rel="noreferrer">
+                  Collection <ExternalLink size={12} aria-hidden="true" />
+                </a>
+              </div>
+            </div>
+            <ol className="postman-step-list">
+              <li>
+                <span>1</span>
+                <p>Import <code>docs/model-registry-postman-collection.json</code>.</p>
+              </li>
+              <li>
+                <span>2</span>
+                <p>Set <code>functions_base_url</code>, <code>model_line</code>, <code>channel</code>, and <code>platform</code>.</p>
+              </li>
+              <li>
+                <span>3</span>
+                <p>Run list/select for model pickers, or resolve default model for startup and sync.</p>
+              </li>
+            </ol>
+          </article>
           <div className="mobile-contract-grid">
             <article className="mobile-contract-card">
               <strong>List selectable models</strong>
