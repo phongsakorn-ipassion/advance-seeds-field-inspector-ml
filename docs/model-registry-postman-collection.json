@@ -6,6 +6,7 @@
   },
   "variable": [
     { "key": "functions_base_url", "value": "https://gqsxiohxokgwwugeoxmy.supabase.co/functions/v1" },
+    { "key": "supabase_anon_key", "value": "" },
     { "key": "model_line", "value": "seeds-poc" },
     { "key": "channel", "value": "staging" },
     { "key": "platform", "value": "android" },
@@ -17,7 +18,10 @@
       "name": "List selectable models",
       "request": {
         "method": "GET",
-        "header": [],
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{supabase_anon_key}}" },
+          { "key": "apikey", "value": "{{supabase_anon_key}}" }
+        ],
         "url": {
           "raw": "{{functions_base_url}}/list-deployed-models?model_line={{model_line}}&channel={{channel}}&platform={{platform}}&ready_only=true",
           "host": ["{{functions_base_url}}"],
@@ -36,7 +40,10 @@
       "name": "Resolve default model",
       "request": {
         "method": "GET",
-        "header": [],
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{supabase_anon_key}}" },
+          { "key": "apikey", "value": "{{supabase_anon_key}}" }
+        ],
         "url": {
           "raw": "{{functions_base_url}}/resolve-channel?model_line={{model_line}}&channel={{channel}}&platform={{platform}}&current_version={{current_version}}&current_compat={{current_compat}}",
           "host": ["{{functions_base_url}}"],

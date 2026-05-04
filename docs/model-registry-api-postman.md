@@ -7,11 +7,21 @@ Import `docs/model-registry-postman-collection.json` into Postman to test the mo
 Set these collection variables:
 
 - `functions_base_url`: `https://gqsxiohxokgwwugeoxmy.supabase.co/functions/v1`
+- `supabase_anon_key`: Supabase project anon public key
 - `model_line`: model line slug, currently `seeds-poc`
 - `channel`: `staging` or `production`
 - `platform`: `android` or `ios`
 - `current_version`: installed version id in the app, or blank for first install
 - `current_compat`: installed compatibility signature, or blank if not installed
+
+Get `supabase_anon_key` from Supabase Dashboard -> Project Settings -> API -> Project API keys -> `anon public`.
+
+Send these headers with each request:
+
+```http
+Authorization: Bearer {{supabase_anon_key}}
+apikey: {{supabase_anon_key}}
+```
 
 ## Requests
 
@@ -61,4 +71,4 @@ For `update`, wire these response keys into the mobile app:
 
 ## Auth
 
-These two endpoints are mobile-facing read endpoints. They do not require service-role credentials in the mobile app. The returned artifact URLs are short-lived signed R2 URLs.
+These two endpoints are mobile-facing read endpoints. Use the Supabase anon public key, not the service-role key. The returned artifact URLs are short-lived signed R2 URLs.
