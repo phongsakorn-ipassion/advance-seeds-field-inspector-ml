@@ -2257,15 +2257,15 @@ function DeploymentSection({
 
   return (
     <div className="deployment-section">
-      <SectionMiniHeading title="Deployment" hint="Mobile-facing channels and endpoint contracts for consuming this model from native Android and iOS apps." />
+      <SectionMiniHeading title="Deployment" hint="Mobile app handoff for this deployed model." />
       {deployments.length === 0 ? (
         <p className="description-empty">Not deployed to staging or production. Mobile apps cannot list or resolve this model until it is deployed.</p>
       ) : (
         <div className="mobile-integration-panel">
           <div className="mobile-integration-summary">
             <div>
-              <strong>Mobile consumption</strong>
-              <span>Use list/select for model pickers, or resolve-channel for a default-model update check.</span>
+              <strong>Mobile handoff</strong>
+              <span>Use the deployed channel from Android or iOS to fetch a signed model package.</span>
             </div>
             <div className="mobile-contract-chips" aria-label="Mobile artifact readiness">
               <span className="status-pill succeeded"><Smartphone size={12} aria-hidden="true" /> Android ready</span>
@@ -2277,8 +2277,8 @@ function DeploymentSection({
           <article className="postman-handoff-card">
             <div className="postman-handoff-heading">
               <div>
-                <strong>How to test with Postman</strong>
-                <span>Use the same mobile-facing services before wiring them into Android or iOS.</span>
+                <strong>Postman quick test</strong>
+                <span>Import the collection, set channel and platform, then run a picker or default-model request.</span>
               </div>
               <div className="postman-handoff-links">
                 <a href={MODEL_REGISTRY_POSTMAN_GUIDE_URL} target="_blank" rel="noreferrer">
@@ -2289,25 +2289,11 @@ function DeploymentSection({
                 </a>
               </div>
             </div>
-            <ol className="postman-step-list">
-              <li>
-                <span>1</span>
-                <p>Import <code>docs/model-registry-postman-collection.json</code>.</p>
-              </li>
-              <li>
-                <span>2</span>
-                <p>Set <code>functions_base_url</code>, <code>model_line</code>, <code>channel</code>, and <code>platform</code>.</p>
-              </li>
-              <li>
-                <span>3</span>
-                <p>Run list/select for model pickers, or resolve default model for startup and sync.</p>
-              </li>
-            </ol>
           </article>
           <div className="mobile-contract-grid">
             <article className="mobile-contract-card">
-              <strong>List selectable models</strong>
-              <span>Returns all active deployments for a channel, default flags, signed artifact URLs, hashes, size, compat signature, and metadata.</span>
+              <strong>Model picker</strong>
+              <span>List selectable models for a channel.</span>
               {deployedChannels.map((channel) => (
                 <div className="endpoint-group" key={`list-${channel}`}>
                   <span className={`status-pill ${channel}`}>{channel}</span>
@@ -2329,8 +2315,8 @@ function DeploymentSection({
               ))}
             </article>
             <article className="mobile-contract-card">
-              <strong>Resolve default model</strong>
-              <span>Use at app startup or sync time. It returns update, noop, rebuild_required, or artifact_missing for the channel default.</span>
+              <strong>Default model</strong>
+              <span>Resolve the channel default at startup or sync.</span>
               {defaultChannels.length === 0 ? (
                 <div className="deployment-default-note" role="status">
                   <span className="status-pill inactive">Selectable</span>
@@ -2358,9 +2344,9 @@ function DeploymentSection({
             </article>
           </div>
           <div className="mobile-contract-note">
-            <strong>Response keys to wire into the app</strong>
+            <strong>App fields</strong>
             <div className="response-key-grid" aria-label="Response keys">
-              {["version_id", "semver", "artifact_url / model_url", "content_hash", "size_bytes", "compat_signature", "metadata"].map((key) => (
+              {["version_id", "artifact_url / model_url", "content_hash", "compat_signature", "metadata"].map((key) => (
                 <code key={key}>{key}</code>
               ))}
             </div>

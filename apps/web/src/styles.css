@@ -779,50 +779,6 @@ button {
   border-color: var(--as-accent);
   background: var(--as-bg-secondary);
 }
-.postman-step-list {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--as-space-sm);
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.postman-step-list li {
-  display: grid;
-  grid-template-columns: 22px minmax(0, 1fr);
-  align-items: flex-start;
-  gap: var(--as-space-sm);
-  min-width: 0;
-  padding: var(--as-space-sm);
-  border: 1px solid var(--as-border-tertiary);
-  border-radius: var(--as-radius-md);
-  background: var(--as-bg-secondary);
-}
-.postman-step-list li > span {
-  display: inline-grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  background: var(--as-bg-primary);
-  color: var(--as-text-primary);
-  font-size: 11px;
-  font-weight: 700;
-}
-.postman-step-list p {
-  margin: 0;
-  min-width: 0;
-  color: var(--as-text-secondary);
-  font-size: 12px;
-  line-height: 1.45;
-}
-.postman-step-list code {
-  color: var(--as-text-primary);
-  font-family: var(--as-font-mono);
-  font-size: 11px;
-  overflow-wrap: anywhere;
-}
 .mobile-contract-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2619,7 +2575,6 @@ a.primary-button { text-decoration: none; }
   .mobile-contract-chips { justify-content: flex-start; }
   .postman-handoff-heading { flex-direction: column; }
   .postman-handoff-links { justify-content: flex-start; }
-  .postman-step-list { grid-template-columns: 1fr; }
   .mobile-contract-grid { grid-template-columns: 1fr; }
   .endpoint-row { grid-template-columns: 1fr; }
   .endpoint-copy { justify-self: start; }
