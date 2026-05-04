@@ -595,6 +595,9 @@ button {
   color: var(--as-text-primary);
   flex: 1;
 }
+.platform-card-title .hint {
+  margin-left: auto;
+}
 .platform-card-meta {
   justify-content: space-between;
   gap: var(--as-space-md);
@@ -804,12 +807,32 @@ button {
 }
 .mobile-contract-note {
   display: grid;
-  gap: 4px;
+  gap: var(--as-space-sm);
   min-width: 0;
   padding: var(--as-space-sm) var(--as-space-md);
   border: 1px dashed var(--as-border-secondary);
   border-radius: var(--as-radius-md);
   background: var(--as-bg-primary);
+}
+.response-key-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.response-key-grid code {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  padding: 3px 7px;
+  border-radius: var(--as-radius-sm);
+  background: var(--as-bg-secondary);
+  color: var(--as-text-primary);
+  font-family: var(--as-font-mono);
+  font-size: 11px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 /* ==== Layout grids ==== */
@@ -2432,7 +2455,7 @@ a.primary-button { text-decoration: none; }
 }
 .storage-row {
   display: grid;
-  grid-template-columns: 2fr auto auto auto;
+  grid-template-columns: 2fr auto auto auto auto;
   align-items: center;
   gap: var(--as-space-md);
   padding: var(--as-space-md) var(--as-space-lg);
@@ -2456,6 +2479,11 @@ a.primary-button { text-decoration: none; }
   min-width: 76px;
   margin-top: 0;
   text-align: center;
+}
+.storage-open-model {
+  width: 30px;
+  height: 30px;
+  justify-self: center;
 }
 
 @media (max-width: 700px) {

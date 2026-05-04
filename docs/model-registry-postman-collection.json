@@ -1,0 +1,56 @@
+{
+  "info": {
+    "name": "Advance Seeds Model Registry",
+    "description": "Public mobile-facing model registry endpoints for listing selectable models and resolving the default model package.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "functions_base_url", "value": "https://gqsxiohxokgwwugeoxmy.supabase.co/functions/v1" },
+    { "key": "model_line", "value": "seeds-poc" },
+    { "key": "channel", "value": "staging" },
+    { "key": "platform", "value": "android" },
+    { "key": "current_version", "value": "" },
+    { "key": "current_compat", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "List selectable models",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{functions_base_url}}/list-deployed-models?model_line={{model_line}}&channel={{channel}}&platform={{platform}}&ready_only=true",
+          "host": ["{{functions_base_url}}"],
+          "path": ["list-deployed-models"],
+          "query": [
+            { "key": "model_line", "value": "{{model_line}}" },
+            { "key": "channel", "value": "{{channel}}" },
+            { "key": "platform", "value": "{{platform}}" },
+            { "key": "ready_only", "value": "true" }
+          ]
+        },
+        "description": "Returns all active model deployments for a channel and platform. Use this for model picker screens. platform=android returns TF Lite URLs; platform=ios returns Core ML URLs."
+      }
+    },
+    {
+      "name": "Resolve default model",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{functions_base_url}}/resolve-channel?model_line={{model_line}}&channel={{channel}}&platform={{platform}}&current_version={{current_version}}&current_compat={{current_compat}}",
+          "host": ["{{functions_base_url}}"],
+          "path": ["resolve-channel"],
+          "query": [
+            { "key": "model_line", "value": "{{model_line}}" },
+            { "key": "channel", "value": "{{channel}}" },
+            { "key": "platform", "value": "{{platform}}" },
+            { "key": "current_version", "value": "{{current_version}}" },
+            { "key": "current_compat", "value": "{{current_compat}}" }
+          ]
+        },
+        "description": "Returns update/noop/rebuild_required/artifact_missing for the channel default. Use this at app startup or sync time."
+      }
+    }
+  ]
+}

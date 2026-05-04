@@ -777,6 +777,7 @@ export function App() {
             storagePercent={storagePercent}
             storageOverQuota={storageOverQuota}
             isAdmin={isAdmin}
+            onOpenModelVersion={openModelVersion}
           />
         )}
       </main>
@@ -1549,7 +1550,6 @@ function DatasetSplitScroller({ stats }: { stats?: DatasetStats }) {
               <div style={{ width: `${knownTotal && typeof split.count === "number" ? Math.max(3, Math.round((split.count / knownTotal) * 100)) : 0}%` }} />
             </div>
             <small>{split.role}</small>
-            <code title={split.path ?? "not in YAML"}>{split.path ?? "not in YAML"}</code>
           </article>
         ))}
       </div>
@@ -1681,7 +1681,7 @@ function ModelsWorkflow({
             >
               <strong>{version.semver}</strong>
               <small>
-                {pct(version.map50)} mAP50 / {pct(version.maskMap)} mask · {version.sizeMb.toFixed(1)} MB
+                {pct(version.map50)} mAP50 / {pct(version.maskMap)} mask
               </small>
               <span className={`status-pill ${version.state}`}>{version.state}</span>
             </button>
@@ -1712,6 +1712,7 @@ function StorageWorkflow({
   storagePercent,
   storageOverQuota,
   isAdmin,
+  onOpenModelVersion,
 }: {
   quotaMb: number;
   storage: ReturnType<RegistryStore["getSnapshot"]>["storage"];
@@ -1720,6 +1721,7 @@ function StorageWorkflow({
   storagePercent: number;
   storageOverQuota: boolean;
   isAdmin: boolean;
+  onOpenModelVersion: (versionId: string) => void;
 }) {
   const [pendingDelete, setPendingDelete] = useState<null | { storageId: string; semver: string; key: string }>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -1780,6 +1782,17 @@ function StorageWorkflow({
               </div>
               <span>{item.sizeMb.toFixed(1)} MB</span>
               <span className={`storage-status status-pill ${item.active ? "production" : "inactive"}`}>{item.active ? "active" : "inactive"}</span>
+              {version && (
+                <button
+                  className="icon-action-button storage-open-model"
+                  type="button"
+                  onClick={() => onOpenModelVersion(version.id)}
+                  aria-label={`Open model ${version.semver}`}
+                  title="Open model detail"
+                >
+                  <ArrowUpRight size={14} aria-hidden="true" />
+                </button>
+              )}
               <button
                 className="danger-button compact"
                 disabled={item.active || !isAdmin}
@@ -1980,7 +1993,6 @@ function ModelDetail({
               <code>{version.originalSemver}</code>
             </p>
           )}
-          <p>{version.dataset}</p>
         </div>
         <div className="detail-hero-actions" aria-label="Lifecycle status">
           <span className={`status-pill ${version.state}`}>{version.state}</span>
@@ -2008,14 +2020,14 @@ function ModelDetail({
       <div>
         <SectionMiniHeading title="Performance" hint="Final validation metrics and artifact identity for this version. Use mAP50 and mask mAP to compare model quality before promotion." />
         <div className="metrics-row performance-metrics-row">
-          <MetricCard label="mAP50" value={pct(version.map50)} detail="box metric" />
-          <MetricCard label="Mask mAP" value={pct(version.maskMap)} detail="segmentation metric" />
+          <MetricCard label="mAP50" value={pct(version.map50)} detail="Box metric" />
+          <MetricCard label="Mask mAP" value={pct(version.maskMap)} detail="Segmentation metric" />
           <PerformanceArtifactCard version={version} />
         </div>
       </div>
       <PlatformReadiness version={version} store={store} />
-      <DeploymentSection version={version} deployments={deployedRows} />
       <DescriptionSection version={version} isAdmin={isAdmin} />
+      <DeploymentSection version={version} deployments={deployedRows} />
       <InfoSection
         dataset={version.dataset}
         datasetStats={resolveDatasetStats(version.dataset, version.datasetStats ?? run?.config.datasetStats)}
@@ -2194,6 +2206,7 @@ function PlatformArtifactCard({
         <div className="platform-card-title">
           {icon}
           <strong>{title}</strong>
+          <Hint text={detail} />
         </div>
         <button
           type="button"
@@ -2210,7 +2223,6 @@ function PlatformArtifactCard({
         <span>{status}</span>
         <small>{size}</small>
       </div>
-      <code title={detail}>{detail}</code>
       {busy && <small className="platform-download-status">Preparing signed download...</small>}
     </article>
   );
@@ -2312,7 +2324,11 @@ function DeploymentSection({
           </div>
           <div className="mobile-contract-note">
             <strong>Response keys to wire into the app</strong>
-            <code>version_id · semver · artifact_url/model_url · content_hash · size_bytes · compat_signature · metadata</code>
+            <div className="response-key-grid" aria-label="Response keys">
+              {["version_id", "semver", "artifact_url / model_url", "content_hash", "size_bytes", "compat_signature", "metadata"].map((key) => (
+                <code key={key}>{key}</code>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -2573,8 +2589,6 @@ function InfoSection({
       <div className="info-block">
         <SectionMiniHeading title="Dataset" hint="Dataset composition from the YAML and known split counts. Train, validation, and testing splits should match the dataset config used by YOLO." />
         <dl className="info-grid">
-          <dt>Config</dt>
-          <dd className="mono">{dataset || "—"}</dd>
           <dt>Classes</dt>
           <dd>{classes.length} total</dd>
           {typeof resolvedStats?.total === "number" && (
