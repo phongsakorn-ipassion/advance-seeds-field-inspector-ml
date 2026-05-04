@@ -15,6 +15,8 @@ import json
 import os
 import platform
 import sys
+import urllib.request
+import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -130,7 +132,6 @@ def materialize_dataset_yaml(client: RegistryClient, dataset_ref: str, repo_root
     download_url = response.get("download_url") if isinstance(response, dict) else None
     if not download_url:
         raise SystemExit(f"download-dataset returned no download_url: {response!r}")
-    import urllib.request
     local_dir = repo_root / "configs"
     local_dir.mkdir(exist_ok=True)
     local_path = local_dir / Path(dataset_ref).name
@@ -138,6 +139,83 @@ def materialize_dataset_yaml(client: RegistryClient, dataset_ref: str, repo_root
         local_path.write_bytes(resp.read())
     print(f"YAML written to {local_path}")
     return str(local_path)
+
+
+def materialize_dataset_bundle(client: RegistryClient, bundle_ref: str, dataset_yaml: str, repo_root: Path) -> Path | None:
+    """Download and extract an optional dataset ZIP uploaded through the dashboard.
+
+    The YAML remains authoritative for the expected dataset root and split
+    paths. The ZIP may either start at that root (images/train, labels/train,
+    ...) or include the repo-relative root path (data/processed/images/train,
+    ...). We choose the extraction target from the archive entries.
+    """
+    if not bundle_ref:
+        print("No dataset bundle attached; expecting images to already exist on disk.")
+        return None
+    if not bundle_ref.startswith("datasets/"):
+        print(f"Dataset bundle is not an R2 dataset key; skipping automatic download: {bundle_ref}")
+        return None
+
+    import yaml as _yaml
+
+    dataset_path = Path(dataset_yaml).expanduser().resolve()
+    doc = _yaml.safe_load(dataset_path.read_text()) or {}
+    if not isinstance(doc, dict):
+        raise SystemExit(f"Dataset YAML is not a mapping: {dataset_path}")
+
+    dataset_root = Path(str(doc.get("path", "."))).expanduser()
+    if not dataset_root.is_absolute():
+        dataset_root = (dataset_path.parent / dataset_root).resolve()
+    repo_relative_root = _relative_to_or_none(dataset_root, repo_root)
+
+    print(f"Fetching dataset bundle from R2: {bundle_ref}")
+    response = client._json("POST", "/functions/v1/download-dataset", {"r2_key": bundle_ref})
+    download_url = response.get("download_url") if isinstance(response, dict) else None
+    if not download_url:
+        raise SystemExit(f"download-dataset returned no download_url for bundle: {response!r}")
+
+    bundle_dir = repo_root / "runs" / "_runtime_datasets" / "_bundles"
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    local_zip = bundle_dir / Path(bundle_ref).name
+    with urllib.request.urlopen(download_url) as resp:
+        local_zip.write_bytes(resp.read())
+
+    with zipfile.ZipFile(local_zip) as archive:
+        names = [name for name in archive.namelist() if name and not name.endswith("/")]
+        target = _dataset_bundle_extract_target(names, doc, dataset_root, repo_root, repo_relative_root)
+        target.mkdir(parents=True, exist_ok=True)
+        print(f"Extracting dataset bundle {local_zip} -> {target}")
+        archive.extractall(target)
+    return target
+
+
+def _relative_to_or_none(path: Path, parent: Path) -> Path | None:
+    try:
+        return path.resolve().relative_to(parent.resolve())
+    except ValueError:
+        return None
+
+
+def _dataset_bundle_extract_target(
+    names: list[str],
+    dataset: dict,
+    dataset_root: Path,
+    repo_root: Path,
+    repo_relative_root: Path | None,
+) -> Path:
+    normalized = [name.lstrip("./") for name in names]
+    split_paths = [
+        str(value).strip().strip("/")
+        for value in (dataset.get("train"), dataset.get("val") or dataset.get("validation"), dataset.get("test"))
+        if isinstance(value, str) and value.strip()
+    ]
+    if split_paths and any(any(name.startswith(f"{split}/") for name in normalized) for split in split_paths):
+        return dataset_root
+    if repo_relative_root is not None:
+        root_prefix = str(repo_relative_root).strip("/")
+        if root_prefix and any(name.startswith(f"{root_prefix}/") for name in normalized):
+            return repo_root
+    return dataset_root
 
 
 def write_dataset_stats(client: RegistryClient, run_id: str, run_row: dict, config: dict) -> None:
@@ -200,6 +278,7 @@ def build_training_config(run_row: dict, repo_root: Path, client: RegistryClient
     if not dataset_ref:
         raise SystemExit("Run has no dataset reference in config_yaml.dataset.")
     dataset_local = materialize_dataset_yaml(client, dataset_ref, repo_root)
+    materialize_dataset_bundle(client, cfg_yaml.get("dataset_bundle") or "", dataset_local, repo_root)
     config: dict = {
         "model": cfg_yaml.get("source_weights") or "yolo26n-seg.pt",
         "data": dataset_local,

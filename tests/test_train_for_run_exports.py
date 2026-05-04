@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -61,6 +62,36 @@ class TrainForRunExportTests(unittest.TestCase):
 
         self.assertEqual(metadata["r2_key"], "runs/x/model.tflite")
         self.assertEqual(metadata["quantization"]["precision"], "int8")
+
+    def test_dataset_bundle_root_layout_extracts_to_dataset_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            dataset_root = repo / "data" / "processed"
+
+            target = self.module._dataset_bundle_extract_target(
+                ["images/train/a.jpg", "labels/train/a.txt"],
+                {"train": "images/train", "val": "images/val"},
+                dataset_root,
+                repo,
+                Path("data/processed"),
+            )
+
+        self.assertEqual(target, dataset_root)
+
+    def test_dataset_bundle_repo_relative_layout_extracts_to_repo_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            dataset_root = repo / "data" / "processed"
+
+            target = self.module._dataset_bundle_extract_target(
+                ["data/processed/images/train/a.jpg", "data/processed/labels/train/a.txt"],
+                {"train": "images/train", "val": "images/val"},
+                dataset_root,
+                repo,
+                Path("data/processed"),
+            )
+
+        self.assertEqual(target, repo)
 
 
 if __name__ == "__main__":

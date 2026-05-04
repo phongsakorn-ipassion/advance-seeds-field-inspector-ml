@@ -36,6 +36,9 @@ const seedsV1Stats: DatasetStats = {
 export const defaultConfig: TrainConfig = {
   modelLine: "seeds-poc",
   dataset: "",
+  datasetBundle: "",
+  datasetBundleFilename: "",
+  datasetBundleSizeBytes: undefined,
   datasetStats: undefined,
   sourceWeights: "yolo26n-seg.pt",
   classes: [],

@@ -31,7 +31,7 @@ export type RegistryStore = {
   updateVersionDescription(versionId: string, description: string): Promise<void>;
 
   // Dataset upload (returns the R2 key the dashboard records)
-  uploadDataset(file: File, modelLineSlug: string): Promise<{ r2Key: string }>;
+  uploadDataset(file: File, modelLineSlug: string, kind?: "yaml" | "zip"): Promise<{ r2Key: string }>;
 };
 
 export class AuthError extends Error {}

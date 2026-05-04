@@ -17,6 +17,9 @@ export type HyperParameters = {
 export type TrainConfig = {
   modelLine: string;
   dataset: string;
+  datasetBundle?: string;
+  datasetBundleFilename?: string;
+  datasetBundleSizeBytes?: number;
   datasetStats?: DatasetStats;
   sourceWeights: string;
   classes: string[];

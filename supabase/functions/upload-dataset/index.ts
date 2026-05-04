@@ -30,6 +30,12 @@ Deno.serve(async (req) => {
     }
     const inferred: "yaml" | "zip" =
       body.kind ?? (body.filename.endsWith(".zip") ? "zip" : "yaml");
+    if (inferred === "yaml" && !/\.ya?ml$/i.test(body.filename)) {
+      return json({ error: "yaml uploads must end with .yaml or .yml" }, 400);
+    }
+    if (inferred === "zip" && !/\.zip$/i.test(body.filename)) {
+      return json({ error: "zip uploads must end with .zip" }, 400);
+    }
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const r2_key = `datasets/${body.model_line_slug}/${stamp}/${body.filename}`;
     const contentType =

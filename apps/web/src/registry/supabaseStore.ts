@@ -128,6 +128,9 @@ function configFromRun(run: DbRun): TrainConfig {
   return {
     modelLine: cfg.model_line ?? cfg.modelLine ?? "seeds-poc",
     dataset: cfg.dataset ?? "",
+    datasetBundle: cfg.dataset_bundle ?? cfg.datasetBundle,
+    datasetBundleFilename: cfg.dataset_bundle_filename ?? cfg.datasetBundleFilename,
+    datasetBundleSizeBytes: numberOrUndefined(cfg.dataset_bundle_size_bytes ?? cfg.datasetBundleSizeBytes),
     datasetStats: datasetStatsFrom(cfg),
     sourceWeights: cfg.source_weights ?? cfg.sourceWeights ?? "",
     classes: cfg.classes ?? cfg.class_names ?? [],
@@ -431,6 +434,7 @@ export function createSupabaseStore(env: Env): RegistryStore {
       `Runtime: Colab ${config.colabAccelerator}`,
       `Source weights: ${config.sourceWeights}`,
       `Dataset: ${config.dataset}`,
+      config.datasetBundle ? `Dataset bundle: ${config.datasetBundle}` : "Dataset bundle: manual Colab image hand-off",
       `Classes (${config.classes.length}): ${classPreview}`,
       `Epochs=${config.hyperParameters.epochs} | imgsz=${config.hyperParameters.imgsz} | lr0=${config.hyperParameters.lr0}`,
       "Hosted trigger is not configured. Awaiting Python SDK / Colab MCP to stream run_metrics...",
@@ -442,6 +446,9 @@ export function createSupabaseStore(env: Env): RegistryStore {
         name: runName,
         model_line: config.modelLine,
         dataset: config.dataset,
+        dataset_bundle: config.datasetBundle,
+        dataset_bundle_filename: config.datasetBundleFilename,
+        dataset_bundle_size_bytes: config.datasetBundleSizeBytes,
         dataset_stats: config.datasetStats,
         source_weights: config.sourceWeights,
         classes: config.classes,
@@ -580,9 +587,11 @@ export function createSupabaseStore(env: Env): RegistryStore {
         await refresh();
       });
     },
-    async uploadDataset(file, modelLineSlug) {
+    async uploadDataset(file, modelLineSlug, kind) {
       return await adminWrite(async () => {
         const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, "_");
+        const uploadKind = kind ?? (safeName.toLowerCase().endsWith(".zip") ? "zip" : "yaml");
+        const contentType = file.type || (uploadKind === "zip" ? "application/zip" : "application/yaml");
         const tokenRes = await client.auth.getSession();
         const token = tokenRes.data.session?.access_token;
         const presignRes = await fetch(`${env.supabaseUrl}/functions/v1/upload-dataset`, {
@@ -592,7 +601,7 @@ export function createSupabaseStore(env: Env): RegistryStore {
             authorization: token ? `Bearer ${token}` : "",
             apikey: env.supabaseAnonKey,
           },
-          body: JSON.stringify({ filename: safeName, model_line_slug: modelLineSlug }),
+          body: JSON.stringify({ filename: safeName, model_line_slug: modelLineSlug, kind: uploadKind, content_type: contentType }),
         });
         if (!presignRes.ok) {
           throw new Error(`upload-dataset presign failed: ${presignRes.status} ${await presignRes.text()}`);
@@ -600,7 +609,7 @@ export function createSupabaseStore(env: Env): RegistryStore {
         const { upload_url, r2_key } = await presignRes.json() as { upload_url: string; r2_key: string };
         const putRes = await fetch(upload_url, {
           method: "PUT",
-          headers: { "content-type": file.type || "application/octet-stream" },
+          headers: { "content-type": contentType },
           body: file,
         });
         if (!putRes.ok) {

@@ -311,7 +311,7 @@ function DatasetConfigField({
         const text = await file.text();
         const classes = parseYoloClasses(text);
         const stats = parseYoloDatasetStats(text);
-        const { r2Key } = await store.uploadDataset(file, modelLineSlug || "seeds-poc");
+        const { r2Key } = await store.uploadDataset(file, modelLineSlug || "seeds-poc", "yaml");
         onChange(r2Key);
         if (onDatasetParsed) onDatasetParsed({ dataset: r2Key, classes: classes ?? undefined, stats });
         setUploaded({ name: file.name, size: file.size, classes: classes?.length ?? null });
@@ -349,6 +349,94 @@ function DatasetConfigField({
             ? ` · parsed ${uploaded.classes} class${uploaded.classes === 1 ? "" : "es"} from names:`
             : " · could not parse names: block, classes left untouched"}
         </p>
+      )}
+      {error && <p className="form-error">{error}</p>}
+    </div>
+  );
+}
+
+function DatasetBundleField({
+  value,
+  filename,
+  sizeBytes,
+  onChange,
+  modelLineSlug,
+  disabled,
+}: {
+  value?: string;
+  filename?: string;
+  sizeBytes?: number;
+  onChange: (next: { r2Key?: string; filename?: string; sizeBytes?: number }) => void;
+  modelLineSlug: string;
+  disabled?: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function pickFile() {
+    if (disabled || busy) return;
+    setError(null);
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".zip,application/zip,application/x-zip-compressed";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith(".zip")) {
+        setError("Dataset image bundle must be a .zip file.");
+        return;
+      }
+      setBusy(true);
+      try {
+        const { r2Key } = await store.uploadDataset(file, modelLineSlug || "seeds-poc", "zip");
+        onChange({ r2Key, filename: file.name, sizeBytes: file.size });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Upload failed.");
+      } finally {
+        setBusy(false);
+      }
+    };
+    input.click();
+  }
+
+  return (
+    <div className="dataset-field">
+      <div className="dataset-row">
+        <input
+          value={value ?? ""}
+          onChange={(event) => onChange({ r2Key: event.target.value, filename, sizeBytes })}
+          placeholder="datasets/seeds-poc/.../images.zip"
+        />
+        <button
+          type="button"
+          className="ghost-button compact"
+          onClick={pickFile}
+          disabled={disabled || busy}
+          title={disabled ? "Admin role required" : "Upload a zipped dataset image bundle to R2"}
+        >
+          <Upload size={14} /> {busy ? "Uploading…" : "Upload .zip"}
+        </button>
+        {(value || filename) && (
+          <button
+            type="button"
+            className="ghost-button compact"
+            onClick={() => onChange({ r2Key: "", filename: "", sizeBytes: undefined })}
+            disabled={disabled || busy}
+            title="Clear dataset bundle"
+          >
+            <X size={14} /> Clear
+          </button>
+        )}
+      </div>
+      {value && !error && (
+        <p className="dataset-note">
+          Bundle <code>{filename || value.split("/").pop()}</code>
+          {typeof sizeBytes === "number" ? ` · ${(sizeBytes / (1024 * 1024)).toFixed(1)} MB` : ""}
+          {" · Colab will download and unzip it before training."}
+        </p>
+      )}
+      {!value && !error && (
+        <p className="dataset-note">Optional. Leave empty only if you will mount or unzip images manually in Colab.</p>
       )}
       {error && <p className="form-error">{error}</p>}
     </div>
@@ -1104,7 +1192,7 @@ function TrainWorkflow({
         <label>
           <span className="label-text">
             Dataset config
-            <Hint text="Reference to a YOLO dataset YAML. You can paste a path the trainer already has on disk, OR upload a .yaml file here so the trainer can pull it from R2. Image data is still expected to be reachable by the trainer; this only uploads the YAML." />
+            <Hint text="Reference to a YOLO dataset YAML. Upload the YAML so Colab can pull it from R2; attach the image ZIP below so Colab can also prepare the image files automatically." />
           </span>
           <DatasetConfigField
             value={config.dataset}
@@ -1117,6 +1205,25 @@ function TrainWorkflow({
               classes: classes ?? config.classes,
               datasetStats: stats,
             })}
+          />
+        </label>
+        <label>
+          <span className="label-text">
+            Dataset image bundle
+            <Hint text="Optional ZIP containing the image/label folders referenced by the YAML. Recommended layout is images/train, images/val, labels/train, labels/val at the ZIP root, or the full data/processed/... path." />
+          </span>
+          <DatasetBundleField
+            value={config.datasetBundle}
+            filename={config.datasetBundleFilename}
+            sizeBytes={config.datasetBundleSizeBytes}
+            onChange={({ r2Key, filename, sizeBytes }) => setConfig({
+              ...config,
+              datasetBundle: r2Key,
+              datasetBundleFilename: filename,
+              datasetBundleSizeBytes: sizeBytes,
+            })}
+            modelLineSlug={config.modelLine}
+            disabled={!isAdmin}
           />
         </label>
         <label>
@@ -1376,8 +1483,8 @@ function ColabManualSteps({ runId }: { runId: string }) {
         <li>
           <details>
             <summary><span>Confirm dataset image path</span></summary>
-            <p>Cell 10 fetches the YAML from R2 and prints the resolved image path. If images are missing, mount Drive and unzip the dataset before the training cell.</p>
-            <pre>{`from google.colab import drive\ndrive.mount('/content/drive')\n!unzip -q /content/drive/MyDrive/<your-dataset>.zip -d /content/advance-seeds-field-inspector-ml/data/processed/`}</pre>
+            <p>Cell 10 fetches the YAML from R2. If this run has a dataset ZIP, the training script downloads and unzips it automatically before YOLO starts.</p>
+            <pre>{`# Fallback only when no dashboard ZIP was attached:\nfrom google.colab import drive\ndrive.mount('/content/drive')\n!unzip -q /content/drive/MyDrive/<your-dataset>.zip -d /content/advance-seeds-field-inspector-ml/data/processed/`}</pre>
           </details>
         </li>
         <li>
