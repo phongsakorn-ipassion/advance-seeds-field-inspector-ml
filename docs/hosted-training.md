@@ -4,6 +4,9 @@
 > adding Modal GPU cost. Keep these notes for a future paid hosted-training
 > upgrade, but do not configure the provider secrets unless that decision
 > changes.
+>
+> Demo decision: no real deployed-dashboard hosted training run is required
+> while hosted training remains parked. Manual Colab remains the active path.
 
 This document covers the `wire-dashboard-to-hosted-training` path. It keeps all
 provider credentials in Supabase Edge Functions and keeps the browser on the

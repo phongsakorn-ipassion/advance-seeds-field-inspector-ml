@@ -264,7 +264,7 @@ Run apps/web dev server and verify:
 login -> overview -> train -> live tracking -> model detail -> deploy/undeploy
 -> storage quota warning/delete inactive artifact.
 
-Known pending manual item:
-Rotate the Cloudflare R2 token before production use. Earlier credentials were
-only in gitignored local files, not committed, but should still be rotated.
+Known production-readiness note:
+Rotate the Cloudflare R2 token before production use. For the demo this is
+accepted as a documented production gate, not a blocking task.
 ```

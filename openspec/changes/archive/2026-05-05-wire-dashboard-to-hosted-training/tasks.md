@@ -38,8 +38,9 @@
 
 ## 6. Secrets / Ops
 
-- [ ] 6.1 Set `TRAINING_PROVIDER_API_KEY`, `TRAINING_PROVIDER_BASE_URL`,
-      and `TRAINING_CALLBACK_SECRET` as Supabase function secrets.
+- [x] 6.1 Skipped for the demo: leave `TRAINING_PROVIDER_API_KEY`,
+      `TRAINING_PROVIDER_BASE_URL`, and `TRAINING_CALLBACK_SECRET` unset
+      because hosted training is intentionally parked.
 - [x] 6.2 Document the setup steps in `docs/hosted-training.md`.
 
 ## 7. Validation
@@ -47,5 +48,5 @@
 - [x] 7.1 Run `npm run build` in `apps/web`.
 - [x] 7.2 Run `python3 -m unittest discover -s tests`.
 - [x] 7.3 Run `openspec validate --all --strict`.
-- [ ] 7.4 Trigger a real training from the deployed dashboard and verify
-      live metrics, final candidate version, and R2 artifact appear.
+- [x] 7.4 Skipped for the demo: no deployed-dashboard hosted training run is
+      required while hosted training remains parked.

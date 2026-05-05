@@ -41,6 +41,17 @@ the `admin` role, and SHALL return a one-hour R2 signed PUT URL otherwise.
 - **WHEN** an anonymous client calls `upload-artifact`
 - **THEN** the function responds with HTTP 401
 
+### Requirement: Production R2 credentials are rotated before launch
+The project SHALL rotate Cloudflare R2 credentials before any production
+launch. Credentials used during demo development may remain valid for demo
+operation.
+
+#### Scenario: Demo moves to production readiness
+- **WHEN** the registry is promoted from demo usage to production usage
+- **THEN** the operator rotates the Cloudflare R2 API token
+- **AND** updates only gitignored local files, Supabase secrets, or CI secrets
+  with the replacement credentials
+
 ### Requirement: Versions carry platform artifacts
 Each model version SHALL represent one logical segmentation model package with
 separate platform artifacts for Android TF Lite and iOS Core ML.
@@ -111,4 +122,3 @@ version and SHALL be blocked while the version is deployed.
 #### Scenario: Deployed version archive is blocked
 - **WHEN** a version is active in any channel deployment
 - **THEN** archive/delete requests fail until it is undeployed
-

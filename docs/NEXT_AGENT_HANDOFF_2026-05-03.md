@@ -78,7 +78,7 @@ These are external to the repo but required for the working pipeline:
 |---|---|---|---|
 | 1 | **Manual Colab flow hardening** | Keep Colab as the chosen no-extra-cost training path | Improve checklist copy, reduce rerun mistakes, and smoke-test GitHub Pages after each push |
 | 2 | **Edge Function source not committed** | `upload-artifact`, `upload-dataset`, `download-dataset` patches deployed but uncommitted | Commit + push when stable to keep source in sync with what's live |
-| 3 | **Hosted Modal training parked** | Worker scaffolding exists, but do not activate unless the user accepts Modal GPU cost | Leave `TRAINING_PROVIDER_*` secrets unset so `start-training` falls back to manual run creation |
+| 3 | **Hosted Modal training parked** | Worker scaffolding exists, but do not activate for the demo | Leave `TRAINING_PROVIDER_*` secrets unset so manual Colab remains the active training path |
 | 4 | **Dataset image upload via dashboard** | Intentionally deferred; image bundles still live on Drive | User excluded this from current priority. Revisit only when Drive hand-off becomes painful |
 | 5 | **Openspec changes** | `connect-dashboard-to-live-registry/` and `wire-dashboard-to-hosted-training/` have edits not archived | Run `openspec archive` interactively after user reviews |
 | 6 | **Browser smoke test on prod** | GitHub Pages deployment hasn't been re-validated since recent UX overhaul | Click through: sign in, train, deploy, storage cleanup |
@@ -104,7 +104,7 @@ These are external to the repo but required for the working pipeline:
   `hosted_training_not_configured` before creating a run.
 - Local `.env.advance-seeds` does not currently contain Modal credentials
   (`MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET`) or provider secret values, so Modal
-  deployment and a real hosted run remain blocked on credentials/configuration.
+  deployment and a real hosted run are intentionally skipped for the demo.
 
 ## Operational constraints (don't break these)
 
