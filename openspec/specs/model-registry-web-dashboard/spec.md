@@ -321,3 +321,46 @@ default branch.
 - **THEN** the workflow builds the dashboard and publishes the static
   artifact to GitHub Pages
 
+### Requirement: Dashboard uploads dataset image bundles
+The dashboard SHALL allow an admin operator to upload a zipped dataset image bundle alongside the YOLO dataset YAML when creating a manual Colab training run.
+
+#### Scenario: Operator attaches image bundle
+- **WHEN** an admin uploads a dataset ZIP in the Train new model form
+- **THEN** the dashboard SHALL upload the ZIP to R2 through an admin-authorized Edge Function
+- **AND** the run config SHALL store the bundle R2 key, original filename, and byte size
+
+#### Scenario: Operator uses manual image handoff
+- **WHEN** no dataset ZIP is attached
+- **THEN** the dashboard SHALL keep the existing manual Colab hand-off path available
+
+### Requirement: Dashboard keeps lifecycle cards concise
+The dashboard SHALL keep model lifecycle cards focused on operator decisions while preserving low-level artifact and path details through secondary affordances.
+
+#### Scenario: Operator reviews dataset sections
+- **WHEN** a run or model detail shows Dataset information
+- **THEN** the Dataset section SHALL omit the dataset config row
+- **AND** dataset split cards SHALL omit full filesystem paths from their card body
+
+#### Scenario: Operator reviews model records
+- **WHEN** model versions are listed
+- **THEN** each record SHALL omit artifact size from the row summary
+
+#### Scenario: Operator reviews platform readiness
+- **WHEN** Android or iOS artifact cards render
+- **THEN** the artifact R2 key SHALL be available through an info icon tooltip
+- **AND** the full R2 key SHALL NOT occupy the artifact card body
+
+### Requirement: Dashboard provides mobile API handoff
+The repository SHALL provide Postman-ready instructions for the mobile-facing registry endpoints.
+
+#### Scenario: Mobile developer imports the collection
+- **WHEN** a developer imports the Postman collection
+- **THEN** they can call list selectable models and resolve default model using collection variables
+- **AND** the instructions SHALL identify response keys needed by the mobile app
+
+#### Scenario: Mobile developer reviews deployment handoff
+- **WHEN** a deployed model detail renders the Deployment section
+- **THEN** the section SHALL show Postman import, variable setup, and endpoint usage steps
+- **AND** it SHALL link to the Postman guide and collection source
+- **AND** model picker, default model, and app field details SHALL be hidden behind expandable content by default
+
