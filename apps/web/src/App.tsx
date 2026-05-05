@@ -2290,10 +2290,15 @@ function DeploymentSection({
               </div>
             </div>
           </article>
-          <div className="mobile-contract-grid">
-            <article className="mobile-contract-card">
-              <strong>Model picker</strong>
-              <span>List selectable models for a channel.</span>
+          <div className="mobile-contract-stack">
+            <details className="mobile-contract-disclosure">
+              <summary>
+                <span>
+                  <strong>Model picker</strong>
+                  <small>List selectable models for a channel.</small>
+                </span>
+              </summary>
+              <div className="mobile-contract-content">
               {deployedChannels.map((channel) => (
                 <div className="endpoint-group" key={`list-${channel}`}>
                   <span className={`status-pill ${channel}`}>{channel}</span>
@@ -2313,10 +2318,16 @@ function DeploymentSection({
                   />
                 </div>
               ))}
-            </article>
-            <article className="mobile-contract-card">
-              <strong>Default model</strong>
-              <span>Resolve the channel default at startup or sync.</span>
+              </div>
+            </details>
+            <details className="mobile-contract-disclosure">
+              <summary>
+                <span>
+                  <strong>Default model</strong>
+                  <small>Resolve the channel default at startup or sync.</small>
+                </span>
+              </summary>
+              <div className="mobile-contract-content">
               {defaultChannels.length === 0 ? (
                 <div className="deployment-default-note" role="status">
                   <span className="status-pill inactive">Selectable</span>
@@ -2341,15 +2352,23 @@ function DeploymentSection({
                   />
                 </div>
               ))}
-            </article>
-          </div>
-          <div className="mobile-contract-note">
-            <strong>App fields</strong>
-            <div className="response-key-grid" aria-label="Response keys">
-              {["version_id", "artifact_url / model_url", "content_hash", "compat_signature", "metadata"].map((key) => (
-                <code key={key}>{key}</code>
-              ))}
-            </div>
+              </div>
+            </details>
+            <details className="mobile-contract-disclosure">
+              <summary>
+                <span>
+                  <strong>App fields</strong>
+                  <small>Keys the mobile app should persist or validate.</small>
+                </span>
+              </summary>
+              <div className="mobile-contract-content">
+                <div className="response-key-grid" aria-label="Response keys">
+                  {["version_id", "artifact_url / model_url", "content_hash", "compat_signature", "metadata"].map((key) => (
+                    <code key={key}>{key}</code>
+                  ))}
+                </div>
+              </div>
+            </details>
           </div>
         </div>
       )}

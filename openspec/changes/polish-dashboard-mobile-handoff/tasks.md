@@ -11,6 +11,7 @@
 - [x] 2.1 Add Postman collection for mobile-facing model registry endpoints.
 - [x] 2.2 Add API usage instructions for list/select and default resolution.
 - [x] 2.3 Surface Postman import/setup/use steps inside the model Deployment section.
+- [x] 2.4 Move model picker, default model, and app field details behind expandable content.
 
 ## 3. Validation
 

@@ -29,3 +29,4 @@ The repository SHALL provide Postman-ready instructions for the mobile-facing re
 - **WHEN** a deployed model detail renders the Deployment section
 - **THEN** the section SHALL show Postman import, variable setup, and endpoint usage steps
 - **AND** it SHALL link to the Postman guide and collection source
+- **AND** model picker, default model, and app field details SHALL be hidden behind expandable content by default
