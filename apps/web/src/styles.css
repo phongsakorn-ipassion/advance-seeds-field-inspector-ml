@@ -714,7 +714,6 @@ button {
   font-size: 12px;
   line-height: 1.45;
 }
-.mobile-contract-chips,
 .deployment-platforms {
   display: flex;
   flex-wrap: wrap;
@@ -2604,7 +2603,6 @@ a.primary-button { text-decoration: none; }
     flex-direction: column;
   }
   .mobile-integration-summary { flex-direction: column; }
-  .mobile-contract-chips { justify-content: flex-start; }
   .postman-handoff-heading { flex-direction: column; }
   .postman-handoff-links { justify-content: flex-start; }
   .endpoint-row { grid-template-columns: 1fr; }

@@ -2267,12 +2267,6 @@ function DeploymentSection({
               <strong>Mobile handoff</strong>
               <span>Use the deployed channel from Android or iOS to fetch a signed model package.</span>
             </div>
-            <div className="mobile-contract-chips" aria-label="Mobile artifact readiness">
-              <span className="status-pill succeeded"><Smartphone size={12} aria-hidden="true" /> Android ready</span>
-              <span className={canServeIos ? "status-pill succeeded" : "status-pill failed"}>
-                <Apple size={12} aria-hidden="true" /> {canServeIos ? "iOS ready" : "iOS missing"}
-              </span>
-            </div>
           </div>
           <article className="postman-handoff-card">
             <div className="postman-handoff-heading">
