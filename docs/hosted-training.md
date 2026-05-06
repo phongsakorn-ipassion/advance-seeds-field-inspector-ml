@@ -74,6 +74,30 @@ The callback writes `versions.tflite_r2_key`, `versions.mlmodel_r2_key`, and
 mobile listing and channel resolution still serve only Android TF Lite or iOS
 Core ML packages.
 
+## Manual Colab Local QA Artifact
+
+The active training path is the dashboard-created run plus
+`notebooks/train_run.ipynb`. The notebook resets the Colab checkout to
+`origin/main`, prints the synced git SHA, and runs `scripts/train_for_run.py`.
+The script now fails the run instead of registering a successful version if
+`best.pt`/`last.pt` cannot be found, if the uploaded R2 key is not a `.pt`, or
+if `metadata.artifacts.pytorch` does not match `versions.pytorch_r2_key`.
+
+If a version was created by an older Colab checkout before the Local QA upload
+ran, repair it from the same Colab runtime while `best.pt` still exists:
+
+```bash
+python3 scripts/backfill_pytorch_artifact.py \
+  --semver 1.0.0-394a0834 \
+  --weights /content/advance-seeds-field-inspector-ml/runs/data-20260506105130/weights/best.pt
+```
+
+The backfill uploads that file through `upload-artifact`, patches
+`versions.pytorch_r2_key`, records `metadata.artifacts.pytorch` as fp32/no
+quantization, and appends a run log line. If the Colab runtime is gone and no
+local `best.pt`/`last.pt` remains, retraining is required because the registry
+only has the quantized mobile artifacts.
+
 ## 2026-05-06 Deployment Note
 
 The linked Supabase project `gqsxiohxokgwwugeoxmy` has the local-QA artifact

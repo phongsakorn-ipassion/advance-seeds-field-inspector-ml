@@ -129,6 +129,14 @@ job from the browser.
   explainer card describing the local-SDK responsibility for actually running
   training
 
+#### Scenario: Colab handoff guards against stale export code
+- **WHEN** an operator opens the manual Colab handoff
+- **THEN** the checklist explains that the notebook syncs the latest main
+  checkout
+- **AND** the operator is told to confirm a git SHA appears before export starts
+- **AND** artifact review mentions Android TF Lite, iOS Core ML, and Local QA
+  `.pt` artifacts
+
 ### Requirement: Deployment controls update channels
 The dashboard SHALL provide deploy and undeploy controls for staging and
 production channels.

@@ -30,7 +30,7 @@ class RecordingTransport:
 
 class RegistryConfigTests(unittest.TestCase):
     def test_config_from_env_requires_url_and_service_role_key(self):
-        with self.assertRaisesRegex(RegistryConfigError, "MODEL_REGISTRY_SERVICE_ROLE_KEY"):
+        with self.assertRaisesRegex(RegistryConfigError, "MODEL_REGISTRY_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY"):
             RegistryConfig.from_env({"MODEL_REGISTRY_URL": "http://127.0.0.1:54321"})
 
     def test_config_from_env_normalizes_url(self):
@@ -38,6 +38,16 @@ class RegistryConfigTests(unittest.TestCase):
             {
                 "MODEL_REGISTRY_URL": "http://127.0.0.1:54321/",
                 "MODEL_REGISTRY_SERVICE_ROLE_KEY": "service-key",
+            }
+        )
+        self.assertEqual(config.url, "http://127.0.0.1:54321")
+        self.assertEqual(config.service_role_key, "service-key")
+
+    def test_config_from_env_accepts_supabase_fallback_names(self):
+        config = RegistryConfig.from_env(
+            {
+                "SUPABASE_URL": "http://127.0.0.1:54321/",
+                "SUPABASE_SERVICE_ROLE_KEY": "service-key",
             }
         )
         self.assertEqual(config.url, "http://127.0.0.1:54321")

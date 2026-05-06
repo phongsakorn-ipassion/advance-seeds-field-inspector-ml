@@ -74,6 +74,46 @@ class TrainForRunExportTests(unittest.TestCase):
         self.assertEqual(metadata["size_bytes"], 20)
         self.assertEqual(metadata["quantization"]["precision"], "fp32")
 
+    def test_resolve_pytorch_weights_prefers_best(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            save_dir = Path(tmp)
+            weights = save_dir / "weights"
+            weights.mkdir()
+            (weights / "last.pt").write_bytes(b"last")
+            (weights / "best.pt").write_bytes(b"best")
+
+            resolved = self.module.resolve_pytorch_weights(save_dir)
+
+        self.assertEqual(resolved.name, "best.pt")
+
+    def test_resolve_pytorch_weights_falls_back_to_last(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            save_dir = Path(tmp)
+            weights = save_dir / "weights"
+            weights.mkdir()
+            (weights / "last.pt").write_bytes(b"last")
+
+            resolved = self.module.resolve_pytorch_weights(save_dir)
+
+        self.assertEqual(resolved.name, "last.pt")
+
+    def test_validate_local_qa_artifact_rejects_missing_pytorch_metadata(self):
+        with self.assertRaisesRegex(ValueError, "artifacts.pytorch"):
+            self.module.validate_local_qa_artifact({"artifacts": {}}, "runs/x/model.pt")
+
+    def test_validate_local_qa_artifact_rejects_non_pt_key(self):
+        metadata = {
+            "artifacts": {
+                "pytorch": {
+                    "r2_key": "runs/x/model.tflite",
+                    "quantization": {"precision": "fp32", "method": "none"},
+                }
+            }
+        }
+
+        with self.assertRaisesRegex(ValueError, ".pt"):
+            self.module.validate_local_qa_artifact(metadata, "runs/x/model.tflite")
+
     def test_dataset_bundle_root_layout_extracts_to_dataset_root(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)

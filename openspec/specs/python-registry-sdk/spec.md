@@ -44,3 +44,9 @@ and content hash after model artifacts are uploaded.
 - **THEN** the SDK can submit `pytorch_r2_key` on the `versions` row
 - **AND** metadata can record `artifacts.pytorch` with `precision=fp32` and no
   quantization
+
+#### Scenario: Registry configuration accepts Supabase aliases
+- **WHEN** local repair or Colab scripts provide `SUPABASE_URL` and
+  `SUPABASE_SERVICE_ROLE_KEY`
+- **THEN** the SDK can use those values as fallbacks for the registry endpoint
+  and service-role credential

@@ -14,6 +14,7 @@ import argparse
 import json
 import os
 import platform
+import subprocess
 import sys
 import urllib.request
 import zipfile
@@ -109,6 +110,95 @@ def artifact_metadata(*, kind: str, artifact, quantization: dict) -> dict:
         "content_hash": artifact.content_hash,
         "quantization": quantization,
     }
+
+
+def current_git_sha(repo_root: Path) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    sha = result.stdout.strip()
+    return sha or None
+
+
+def resolve_pytorch_weights(save_dir: Path) -> Path:
+    for filename in ("best.pt", "last.pt"):
+        candidate = save_dir / "weights" / filename
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(f"No PyTorch weights found under {save_dir / 'weights'}")
+
+
+def build_version_metadata(
+    *,
+    run_row: dict,
+    config: dict,
+    results,
+    pytorch_artifact,
+    tflite_artifact,
+    coreml_artifact,
+    tflite_quantization: dict,
+    coreml_quantization: dict,
+    host: str,
+    git_sha: str | None,
+) -> dict:
+    metrics_dict = getattr(results, "results_dict", {}) or {}
+    metadata = {
+        "dataset": run_row.get("config_yaml", {}).get("dataset"),
+        "source_weights": run_row.get("config_yaml", {}).get("source_weights"),
+        "class_names": run_row.get("config_yaml", {}).get("classes", []),
+        "input_size": int(config.get("imgsz", 640)),
+        "output_kind": "segmentation-mask",
+        "task": "segmentation",
+        "hyperparameters": run_row.get("config_yaml", {}).get("hyperparameters", {}),
+        "metrics": {
+            "map50": float(metrics_dict.get("metrics/mAP50(B)", 0.0)),
+            "mask_map": float(metrics_dict.get("metrics/mAP50-95(M)", 0.0)),
+        },
+        "artifacts": {
+            "pytorch": artifact_metadata(
+                kind="pytorch",
+                artifact=pytorch_artifact,
+                quantization={"precision": "fp32", "method": "none", "source": "best_weights"},
+            ),
+            "tflite": artifact_metadata(
+                kind="tflite",
+                artifact=tflite_artifact,
+                quantization=tflite_quantization,
+            ),
+            "coreml": {
+                **artifact_metadata(
+                    kind="coreml",
+                    artifact=coreml_artifact,
+                    quantization=coreml_quantization,
+                ),
+                "packaging": "mlpackage.zip",
+            },
+        },
+        "host": host,
+    }
+    if git_sha:
+        metadata["export_git_sha"] = git_sha
+    return metadata
+
+
+def validate_local_qa_artifact(metadata: dict, pytorch_r2_key: str) -> None:
+    if not pytorch_r2_key or not pytorch_r2_key.endswith(".pt"):
+        raise ValueError(f"Local QA PyTorch artifact key must point to a .pt file: {pytorch_r2_key!r}")
+    pytorch = (metadata.get("artifacts") or {}).get("pytorch") if isinstance(metadata, dict) else None
+    if not isinstance(pytorch, dict):
+        raise ValueError("Version metadata is missing artifacts.pytorch")
+    if pytorch.get("r2_key") != pytorch_r2_key:
+        raise ValueError("Version metadata artifacts.pytorch.r2_key does not match versions.pytorch_r2_key")
+    quantization = pytorch.get("quantization") or {}
+    if quantization.get("precision") != "fp32" or quantization.get("method") != "none":
+        raise ValueError("Local QA PyTorch artifact must be recorded as non-quantized fp32")
 
 
 def fetch_run(client: RegistryClient, run_id: str) -> dict:
@@ -338,6 +428,7 @@ def main(argv: list[str] | None = None) -> int:
 
     repo_root = Path(__file__).resolve().parents[1]
     client = RegistryClient(RegistryConfig.from_env())
+    git_sha = current_git_sha(repo_root)
 
     run_row = fetch_run(client, args.run_id)
     config = build_training_config(run_row, repo_root, client)
@@ -409,6 +500,8 @@ def main(argv: list[str] | None = None) -> int:
 
     gpu = config.get("hardware", {}).get("gpu_name") or "unknown GPU"
     append_log(f"Training started on {gpu}, target epochs={total_epochs}")
+    if git_sha:
+        append_log(f"Training script git={git_sha}")
 
     try:
         results = model.train(**train_kwargs(config))
@@ -420,13 +513,13 @@ def main(argv: list[str] | None = None) -> int:
     append_log("Training finished — exporting quantized mobile artifacts")
 
     save_dir = Path(getattr(results, "save_dir", config.get("project", "runs")))
-    best = save_dir / "weights" / "best.pt"
-    print("Best weights:", best if best.exists() else "(missing — using last.pt)")
-    if not best.exists():
-        best = save_dir / "weights" / "last.pt"
-
-    semver = f"1.0.0-{args.run_id[:8]}"
-    append_log(f"Preserving original PyTorch weights for local segmentation QA: {best.name}")
+    try:
+        best = resolve_pytorch_weights(save_dir)
+    except FileNotFoundError as exc:
+        append_log(f"Local QA PyTorch export failed: {exc}")
+        finalize_run("failed")
+        raise
+    print("Local QA PyTorch weights:", best)
 
     tflite_path: Path
     tflite_export_kwargs = export_kwargs("tflite", config)
@@ -462,6 +555,8 @@ def main(argv: list[str] | None = None) -> int:
         finalize_run("failed")
         raise
 
+    semver = f"1.0.0-{args.run_id[:8]}"
+    append_log(f"Preserving original PyTorch weights for local segmentation QA: {best.name}")
     pytorch_artifact = client.upload_artifact(
         best,
         kind="pytorch",
@@ -469,6 +564,11 @@ def main(argv: list[str] | None = None) -> int:
         semver=semver,
         content_type="application/octet-stream",
     )
+    if not pytorch_artifact.r2_key.endswith(".pt"):
+        append_log(f"Local QA PyTorch upload returned an invalid key: {pytorch_artifact.r2_key}")
+        finalize_run("failed")
+        raise ValueError(f"Local QA PyTorch upload returned an invalid key: {pytorch_artifact.r2_key}")
+    append_log(f"Uploaded Local QA PyTorch artifact: {pytorch_artifact.r2_key}")
     tflite_artifact = client.upload_artifact(
         tflite_path,
         kind="tflite",
@@ -483,45 +583,30 @@ def main(argv: list[str] | None = None) -> int:
         content_type="application/zip" if coreml_path.is_dir() else None,
     )
 
-    metrics_dict = getattr(results, "results_dict", {}) or {}
+    metadata = build_version_metadata(
+        run_row=run_row,
+        config=config,
+        results=results,
+        pytorch_artifact=pytorch_artifact,
+        tflite_artifact=tflite_artifact,
+        coreml_artifact=coreml_artifact,
+        tflite_quantization=tflite_quantization,
+        coreml_quantization=coreml_quantization,
+        host=platform.node() or "colab",
+        git_sha=git_sha,
+    )
+    try:
+        validate_local_qa_artifact(metadata, pytorch_artifact.r2_key)
+    except ValueError as exc:
+        append_log(f"Local QA PyTorch artifact validation failed: {exc}")
+        finalize_run("failed")
+        raise
+
     client.create_version(
         run_id=args.run_id,
         model_line_id=run_row["model_line_id"],
         semver=semver,
-        metadata={
-            "dataset": run_row.get("config_yaml", {}).get("dataset"),
-            "source_weights": run_row.get("config_yaml", {}).get("source_weights"),
-            "class_names": run_row.get("config_yaml", {}).get("classes", []),
-            "input_size": int(config.get("imgsz", 640)),
-            "output_kind": "segmentation-mask",
-            "task": "segmentation",
-            "hyperparameters": run_row.get("config_yaml", {}).get("hyperparameters", {}),
-            "metrics": {
-                "map50": float(metrics_dict.get("metrics/mAP50(B)", 0.0)),
-                "mask_map": float(metrics_dict.get("metrics/mAP50-95(M)", 0.0)),
-            },
-            "artifacts": {
-                "pytorch": artifact_metadata(
-                    kind="pytorch",
-                    artifact=pytorch_artifact,
-                    quantization={"precision": "fp32", "method": "none", "source": "best_weights"},
-                ),
-                "tflite": artifact_metadata(
-                    kind="tflite",
-                    artifact=tflite_artifact,
-                    quantization=tflite_quantization,
-                ),
-                "coreml": {
-                    **artifact_metadata(
-                        kind="coreml",
-                        artifact=coreml_artifact,
-                        quantization=coreml_quantization,
-                    ),
-                    "packaging": "mlpackage.zip",
-                },
-            },
-            "host": platform.node() or "colab",
-        },
+        metadata=metadata,
         tflite_r2_key=tflite_artifact.r2_key,
         mlmodel_r2_key=coreml_artifact.r2_key,
         pytorch_r2_key=pytorch_artifact.r2_key,
@@ -530,6 +615,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     finalize_run("succeeded")
+    append_log("Run finalized with Android TF Lite, iOS Core ML, and Local QA PyTorch artifacts")
     print("Run finalized — switch back to the dashboard.")
     return 0
 

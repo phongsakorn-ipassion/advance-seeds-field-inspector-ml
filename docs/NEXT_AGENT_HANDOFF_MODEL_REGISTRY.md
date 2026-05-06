@@ -3,7 +3,8 @@
 **Date:** 2026-05-06
 **Repo:** `/Users/ppungpong/Github/advance-seeds-field-inspector-ml`  
 **Current branch:** `main`  
-**Status:** local `main` is ahead of `origin/main`; push has not been done.
+**Status:** Local QA artifact hardening is implemented; `1.0.0-394a0834`
+still needs the original Colab `.pt` uploaded with the backfill script.
 
 ## Current State
 
@@ -19,6 +20,23 @@ Deployment follow-up on 2026-05-06: the linked Supabase project
 column and the changed artifact functions were deployed. `supabase db push`
 is still blocked by remote-only historical migrations, so reconcile migration
 history separately before depending on normal push for future schema changes.
+
+Regression note on 2026-05-06: version `1.0.0-394a0834` was created by a stale
+Colab training checkout. It has Android TF Lite and iOS Core ML R2 keys, but no
+`versions.pytorch_r2_key` and no `metadata.artifacts.pytorch`. Future
+`scripts/train_for_run.py` runs now log the git SHA, validate that the Local QA
+artifact is a `.pt`, and fail before creating a version if the PyTorch artifact
+is missing. Repair older versions with:
+
+```bash
+python3 scripts/backfill_pytorch_artifact.py \
+  --semver 1.0.0-394a0834 \
+  --weights /content/advance-seeds-field-inspector-ml/runs/data-20260506105130/weights/best.pt
+```
+
+Run that inside the Colab runtime that still has the weights. If the runtime was
+destroyed and no `best.pt`/`last.pt` was saved elsewhere, retrain the run with
+the latest notebook.
 
 This repo now contains the first three layers of the Advance Seeds model
 registry workflow:

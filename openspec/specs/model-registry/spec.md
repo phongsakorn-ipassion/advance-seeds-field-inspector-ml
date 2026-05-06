@@ -57,11 +57,25 @@ Each model version SHALL represent one logical segmentation model package with
 separate platform artifacts for Android TF Lite, iOS Core ML, and the original
 non-quantized PyTorch `.pt` export for local segmentation QA.
 
-#### Scenario: Training registers both artifacts
-- **WHEN** training completes and both exports succeed
+#### Scenario: Training registers all required artifacts
+- **WHEN** training completes and mobile exports succeed
 - **THEN** the version row stores `tflite_r2_key`, `mlmodel_r2_key`, and
   `pytorch_r2_key`
 - **AND** metadata records per-platform size and content hash
+
+#### Scenario: Local QA artifact is missing during training export
+- **WHEN** the Colab training script cannot find or upload `best.pt` or
+  `last.pt`
+- **THEN** the run is finalized as failed
+- **AND** no successful version is created without `pytorch_r2_key`
+
+#### Scenario: Existing version is missing Local QA artifact
+- **WHEN** an older successful version has Android and iOS artifacts but no
+  `pytorch_r2_key`
+- **THEN** an operator can backfill the original `.pt` weights from the training
+  runtime
+- **AND** the version row and `metadata.artifacts.pytorch` are patched to match
+  the uploaded R2 key
 
 #### Scenario: Production schema accepts local QA artifact keys
 - **WHEN** the registry database is deployed

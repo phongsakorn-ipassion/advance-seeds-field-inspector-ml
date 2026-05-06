@@ -1486,6 +1486,7 @@ function ColabManualSteps({ runId }: { runId: string }) {
           <details>
             <summary><span>Run all notebook cells</span></summary>
             <p>Click <em>Runtime, Run all</em> or press <code>Cmd/Ctrl + F9</code>. Colab does not auto-run on open.</p>
+            <p>The setup cell syncs the latest <code>main</code> checkout before training. Confirm the run log shows a git SHA before export starts.</p>
           </details>
         </li>
         <li>
@@ -1511,6 +1512,7 @@ function ColabManualSteps({ runId }: { runId: string }) {
           <details>
             <summary><span>Review exported artifacts</span></summary>
             <p>On success, the script exports INT8 TF Lite, optimized Core ML, and the original PyTorch .pt weights, uploads all artifacts to R2, and creates the model version.</p>
+            <p>If Local QA is missing, rerun the latest notebook or backfill the Colab <code>best.pt</code> with <code>scripts/backfill_pytorch_artifact.py</code>.</p>
             <p>Closing the Colab tab terminates the runtime and stops training.</p>
           </details>
         </li>

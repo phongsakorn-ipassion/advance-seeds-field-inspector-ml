@@ -33,16 +33,20 @@ class RegistryConfig:
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "RegistryConfig":
         source = os.environ if env is None else env
-        missing = [
-            key
-            for key in ("MODEL_REGISTRY_URL", "MODEL_REGISTRY_SERVICE_ROLE_KEY")
-            if not str(source.get(key, "")).strip()
-        ]
+        url = str(source.get("MODEL_REGISTRY_URL") or source.get("SUPABASE_URL") or "").strip()
+        service_role_key = str(
+            source.get("MODEL_REGISTRY_SERVICE_ROLE_KEY") or source.get("SUPABASE_SERVICE_ROLE_KEY") or ""
+        ).strip()
+        missing = []
+        if not url:
+            missing.append("MODEL_REGISTRY_URL or SUPABASE_URL")
+        if not service_role_key:
+            missing.append("MODEL_REGISTRY_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY")
         if missing:
             raise RegistryConfigError(f"missing registry settings: {', '.join(missing)}")
         return cls(
-            url=str(source["MODEL_REGISTRY_URL"]).rstrip("/"),
-            service_role_key=str(source["MODEL_REGISTRY_SERVICE_ROLE_KEY"]),
+            url=url.rstrip("/"),
+            service_role_key=service_role_key,
         )
 
 
