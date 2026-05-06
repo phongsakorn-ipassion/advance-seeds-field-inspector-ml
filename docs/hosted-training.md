@@ -74,6 +74,20 @@ The callback writes `versions.tflite_r2_key`, `versions.mlmodel_r2_key`, and
 mobile listing and channel resolution still serve only Android TF Lite or iOS
 Core ML packages.
 
+## 2026-05-06 Deployment Note
+
+The linked Supabase project `gqsxiohxokgwwugeoxmy` has the local-QA artifact
+schema applied with:
+
+```sql
+alter table public.versions add column if not exists pytorch_r2_key text;
+```
+
+The `upload-artifact`, `download-artifact`, `storage-usage`, and
+`training-callback` Edge Functions were deployed after the `.pt` artifact
+rollout. A future migration-history cleanup is still needed because the remote
+project contains older migration versions that are not present in this checkout.
+
 The provider adapter called by `start-training` must expose:
 
 ```text

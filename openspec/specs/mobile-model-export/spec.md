@@ -55,10 +55,10 @@ candidate models for app QA.
 
 #### Scenario: Four banana candidates are exported
 - **WHEN** the mobile candidate export script runs successfully
-- **THEN** `runs/mobile-exports/1-v1/` contains Android and iOS artifacts
-- **AND** `runs/mobile-exports/2-v1-quantized/` contains Android and iOS artifacts
-- **AND** `runs/mobile-exports/3-v2/` contains Android and iOS artifacts
-- **AND** `runs/mobile-exports/4-v2-quantized/` contains Android and iOS artifacts
+- **THEN** `runs/mobile-exports/1-v1/` contains Android, iOS, and PyTorch artifacts
+- **AND** `runs/mobile-exports/2-v1-quantized/` contains Android, iOS, and PyTorch artifacts
+- **AND** `runs/mobile-exports/3-v2/` contains Android, iOS, and PyTorch artifacts
+- **AND** `runs/mobile-exports/4-v2-quantized/` contains Android, iOS, and PyTorch artifacts
 
 ### Requirement: Candidate manifests
 Each exported candidate SHALL include a manifest that records platform artifact

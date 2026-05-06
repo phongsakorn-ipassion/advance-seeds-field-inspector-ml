@@ -29,6 +29,8 @@ supabase db reset
 
 ```bash
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+  -c "create extension if not exists pgtap;"
+psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
   -f supabase/tests/sql/schema.test.sql
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
   -f supabase/tests/sql/compat_signature.test.sql
@@ -63,9 +65,20 @@ Expected: JSON with `"action": "update"` and a presigned `model_url`.
 4. `supabase db push`
 5. `supabase functions deploy resolve-channel`
 6. `supabase functions deploy upload-artifact`
-7. `supabase secrets set R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=... R2_BUCKET=advance-seeds-models`
-8. Add the same R2 secrets to GitHub repo settings → Secrets so the
+7. `supabase functions deploy download-artifact storage-usage training-callback list-deployed-models`
+8. `supabase secrets set R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=... R2_BUCKET=advance-seeds-models`
+9. Add the same R2 secrets to GitHub repo settings → Secrets so the
    `backend` workflow can run edge function tests.
+
+If `supabase db push` reports remote migration versions that are not present
+locally, do not repair migration history casually. For additive emergency
+changes, apply the exact idempotent SQL with `supabase db query --linked` and
+then reconcile migration history in a dedicated maintenance pass. The
+2026-05-06 local-QA artifact rollout used:
+
+```sql
+alter table public.versions add column if not exists pytorch_r2_key text;
+```
 
 ## 7. Promote a fixture version manually
 

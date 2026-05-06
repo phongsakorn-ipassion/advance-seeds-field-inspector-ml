@@ -63,6 +63,10 @@ non-quantized PyTorch `.pt` export for local segmentation QA.
   `pytorch_r2_key`
 - **AND** metadata records per-platform size and content hash
 
+#### Scenario: Production schema accepts local QA artifact keys
+- **WHEN** the registry database is deployed
+- **THEN** the `versions` table has a nullable `pytorch_r2_key` column
+
 #### Scenario: Training records mobile export optimization
 - **WHEN** the Colab training script exports mobile artifacts
 - **THEN** the Android TF Lite artifact SHALL use calibrated INT8 export with

@@ -14,6 +14,12 @@ weights are uploaded to R2, stored as `versions.pytorch_r2_key`, recorded under
 deleted when a version is archived. Mobile-facing endpoints still return only
 platform runtime packages.
 
+Deployment follow-up on 2026-05-06: the linked Supabase project
+`gqsxiohxokgwwugeoxmy` was patched with the nullable `versions.pytorch_r2_key`
+column and the changed artifact functions were deployed. `supabase db push`
+is still blocked by remote-only historical migrations, so reconcile migration
+history separately before depending on normal push for future schema changes.
+
 This repo now contains the first three layers of the Advance Seeds model
 registry workflow:
 

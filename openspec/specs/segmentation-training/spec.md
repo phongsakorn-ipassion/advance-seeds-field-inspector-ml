@@ -6,7 +6,7 @@ Train and evaluate an instance segmentation model that produces per-object masks
 for downstream measurement and grading.
 ## Requirements
 ### Requirement: Segmentation model training path
-The project SHALL support training Ultralytics YOLO26n-seg from validated YOLO
+The project SHALL support training Ultralytics YOLO26 segmentation models from validated YOLO
 segmentation datasets for the canonical PoC object/spot class list.
 
 #### Scenario: Training uses validated dataset config
@@ -18,6 +18,11 @@ segmentation datasets for the canonical PoC object/spot class list.
 - **GIVEN** the model source has not been overridden by a documented OpenSpec change
 - **WHEN** training is configured
 - **THEN** the source weights are `yolo26n-seg.pt`
+
+#### Scenario: Dashboard offers YOLO26 segmentation size variants
+- **WHEN** an operator selects source weights in the Train new model form
+- **THEN** the selector includes `yolo26n-seg.pt`, `yolo26s-seg.pt`,
+  `yolo26m-seg.pt`, `yolo26l-seg.pt`, and `yolo26x-seg.pt`
 
 #### Scenario: PoC training uses object and spot classes
 - **WHEN** PoC training is configured
@@ -89,6 +94,16 @@ default.
 - **THEN** it validates `configs/dataset.banana-v2.yaml`
 - **AND** it passes `configs/train.banana-v2.yaml` to the training entrypoint
 
+### Requirement: Banana v3 training config
+The project SHALL include a banana-v3 YOLO26n-seg training config for the
+processed banana-v3 dataset while keeping banana-v2 as the local launcher
+default.
+
+#### Scenario: Banana v3 config targets banana-v3 data
+- **WHEN** `configs/train.banana-v3.yaml` is inspected
+- **THEN** its dataset is `configs/dataset.banana-v3.yaml`
+- **AND** its project path is `runs/banana-v3`
+
 ### Requirement: Training may report to registry
 YOLO26n segmentation training SHALL support optional model registry reporting
 without changing the default local-only training behavior.
@@ -122,4 +137,3 @@ The Colab training flow SHALL automatically download and extract an attached dat
   service-role Edge Function
 - **AND** the run config SHALL record the deleted bundle key and deletion time
   so operators can audit the cleanup
-

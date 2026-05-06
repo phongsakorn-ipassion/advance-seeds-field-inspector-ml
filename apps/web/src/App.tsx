@@ -1906,7 +1906,7 @@ function ModelDetail({
     setActionError(null);
     setPending({
       title: "Archive model",
-      message: `Archive ${version.semver}. This permanently deletes the stored Android and iOS artifacts, keeps the model metadata as history, and blocks future deployment.`,
+      message: `Archive ${version.semver}. This permanently deletes the stored Android, iOS, and Local QA artifacts, keeps the model metadata as history, and blocks future deployment.`,
       confirmLabel: "Archive model",
       danger: true,
       run: () => store.archiveVersion(version.id),

@@ -73,6 +73,9 @@ The original non-quantized PyTorch `.pt` artifact is stored in version metadata
 and can be downloaded from the dashboard by an admin. It is intentionally not
 returned by these mobile-facing endpoints.
 
+For admin/local-QA checks, request a signed download through the dashboard or
+the `download-artifact` Edge Function using the stored `.pt` R2 key.
+
 ## Auth
 
 These two endpoints are mobile-facing read endpoints. Use the Supabase anon public key, not the service-role key. The returned artifact URLs are short-lived signed R2 URLs.

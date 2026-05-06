@@ -334,6 +334,11 @@ default branch.
 - **THEN** the workflow builds the dashboard and publishes the static
   artifact to GitHub Pages
 
+#### Scenario: Pages workflow uses current JavaScript action runtime
+- **WHEN** the Pages workflow runs
+- **THEN** it opts JavaScript actions into the Node 24 runtime before the
+  Node 20 hosted-runner deprecation window
+
 ### Requirement: Dashboard uploads dataset image bundles
 The dashboard SHALL allow an admin operator to upload a zipped dataset image bundle alongside the YOLO dataset YAML when creating a manual Colab training run.
 

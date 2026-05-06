@@ -23,6 +23,12 @@ PoC run:
 python3 scripts/train_yolo26n_seg.py --config configs/train.banana-v2.yaml
 ```
 
+Banana v3 run:
+
+```bash
+python3 scripts/train_yolo26n_seg.py --config configs/train.banana-v3.yaml
+```
+
 Local machine training launcher:
 
 ```bash
@@ -68,6 +74,23 @@ scripts/train_local_banana.sh --epochs 3 --name banana-v2-smoke
 | `hsv_h` | `0.014` | YOLO26n pretraining value. |
 | `hsv_s` | `0.5` | Moderate color augmentation for lighting variation. |
 | `hsv_v` | `0.4` | Moderate brightness/value augmentation. |
+
+## YOLO26 Source Weights
+
+The dashboard source-weight selector offers the YOLO26 segmentation size
+ladder:
+
+| Weight | Use when |
+| --- | --- |
+| `yolo26n-seg.pt` | Default mobile-oriented fine-tuning baseline. |
+| `yolo26s-seg.pt` | Balanced option when latency budget allows a larger model. |
+| `yolo26m-seg.pt` | Accuracy-focused experiments with higher training/export cost. |
+| `yolo26l-seg.pt` | Large-model validation runs before deciding whether mobile cost is acceptable. |
+| `yolo26x-seg.pt` | Maximum-capacity local or Colab experiments, not a default mobile target. |
+
+Banana v2 remains the local launcher default. Banana v3 configs are available
+for explicit runs once the processed dataset exists under
+`data/processed/advance-seeds-banana-v3`.
 
 ## Hardware Auto-Tuning
 

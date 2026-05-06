@@ -91,3 +91,16 @@ dataset.
 - **WHEN** `python3 scripts/validate_dataset.py configs/dataset.banana-v2.yaml` runs
 - **THEN** validation passes with banana and banana_spot labels under the canonical six-class config
 
+### Requirement: Banana v3 dataset configuration
+The project SHALL provide a banana-v3 YOLO dataset config that points to the
+processed local dataset root and preserves the canonical six-class object/spot
+contract.
+
+#### Scenario: Banana v3 config preserves canonical classes
+- **WHEN** `configs/dataset.banana-v3.yaml` is inspected
+- **THEN** class id `0` is `apple`
+- **AND** class id `1` is `apple_spot`
+- **AND** class id `2` is `banana`
+- **AND** class id `3` is `banana_spot`
+- **AND** class id `4` is `orange`
+- **AND** class id `5` is `orange_spot`
