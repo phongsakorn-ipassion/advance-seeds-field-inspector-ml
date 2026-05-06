@@ -61,6 +61,14 @@ class TrainingWorkerTests(unittest.TestCase):
             def fake_runner(command, cwd):
                 self.assertEqual(cwd, root)
                 self.assertIn("--config", command)
+                train_config = Path(command[command.index("--config") + 1]).read_text(encoding="utf-8")
+                self.assertIn("optimizer: AdamW", train_config)
+                self.assertIn("weight_decay: 0.00064", train_config)
+                self.assertIn("cos_lr: true", train_config)
+                self.assertIn("close_mosaic: 10", train_config)
+                self.assertIn("mask_ratio: 2", train_config)
+                self.assertIn("overlap_mask: true", train_config)
+                self.assertIn("multi_scale: 0.1", train_config)
                 yield "epoch=1 mAP50=0.42\n"
                 yield "progress=100\n"
 
@@ -73,7 +81,17 @@ class TrainingWorkerTests(unittest.TestCase):
                 config={
                     "dataset": str(dataset),
                     "source_weights": "yolo26n-seg.pt",
-                    "hyperparameters": {"epochs": 1, "imgsz": 32},
+                    "hyperparameters": {
+                        "epochs": 1,
+                        "imgsz": 32,
+                        "optimizer": "AdamW",
+                        "weightDecay": 0.00064,
+                        "cosLr": True,
+                        "closeMosaic": 10,
+                        "maskRatio": 2,
+                        "overlapMask": True,
+                        "multiScale": 0.1,
+                    },
                     "artifact_path": str(artifact),
                     "coreml_artifact_path": str(coreml),
                     "pytorch_artifact_path": str(pytorch),

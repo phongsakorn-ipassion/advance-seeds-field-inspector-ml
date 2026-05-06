@@ -14,6 +14,7 @@ BOOL_KEYS = {
     "amp",
     "cos_lr",
     "deterministic",
+    "overlap_mask",
     "plots",
     "pretrained",
     "save",
@@ -26,6 +27,7 @@ INT_KEYS = {
     "close_mosaic",
     "epochs",
     "imgsz",
+    "mask_ratio",
     "patience",
     "save_period",
     "seed",
@@ -36,6 +38,8 @@ AUTO_INT_KEYS = {"batch", "workers"}
 
 FLOAT_KEYS = {
     "batch",
+    "box",
+    "cls",
     "copy_paste",
     "degrees",
     "fliplr",
@@ -47,6 +51,7 @@ FLOAT_KEYS = {
     "lrf",
     "mixup",
     "momentum",
+    "multi_scale",
     "mosaic",
     "scale",
     "shear",

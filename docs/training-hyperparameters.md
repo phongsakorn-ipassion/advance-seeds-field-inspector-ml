@@ -29,6 +29,16 @@ Banana v3 run:
 python3 scripts/train_yolo26n_seg.py --config configs/train.banana-v3.yaml
 ```
 
+Banana v4 baseline and controlled trials:
+
+```bash
+python3 scripts/train_yolo26n_seg.py --config configs/train.banana-v4.yaml
+python3 scripts/train_yolo26n_seg.py --config configs/train.banana-v4.copy-paste.yaml
+python3 scripts/train_yolo26n_seg.py --config configs/train.banana-v4.mask-quality.yaml
+python3 scripts/train_yolo26n_seg.py --config configs/train.banana-v4.yolo26s.yaml
+python3 scripts/train_yolo26n_seg.py --config configs/train.banana-v4.yolo26m.yaml
+```
+
 Local machine training launcher:
 
 ```bash
@@ -74,6 +84,38 @@ scripts/train_local_banana.sh --epochs 3 --name banana-v2-smoke
 | `hsv_h` | `0.014` | YOLO26n pretraining value. |
 | `hsv_s` | `0.5` | Moderate color augmentation for lighting variation. |
 | `hsv_v` | `0.4` | Moderate brightness/value augmentation. |
+| `mask_ratio` | `4` | Default segmentation mask downsample ratio; use `2` only for mask-quality trials. |
+| `overlap_mask` | `true` | Keep YOLO's default overlap handling for segmentation masks. |
+| `box` | `7.5` | Box loss gain; tune only in controlled trials. |
+| `cls` | `0.5` | Classification loss gain for banana vs banana_spot separation. |
+| `multi_scale` | `0.0` | Disabled by default; enable only for scale-robustness trials. |
+
+## Banana v4 Experiment Profiles
+
+Banana v4 is the next first-class dataset target:
+
+```bash
+python3 scripts/validate_dataset.py configs/dataset.banana-v4.yaml
+```
+
+Use `configs/train.banana-v4.yaml` as the production-candidate baseline. The
+trial configs isolate one change at a time:
+
+| Config | Purpose | Promotion gate |
+| --- | --- | --- |
+| `train.banana-v4.copy-paste.yaml` | Low Copy-Paste segmentation augmentation for spot recall. | Must improve banana_spot recall and preserve visual spot masks. |
+| `train.banana-v4.mask-quality.yaml` | Higher `imgsz` and lower `mask_ratio` for mask detail. | Must beat baseline mask mAP and pass mobile latency checks. |
+| `train.banana-v4.yolo26s.yaml` | Small model-capacity comparison. | Must justify added mobile cost over YOLO26n. |
+| `train.banana-v4.yolo26m.yaml` | Medium model-capacity ceiling test. | Accuracy-only experiment until mobile runtime is proven. |
+
+Evaluation summary after a full run:
+
+```bash
+python3 scripts/evaluate_model_summary.py \
+  --weights runs/banana-v4/banana-v4-baseline/weights/best.pt \
+  --data configs/dataset.banana-v4.yaml \
+  --output runs/banana-v4/banana-v4-baseline/evaluation-summary.json
+```
 
 ## YOLO26 Source Weights
 

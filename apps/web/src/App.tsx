@@ -167,7 +167,8 @@ function expertLogLines(run: RegistryRun): string[] {
     `[registry] run=${run.id} status=${run.status} progress=${run.progress}% hardware="${run.hardware || "pending"}"`,
     `[dataset] config=${run.dataset || "pending"} total=${formatCount(stats?.total)} train=${formatCount(stats?.train)} val=${formatCount(stats?.validation)} test=${formatCount(stats?.testing)}`,
     `[training] epochs=${run.config.hyperParameters.epochs} imgsz=${run.config.hyperParameters.imgsz} batch=${run.config.hyperParameters.batch} patience=${run.config.hyperParameters.patience}`,
-    `[augmentation] mosaic=${run.config.hyperParameters.mosaic} mixup=${run.config.hyperParameters.mixup} copyPaste=${run.config.hyperParameters.copyPaste}`,
+    `[optimization] optimizer=${run.config.hyperParameters.optimizer} lr0=${run.config.hyperParameters.lr0} lrf=${run.config.hyperParameters.lrf} cos_lr=${run.config.hyperParameters.cosLr}`,
+    `[augmentation] mosaic=${run.config.hyperParameters.mosaic} close_mosaic=${run.config.hyperParameters.closeMosaic} mixup=${run.config.hyperParameters.mixup} copyPaste=${run.config.hyperParameters.copyPaste}`,
     `[metrics] mAP50=${map50} mask_mAP=${maskMap} source_weights=${run.config.sourceWeights || "pending"}`,
     `[timing] started_at="${run.startedAt || "pending"}" finished_at="${run.finishedAt ?? "running"}" notebook="${displayColabNotebook(run) || "pending"}"`,
     ...run.logs.map((line, index) => `[log ${String(index + 1).padStart(2, "0")}] ${line}`),
@@ -1284,6 +1285,21 @@ function TrainWorkflow({
           <div className="form-grid">
             <label>
               <span className="label-text">
+                Optimizer
+                <Hint text="YOLO optimizer selection. Keep auto unless comparing a controlled trial; Ultralytics can select optimizer based on run length and model." />
+              </span>
+              <select
+                value={config.hyperParameters.optimizer}
+                onChange={(event) => updateHp(config, setConfig, "optimizer", event.target.value)}
+              >
+                <option value="auto">auto</option>
+                <option value="AdamW">AdamW</option>
+                <option value="SGD">SGD</option>
+                <option value="MuSGD">MuSGD</option>
+              </select>
+            </label>
+            <label>
+              <span className="label-text">
                 Batch
                 <Hint text="Batch size per training step. 'auto' lets YOLO pick based on GPU memory; otherwise pass an integer like 16 or 32. Larger batches train faster but need more VRAM." />
               </span>
@@ -1306,12 +1322,78 @@ function TrainWorkflow({
               hint="Final learning-rate factor. Final LR = LR0 × LRF. Smaller (e.g. 0.01) means more aggressive cosine annealing toward the end of training."
             />
             <NumberField
+              label="Momentum"
+              value={config.hyperParameters.momentum}
+              step="0.001"
+              onChange={(value) => updateHp(config, setConfig, "momentum", value)}
+              hint="Momentum for SGD-style optimizers or beta1 for Adam-style optimizers. Keep near the baseline unless tuning."
+            />
+            <NumberField
+              label="Weight decay"
+              value={config.hyperParameters.weightDecay}
+              step="0.00001"
+              onChange={(value) => updateHp(config, setConfig, "weightDecay", value)}
+              hint="L2 regularization. Increase only if overfitting is visible; reduce if the model underfits."
+            />
+            <NumberField
+              label="Warmup epochs"
+              value={config.hyperParameters.warmupEpochs}
+              step="0.1"
+              onChange={(value) => updateHp(config, setConfig, "warmupEpochs", value)}
+              hint="Gradual learning-rate ramp at the start of training to stabilize early updates."
+            />
+            <label>
+              <span className="label-text">
+                Cosine LR
+                <Hint text="Use cosine learning-rate decay. Keep enabled for the baseline profile." />
+              </span>
+              <select
+                value={config.hyperParameters.cosLr ? "true" : "false"}
+                onChange={(event) => updateHp(config, setConfig, "cosLr", event.target.value === "true")}
+              >
+                <option value="true">true</option>
+                <option value="false">false</option>
+              </select>
+            </label>
+            <NumberField
+              label="Close mosaic"
+              value={config.hyperParameters.closeMosaic}
+              onChange={(value) => updateHp(config, setConfig, "closeMosaic", value)}
+              hint="Disable mosaic during the last N epochs to stabilize final masks."
+            />
+            <NumberField
               label="Copy-paste"
               value={config.hyperParameters.copyPaste}
               step="0.1"
               onChange={(value) => updateHp(config, setConfig, "copyPaste", value)}
               hint="Copy-paste augmentation probability (0–1). Pastes instances from one image onto another to boost rare-class recall. Usually 0–0.3."
             />
+            <NumberField label="Scale" value={config.hyperParameters.scale} step="0.01" onChange={(value) => updateHp(config, setConfig, "scale", value)} hint="Random image scale augmentation. Helps distance and seed-size variation." />
+            <NumberField label="Translate" value={config.hyperParameters.translate} step="0.01" onChange={(value) => updateHp(config, setConfig, "translate", value)} hint="Random translation augmentation. Keep low for tightly framed seed images." />
+            <NumberField label="Flip LR" value={config.hyperParameters.fliplr} step="0.1" onChange={(value) => updateHp(config, setConfig, "fliplr", value)} hint="Left-right flip probability." />
+            <NumberField label="Flip UD" value={config.hyperParameters.flipud} step="0.1" onChange={(value) => updateHp(config, setConfig, "flipud", value)} hint="Up-down flip probability. Keep at zero unless capture orientation makes this realistic." />
+            <NumberField label="Degrees" value={config.hyperParameters.degrees} step="0.1" onChange={(value) => updateHp(config, setConfig, "degrees", value)} hint="Small random rotation in degrees." />
+            <NumberField label="Shear" value={config.hyperParameters.shear} step="0.1" onChange={(value) => updateHp(config, setConfig, "shear", value)} hint="Shear augmentation. Keep zero unless validated." />
+            <NumberField label="HSV H" value={config.hyperParameters.hsvH} step="0.001" onChange={(value) => updateHp(config, setConfig, "hsvH", value)} hint="Hue augmentation for lighting variation." />
+            <NumberField label="HSV S" value={config.hyperParameters.hsvS} step="0.01" onChange={(value) => updateHp(config, setConfig, "hsvS", value)} hint="Saturation augmentation for lighting and camera variation." />
+            <NumberField label="HSV V" value={config.hyperParameters.hsvV} step="0.01" onChange={(value) => updateHp(config, setConfig, "hsvV", value)} hint="Brightness/value augmentation." />
+            <NumberField label="Mask ratio" value={config.hyperParameters.maskRatio} onChange={(value) => updateHp(config, setConfig, "maskRatio", value)} hint="Mask downsample ratio. Lower values can improve masks but cost memory and speed." />
+            <label>
+              <span className="label-text">
+                Overlap mask
+                <Hint text="YOLO segmentation mask overlap handling. Keep enabled unless an experiment proves otherwise." />
+              </span>
+              <select
+                value={config.hyperParameters.overlapMask ? "true" : "false"}
+                onChange={(event) => updateHp(config, setConfig, "overlapMask", event.target.value === "true")}
+              >
+                <option value="true">true</option>
+                <option value="false">false</option>
+              </select>
+            </label>
+            <NumberField label="Box loss" value={config.hyperParameters.box} step="0.1" onChange={(value) => updateHp(config, setConfig, "box", value)} hint="Box loss gain. Tune only in controlled experiments." />
+            <NumberField label="Cls loss" value={config.hyperParameters.cls} step="0.1" onChange={(value) => updateHp(config, setConfig, "cls", value)} hint="Class loss gain. Relevant to banana vs banana_spot separation." />
+            <NumberField label="Multi-scale" value={config.hyperParameters.multiScale} step="0.05" onChange={(value) => updateHp(config, setConfig, "multiScale", value)} hint="Randomly varies training image size by this fraction. Keep zero unless testing scale robustness." />
           </div>
         </details>
         <label>

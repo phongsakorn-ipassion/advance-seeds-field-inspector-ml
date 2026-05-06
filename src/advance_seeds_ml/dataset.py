@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ class DatasetReport:
     split_images: dict[str, int] = field(default_factory=dict)
     split_labels: dict[str, int] = field(default_factory=dict)
     class_counts: dict[int, int] = field(default_factory=dict)
+    duplicate_images: dict[str, list[Path]] = field(default_factory=dict)
     issues: list[LabelIssue] = field(default_factory=list)
 
     @property
@@ -98,6 +100,7 @@ def validate_yolo_seg_dataset(config_path: str | Path) -> DatasetReport:
     root = _resolve_path(config_dir, config["path"])
     class_names = _normalize_names(config["names"])
     report = DatasetReport(root=root, class_names=class_names)
+    image_hashes: dict[str, tuple[str, Path]] = {}
 
     for split in ("train", "val", "test"):
         image_dir = root / str(config.get(split, f"images/{split}"))
@@ -108,8 +111,11 @@ def validate_yolo_seg_dataset(config_path: str | Path) -> DatasetReport:
         report.split_labels[split] = len(labels)
         if images and not label_dir.exists():
             report.issues.append(LabelIssue(label_dir, 0, "label directory is missing"))
+        _validate_image_label_pairs(images, labels, report)
+        _validate_duplicate_images(split, images, image_hashes, report)
         _validate_split_labels(labels, class_names, report)
 
+    _validate_class_balance(report)
     return report
 
 
@@ -165,6 +171,69 @@ def _validate_split_labels(
             report.class_counts[class_id] = report.class_counts.get(class_id, 0) + 1
 
 
+def _validate_image_label_pairs(
+    images: list[Path],
+    labels: list[Path],
+    report: DatasetReport,
+) -> None:
+    image_stems = {path.stem for path in images}
+    label_stems = {path.stem for path in labels}
+    for image_path in images:
+        if image_path.stem not in label_stems:
+            report.issues.append(LabelIssue(image_path, 0, "matching label file is missing"))
+    for label_path in labels:
+        if label_path.stem not in image_stems:
+            report.issues.append(LabelIssue(label_path, 0, "label file has no matching image"))
+
+
+def _validate_duplicate_images(
+    split: str,
+    images: list[Path],
+    image_hashes: dict[str, tuple[str, Path]],
+    report: DatasetReport,
+) -> None:
+    for image_path in images:
+        digest = _sha256_file(image_path)
+        previous = image_hashes.get(digest)
+        if previous is None:
+            image_hashes[digest] = (split, image_path)
+            continue
+        previous_split, previous_path = previous
+        if previous_split != split:
+            report.duplicate_images.setdefault(digest, [previous_path]).append(image_path)
+            report.issues.append(
+                LabelIssue(
+                    image_path,
+                    0,
+                    f"duplicate image content also appears in {previous_split}: {previous_path}",
+                )
+            )
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _validate_class_balance(report: DatasetReport) -> None:
+    present_counts = [count for count in report.class_counts.values() if count > 0]
+    if len(present_counts) < 2:
+        return
+    smallest = min(present_counts)
+    largest = max(present_counts)
+    if smallest / largest < 0.05:
+        report.issues.append(
+            LabelIssue(
+                report.root,
+                0,
+                f"class imbalance is high: smallest/largest instance ratio is {smallest}/{largest}",
+            )
+        )
+
+
 def validate_yolo_seg_line(line: str, class_names: dict[int, str]) -> str | None:
     parts = line.split()
     if len(parts) < 7:
@@ -177,6 +246,7 @@ def validate_yolo_seg_line(line: str, class_names: dict[int, str]) -> str | None
         return "class id must be an integer"
     if class_id not in class_names:
         return f"class id {class_id} is not defined in dataset names"
+    coords: list[float] = []
     for value in parts[1:]:
         try:
             coord = float(value)
@@ -184,4 +254,20 @@ def validate_yolo_seg_line(line: str, class_names: dict[int, str]) -> str | None
             return f"coordinate {value!r} is not numeric"
         if coord < 0 or coord > 1:
             return f"coordinate {coord} is outside normalized range [0, 1]"
+        coords.append(coord)
+    point_count = len(coords) // 2
+    if point_count > 3000:
+        return f"polygon point count {point_count} is an outlier"
+    area = _polygon_area(coords)
+    if area < 1e-8:
+        return f"polygon area {area:.2e} is too small"
     return None
+
+
+def _polygon_area(coords: list[float]) -> float:
+    points = list(zip(coords[0::2], coords[1::2]))
+    area = 0.0
+    for index, (x1, y1) in enumerate(points):
+        x2, y2 = points[(index + 1) % len(points)]
+        area += x1 * y2 - x2 * y1
+    return abs(area) / 2.0

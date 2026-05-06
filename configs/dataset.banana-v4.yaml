@@ -1,0 +1,9 @@
+path: ../data/processed/advance-seeds-banana-v4
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: banana
+  1: banana_spot
+

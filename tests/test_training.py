@@ -35,6 +35,9 @@ class TrainingConfigTests(unittest.TestCase):
                         "batch: -1",
                         "lr0: 0.001",
                         "amp: true",
+                        "mask_ratio: 2",
+                        "overlap_mask: true",
+                        "multi_scale: 0.1",
                     ]
                 ),
                 encoding="utf-8",
@@ -44,6 +47,9 @@ class TrainingConfigTests(unittest.TestCase):
         self.assertEqual(loaded["batch"], -1)
         self.assertEqual(loaded["lr0"], 0.001)
         self.assertTrue(loaded["amp"])
+        self.assertEqual(loaded["mask_ratio"], 2)
+        self.assertTrue(loaded["overlap_mask"])
+        self.assertEqual(loaded["multi_scale"], 0.1)
 
     def test_apply_overrides_replaces_non_none_values(self):
         config = {

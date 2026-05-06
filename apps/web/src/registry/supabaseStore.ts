@@ -115,17 +115,7 @@ function fmt(ts: string | null): string {
 
 function configFromRun(run: DbRun): TrainConfig {
   const cfg = run.config_yaml ?? {};
-  const hp: HyperParameters = {
-    epochs: cfg.hyperparameters?.epochs ?? 0,
-    imgsz: cfg.hyperparameters?.imgsz ?? 0,
-    batch: cfg.hyperparameters?.batch ?? "auto",
-    patience: cfg.hyperparameters?.patience ?? 0,
-    lr0: cfg.hyperparameters?.lr0 ?? 0,
-    lrf: cfg.hyperparameters?.lrf ?? 0,
-    mosaic: cfg.hyperparameters?.mosaic ?? 0,
-    mixup: cfg.hyperparameters?.mixup ?? 0,
-    copyPaste: cfg.hyperparameters?.copyPaste ?? cfg.hyperparameters?.copy_paste ?? 0,
-  };
+  const hp = hyperParametersFrom(cfg.hyperparameters ?? {});
   return {
     modelLine: cfg.model_line ?? cfg.modelLine ?? "seeds-poc",
     dataset: cfg.dataset ?? "",
@@ -141,6 +131,48 @@ function configFromRun(run: DbRun): TrainConfig {
     colabAccelerator: cfg.colab_accelerator ?? cfg.colabAccelerator ?? "T4",
     note: typeof cfg.note === "string" ? cfg.note : "",
   };
+}
+
+function hyperParametersFrom(hp: any, inputSize?: number): HyperParameters {
+  return {
+    epochs: numberOr(hp.epochs, 0),
+    imgsz: numberOr(hp.imgsz ?? inputSize, 0),
+    batch: String(hp.batch ?? "auto"),
+    patience: numberOr(hp.patience, 0),
+    optimizer: String(hp.optimizer ?? "auto"),
+    lr0: numberOr(hp.lr0, 0),
+    lrf: numberOr(hp.lrf, 0),
+    momentum: numberOr(hp.momentum, 0),
+    weightDecay: numberOr(hp.weightDecay ?? hp.weight_decay, 0),
+    warmupEpochs: numberOr(hp.warmupEpochs ?? hp.warmup_epochs, 0),
+    cosLr: booleanOr(hp.cosLr ?? hp.cos_lr, false),
+    closeMosaic: numberOr(hp.closeMosaic ?? hp.close_mosaic, 0),
+    mosaic: numberOr(hp.mosaic, 0),
+    mixup: numberOr(hp.mixup, 0),
+    copyPaste: numberOr(hp.copyPaste ?? hp.copy_paste, 0),
+    scale: numberOr(hp.scale, 0),
+    translate: numberOr(hp.translate, 0),
+    fliplr: numberOr(hp.fliplr, 0),
+    flipud: numberOr(hp.flipud, 0),
+    degrees: numberOr(hp.degrees, 0),
+    shear: numberOr(hp.shear, 0),
+    hsvH: numberOr(hp.hsvH ?? hp.hsv_h, 0),
+    hsvS: numberOr(hp.hsvS ?? hp.hsv_s, 0),
+    hsvV: numberOr(hp.hsvV ?? hp.hsv_v, 0),
+    maskRatio: numberOr(hp.maskRatio ?? hp.mask_ratio, 0),
+    overlapMask: booleanOr(hp.overlapMask ?? hp.overlap_mask, false),
+    box: numberOr(hp.box, 0),
+    cls: numberOr(hp.cls, 0),
+    multiScale: numberOr(hp.multiScale ?? hp.multi_scale, 0),
+  };
+}
+
+function numberOr(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function booleanOr(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
 }
 
 // Derive 0-100 progress from run_metrics. Default: use the latest reported
@@ -219,17 +251,7 @@ function mapVersion(v: DbVersion, channelByVersion: Map<string, ChannelName>): R
     dataset: md.dataset ?? "",
     datasetStats: datasetStatsFrom(md),
     classes: md.class_names ?? [],
-    hyperParameters: {
-      epochs: hp.epochs ?? 0,
-      imgsz: hp.imgsz ?? md.input_size ?? 0,
-      batch: hp.batch ?? "auto",
-      patience: hp.patience ?? 0,
-      lr0: hp.lr0 ?? 0,
-      lrf: hp.lrf ?? 0,
-      mosaic: hp.mosaic ?? 0,
-      mixup: hp.mixup ?? 0,
-      copyPaste: hp.copy_paste ?? hp.copyPaste ?? 0,
-    },
+    hyperParameters: hyperParametersFrom(hp, md.input_size),
     map50: md.metrics?.map50 ?? 0,
     maskMap: md.metrics?.mask_map ?? 0,
     sizeMb: v.size_bytes / (1024 * 1024),

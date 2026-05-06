@@ -39,7 +39,7 @@ class DatasetTests(unittest.TestCase):
             for split in ("train", "val", "test"):
                 (dataset / "images" / split).mkdir(parents=True)
                 (dataset / "labels" / split).mkdir(parents=True)
-                (dataset / "images" / split / f"{split}.jpg").write_bytes(b"fake")
+                (dataset / "images" / split / f"{split}.jpg").write_bytes(f"fake-{split}".encode("utf-8"))
                 (dataset / "labels" / split / f"{split}.txt").write_text(
                     "0 0.10 0.10 0.20 0.10 0.20 0.20\n",
                     encoding="utf-8",
@@ -68,6 +68,59 @@ names:
         self.assertEqual(report.split_images, {"train": 1, "val": 1, "test": 1})
         self.assertEqual(report.class_names, POC_CLASS_NAMES)
         self.assertEqual(report.class_counts, {0: 3})
+
+    def test_dataset_report_flags_missing_label_pair(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "dataset"
+            (dataset / "images" / "train").mkdir(parents=True)
+            (dataset / "labels" / "train").mkdir(parents=True)
+            (dataset / "images" / "train" / "seed.jpg").write_bytes(b"seed")
+            config = root / "dataset.yaml"
+            config.write_text(
+                f"""
+path: {dataset}
+train: images/train
+val: images/train
+names:
+  0: banana
+""",
+                encoding="utf-8",
+            )
+
+            report = validate_yolo_seg_dataset(config)
+
+        self.assertFalse(report.ok)
+        self.assertIn("matching label file is missing", report.issues[0].message)
+
+    def test_dataset_report_flags_duplicate_images_across_splits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "dataset"
+            for split in ("train", "val"):
+                (dataset / "images" / split).mkdir(parents=True)
+                (dataset / "labels" / split).mkdir(parents=True)
+                (dataset / "images" / split / f"{split}.jpg").write_bytes(b"same")
+                (dataset / "labels" / split / f"{split}.txt").write_text(
+                    "0 0.10 0.10 0.20 0.10 0.20 0.20\n",
+                    encoding="utf-8",
+                )
+            config = root / "dataset.yaml"
+            config.write_text(
+                f"""
+path: {dataset}
+train: images/train
+val: images/val
+names:
+  0: banana
+""",
+                encoding="utf-8",
+            )
+
+            report = validate_yolo_seg_dataset(config)
+
+        self.assertFalse(report.ok)
+        self.assertIn("duplicate image content", report.issues[0].message)
 
 
 if __name__ == "__main__":

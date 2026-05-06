@@ -7,11 +7,31 @@ export type HyperParameters = {
   imgsz: number;
   batch: string;
   patience: number;
+  optimizer: string;
   lr0: number;
   lrf: number;
+  momentum: number;
+  weightDecay: number;
+  warmupEpochs: number;
+  cosLr: boolean;
+  closeMosaic: number;
   mosaic: number;
   mixup: number;
   copyPaste: number;
+  scale: number;
+  translate: number;
+  fliplr: number;
+  flipud: number;
+  degrees: number;
+  shear: number;
+  hsvH: number;
+  hsvS: number;
+  hsvV: number;
+  maskRatio: number;
+  overlapMask: boolean;
+  box: number;
+  cls: number;
+  multiScale: number;
 };
 
 export type TrainConfig = {

@@ -1,0 +1,53 @@
+# Banana v4 Copy-Paste segmentation trial.
+# Compare against configs/train.banana-v4.yaml before promotion.
+
+model: yolo26n-seg.pt
+data: configs/dataset.banana-v4.yaml
+project: runs/banana-v4
+name: banana-v4-copy-paste-trial
+
+epochs: 50
+patience: 20
+imgsz: 640
+batch: auto
+workers: auto
+device: auto
+seed: 42
+deterministic: true
+pretrained: true
+cache: auto
+amp: auto
+
+optimizer: auto
+lr0: 0.001
+lrf: 0.0495
+momentum: 0.947
+weight_decay: 0.00064
+warmup_epochs: 1.0
+cos_lr: true
+close_mosaic: 10
+
+mosaic: 0.5
+mixup: 0.0
+copy_paste: 0.1
+scale: 0.56
+translate: 0.07
+fliplr: 0.5
+flipud: 0.0
+degrees: 2.0
+shear: 0.0
+hsv_h: 0.014
+hsv_s: 0.5
+hsv_v: 0.4
+
+mask_ratio: 4
+overlap_mask: true
+box: 7.5
+cls: 0.5
+multi_scale: 0.0
+
+save: true
+save_period: 10
+plots: true
+val: true
+

@@ -414,10 +414,56 @@ def build_training_config(run_row: dict, repo_root: Path, client: RegistryClient
         "mixup": float(hp.get("mixup", 0.0)),
         "copy_paste": float(hp.get("copy_paste", hp.get("copyPaste", 0.0))),
     }
+    for target, aliases, coercer in optional_training_hyperparameters():
+        value = first_present(hp, *aliases)
+        if value is not None:
+            config[target] = coercer(value)
     config = apply_hardware_profile(config, detect_hardware())
     config = resolve_training_paths(config, repo_root)
     config = materialize_ultralytics_dataset_config(config, repo_root / "runs" / "_runtime_datasets")
     return config
+
+
+def optional_training_hyperparameters():
+    return (
+        ("optimizer", ("optimizer",), str),
+        ("momentum", ("momentum",), float),
+        ("weight_decay", ("weight_decay", "weightDecay"), float),
+        ("warmup_epochs", ("warmup_epochs", "warmupEpochs"), float),
+        ("cos_lr", ("cos_lr", "cosLr"), coerce_bool),
+        ("close_mosaic", ("close_mosaic", "closeMosaic"), int),
+        ("scale", ("scale",), float),
+        ("translate", ("translate",), float),
+        ("fliplr", ("fliplr",), float),
+        ("flipud", ("flipud",), float),
+        ("degrees", ("degrees",), float),
+        ("shear", ("shear",), float),
+        ("hsv_h", ("hsv_h", "hsvH"), float),
+        ("hsv_s", ("hsv_s", "hsvS"), float),
+        ("hsv_v", ("hsv_v", "hsvV"), float),
+        ("mask_ratio", ("mask_ratio", "maskRatio"), int),
+        ("overlap_mask", ("overlap_mask", "overlapMask"), coerce_bool),
+        ("box", ("box",), float),
+        ("cls", ("cls",), float),
+        ("multi_scale", ("multi_scale", "multiScale"), float),
+    )
+
+
+def first_present(mapping: dict, *keys: str):
+    for key in keys:
+        if key in mapping:
+            return mapping[key]
+    return None
+
+
+def coerce_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if str(value).lower() in {"true", "1", "yes"}:
+        return True
+    if str(value).lower() in {"false", "0", "no"}:
+        return False
+    raise ValueError(f"expected boolean value, got {value!r}")
 
 
 def main(argv: list[str] | None = None) -> int:
