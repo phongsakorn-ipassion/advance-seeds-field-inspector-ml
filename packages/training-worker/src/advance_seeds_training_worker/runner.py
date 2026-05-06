@@ -90,14 +90,24 @@ class HostedTrainingWorker:
                     kind="coreml",
                     transport=self.config.transport,
                 )
+                uploaded_pytorch = upload_artifact(
+                    registry_url=self.config.registry_url,
+                    service_role_key=self.config.service_role_key,
+                    run_id=run_id,
+                    semver=semver,
+                    path=artifacts["pytorch"],
+                    kind="pytorch",
+                    transport=self.config.transport,
+                )
                 callback.succeeded(
                     run_id=run_id,
                     semver=semver,
                     metrics=final_metrics,
                     **uploaded_tflite,
                     **uploaded_coreml,
+                    **uploaded_pytorch,
                 )
-                return {"run_id": run_id, "semver": semver, **uploaded_tflite, **uploaded_coreml, "metrics": final_metrics}
+                return {"run_id": run_id, "semver": semver, **uploaded_tflite, **uploaded_coreml, **uploaded_pytorch, "metrics": final_metrics}
         except Exception as exc:
             callback.failed(run_id=run_id, error=str(exc))
             raise
@@ -144,19 +154,25 @@ def materialize_dataset(config: dict[str, Any], workdir: Path) -> Path:
 def resolve_artifact_paths(config: dict[str, Any], workdir: Path) -> dict[str, Path]:
     explicit = config.get("artifact_path") or config.get("artifactPath")
     explicit_coreml = config.get("coreml_artifact_path") or config.get("coremlArtifactPath")
+    explicit_pytorch = config.get("pytorch_artifact_path") or config.get("pytorchArtifactPath")
     tflite = Path(str(explicit)) if explicit else latest_matching(workdir / "runs", "*.tflite")
     coreml = Path(str(explicit_coreml)) if explicit_coreml else (
         latest_matching(workdir / "runs", "*.mlpackage") or latest_matching(workdir / "runs", "*.mlmodel")
     )
+    pytorch = Path(str(explicit_pytorch)) if explicit_pytorch else latest_matching(workdir / "runs", "best.pt")
     if tflite and not tflite.is_absolute():
         tflite = workdir / tflite
     if coreml and not coreml.is_absolute():
         coreml = workdir / coreml
+    if pytorch and not pytorch.is_absolute():
+        pytorch = workdir / pytorch
     if not tflite:
         raise FileNotFoundError("training completed but no .tflite artifact was found")
     if not coreml:
         raise FileNotFoundError("training completed but no Core ML artifact was found")
-    return {"tflite": tflite, "coreml": coreml}
+    if not pytorch:
+        raise FileNotFoundError("training completed but no original .pt artifact was found")
+    return {"tflite": tflite, "coreml": coreml, "pytorch": pytorch}
 
 
 def latest_matching(root: Path, pattern: str) -> Path | None:
@@ -216,11 +232,14 @@ def upload_artifact(
         {"content-type": "application/zip" if kind == "coreml" and path.is_dir() else "application/octet-stream", "content-length": str(len(data))},
         data,
     )
-    result = {
-        "tflite_r2_key" if kind == "tflite" else "mlmodel_r2_key": str(signed["r2_key"]),
-        "size_bytes" if kind == "tflite" else "mlmodel_size_bytes": len(data),
-        "content_hash" if kind == "tflite" else "mlmodel_content_hash": content_hash,
-    }
+    if kind == "tflite":
+        result = {"tflite_r2_key": str(signed["r2_key"]), "size_bytes": len(data), "content_hash": content_hash}
+    elif kind == "coreml":
+        result = {"mlmodel_r2_key": str(signed["r2_key"]), "mlmodel_size_bytes": len(data), "mlmodel_content_hash": content_hash}
+    elif kind in {"pytorch", "pt"}:
+        result = {"pytorch_r2_key": str(signed["r2_key"]), "pytorch_size_bytes": len(data), "pytorch_content_hash": content_hash}
+    else:
+        raise ValueError(f"unsupported artifact kind: {kind}")
     if cleanup is not None:
         cleanup.cleanup()
     return result

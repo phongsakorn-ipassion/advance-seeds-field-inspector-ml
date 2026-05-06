@@ -62,13 +62,15 @@ candidate models for app QA.
 
 ### Requirement: Candidate manifests
 Each exported candidate SHALL include a manifest that records platform artifact
-paths, SHA-256 hashes, byte sizes, source weights, dataset config, training
-results, and metadata path.
+paths, SHA-256 hashes, byte sizes, the original non-quantized PyTorch `.pt`
+artifact, source weights, dataset config, training results, and metadata path.
 
 #### Scenario: Candidate manifest supports app download validation
 - **WHEN** a candidate manifest is inspected
 - **THEN** it contains a `tflite` artifact entry with `path`, `sha256`, and `size_bytes`
 - **AND** it contains a `coreml` artifact entry with `path`, `sha256`, and `size_bytes`
+- **AND** it contains a `pytorch` artifact entry with `path`, `sha256`,
+  `size_bytes`, and `precision=fp32`
 - **AND** the candidate metadata path is recorded
 
 ### Requirement: Candidate index
@@ -89,4 +91,3 @@ browsing, downloading, validation, activation, fallback, and rollback.
 - **THEN** Android TensorFlow Lite loading requirements are described
 - **AND** iOS Core ML package or compiled model loading requirements are described
 - **AND** SHA-256 validation and smoke inference are required before activation
-

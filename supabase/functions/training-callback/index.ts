@@ -88,6 +88,16 @@ async function applyEvent(event: CallbackEvent): Promise<void> {
         size_bytes: event.size_bytes,
         content_hash: contentHash,
       },
+      ...(event.pytorch_r2_key
+        ? {
+          pytorch: {
+            r2_key: event.pytorch_r2_key,
+            size_bytes: event.pytorch_size_bytes,
+            content_hash: event.pytorch_content_hash,
+            quantization: { precision: "fp32", method: "none", source: "best_weights" },
+          },
+        }
+        : {}),
       ...(event.mlmodel_r2_key
         ? {
           coreml: {
@@ -108,6 +118,7 @@ async function applyEvent(event: CallbackEvent): Promise<void> {
     metadata,
     tflite_r2_key: event.tflite_r2_key,
     mlmodel_r2_key: event.mlmodel_r2_key ?? null,
+    pytorch_r2_key: event.pytorch_r2_key ?? null,
     size_bytes: event.size_bytes,
     content_hash: contentHash,
   });

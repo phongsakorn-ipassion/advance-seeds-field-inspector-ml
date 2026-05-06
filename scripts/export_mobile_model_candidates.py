@@ -79,6 +79,16 @@ def export_model(candidate: ExportCandidate, output_root: Path, imgsz: int) -> d
     target_dir.mkdir(parents=True, exist_ok=True)
 
     artifacts: dict[str, dict[str, Any]] = {}
+    pytorch_destination = target_dir / f"{candidate.key}.pt"
+    if not pytorch_destination.exists():
+        copy_artifact(candidate.weights, pytorch_destination)
+    artifacts["pytorch"] = {
+        "path": str(pytorch_destination),
+        "sha256": sha256_path(pytorch_destination),
+        "size_bytes": file_size(pytorch_destination),
+        "quantization": "none",
+        "precision": "fp32",
+    }
     materialize_ultralytics_dataset_config(
         {"data": str(candidate.dataset_config)},
         output_root / "_runtime_datasets",

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Advance Seeds Model Registry",
-    "description": "Public mobile-facing model registry endpoints for listing selectable models and resolving the default model package.",
+    "description": "Public mobile-facing model registry endpoints for listing selectable Android TF Lite and iOS Core ML models and resolving the default model package. Original PyTorch .pt artifacts are admin dashboard downloads, not mobile endpoint responses.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [

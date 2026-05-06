@@ -74,6 +74,7 @@ type DbVersion = {
   metadata: any;
   tflite_r2_key: string;
   mlmodel_r2_key: string | null;
+  pytorch_r2_key: string | null;
   size_bytes: number;
   content_hash: string;
   created_at: string;
@@ -205,6 +206,7 @@ function mapVersion(v: DbVersion, channelByVersion: Map<string, ChannelName>): R
   const hp = md.hyperparameters ?? {};
   const tfliteArtifact = md.artifacts?.tflite ?? {};
   const coremlArtifact = md.artifacts?.coreml ?? {};
+  const pytorchArtifact = md.artifacts?.pytorch ?? {};
   const channelName = channelByVersion.get(v.id);
   const isArchived = Boolean(md.archived_at ?? md.artifacts_deleted_at ?? md.artifacts_archived_at);
   const state: VersionState = isArchived ? "archived" : channelName ?? "inactive";
@@ -238,6 +240,10 @@ function mapVersion(v: DbVersion, channelByVersion: Map<string, ChannelName>): R
     coremlSizeMb: typeof coremlArtifact.size_bytes === "number" ? coremlArtifact.size_bytes / (1024 * 1024) : null,
     coremlContentHash: typeof coremlArtifact.content_hash === "string" ? coremlArtifact.content_hash : null,
     coremlPrecision: typeof coremlArtifact.quantization?.precision === "string" ? coremlArtifact.quantization.precision : null,
+    pytorchR2Key: v.pytorch_r2_key ?? (typeof pytorchArtifact.r2_key === "string" ? pytorchArtifact.r2_key : null),
+    pytorchSizeMb: typeof pytorchArtifact.size_bytes === "number" ? pytorchArtifact.size_bytes / (1024 * 1024) : null,
+    pytorchContentHash: typeof pytorchArtifact.content_hash === "string" ? pytorchArtifact.content_hash : null,
+    pytorchPrecision: typeof pytorchArtifact.quantization?.precision === "string" ? pytorchArtifact.quantization.precision : null,
     compatSignature: v.compat_signature ?? "",
     createdAt: fmt(v.created_at),
     description: typeof md.description === "string" ? md.description : "",
@@ -289,6 +295,18 @@ function storageFromVersions(versions: DbVersion[], channels: DbChannel[], deplo
         key: v.mlmodel_r2_key,
         kind: "coreml",
         sizeMb: (typeof coremlSize === "number" ? coremlSize : v.size_bytes) / (1024 * 1024),
+        active: active.has(v.id),
+      });
+    }
+    const pytorchKey = v.pytorch_r2_key ?? (typeof md.artifacts?.pytorch?.r2_key === "string" ? md.artifacts.pytorch.r2_key : null);
+    if (pytorchKey) {
+      const pytorchSize = md.artifacts?.pytorch?.size_bytes;
+      items.push({
+        id: `${v.id}-pytorch`,
+        versionId: v.id,
+        key: pytorchKey,
+        kind: "pytorch",
+        sizeMb: (typeof pytorchSize === "number" ? pytorchSize : v.size_bytes) / (1024 * 1024),
         active: active.has(v.id),
       });
     }
@@ -660,7 +678,7 @@ export function createSupabaseStore(env: Env): RegistryStore {
     },
     async deleteInactiveArtifact(storageId) {
       await adminWrite(async () => {
-        const versionId = storageId.replace(/-(tflite|coreml)$/, "");
+        const versionId = storageId.replace(/-(tflite|coreml|pytorch)$/, "");
         await archiveVersionById(versionId);
         await refresh();
       });

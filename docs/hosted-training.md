@@ -21,7 +21,8 @@ anon key plus RLS boundary.
   status.
 - `packages/training-worker`: Python worker package. The Modal app entrypoint
   wraps `scripts/train_yolo26n_seg.py`, streams logs/metrics, uploads the final
-  TFLite artifact via `upload-artifact`, then emits a signed success callback.
+  TF Lite, Core ML, and original non-quantized PyTorch `.pt` artifacts via
+  `upload-artifact`, then emits a signed success callback.
 
 ## Supabase Secrets
 
@@ -67,6 +68,11 @@ MODEL_REGISTRY_URL=https://gqsxiohxokgwwugeoxmy.supabase.co
 MODEL_REGISTRY_SERVICE_ROLE_KEY=<service-role-key>
 PROVIDER_API_KEY=<provider-api-key>
 ```
+
+The callback writes `versions.tflite_r2_key`, `versions.mlmodel_r2_key`, and
+`versions.pytorch_r2_key`. The `.pt` artifact is for local segmentation checks;
+mobile listing and channel resolution still serve only Android TF Lite or iOS
+Core ML packages.
 
 The provider adapter called by `start-training` must expose:
 

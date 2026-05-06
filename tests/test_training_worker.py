@@ -21,7 +21,7 @@ class RecordingTransport:
         self.requests.append({"method": method, "url": url, "headers": dict(headers), "body": body})
         if method == "POST" and url.endswith("/functions/v1/upload-artifact"):
             payload = json.loads(body.decode("utf-8"))
-            ext = "tflite" if payload["kind"] == "tflite" else "mlpackage.zip"
+            ext = "tflite" if payload["kind"] == "tflite" else "pt" if payload["kind"] == "pytorch" else "mlpackage.zip"
             return {"upload_url": f"https://r2.example/upload-{payload['kind']}", "r2_key": f"runs/{RUN_ID}/0.1.test.{ext}"}
         return {}
 
@@ -53,6 +53,8 @@ class TrainingWorkerTests(unittest.TestCase):
             coreml = Path(tmp) / "model.mlpackage"
             coreml.mkdir()
             (coreml / "Manifest.json").write_text("{}", encoding="utf-8")
+            pytorch = Path(tmp) / "best.pt"
+            pytorch.write_bytes(b"weights")
             dataset = Path(tmp) / "dataset.yaml"
             dataset.write_text("path: .\ntrain: images\nval: images\nnames:\n  0: banana\n", encoding="utf-8")
 
@@ -74,6 +76,7 @@ class TrainingWorkerTests(unittest.TestCase):
                     "hyperparameters": {"epochs": 1, "imgsz": 32},
                     "artifact_path": str(artifact),
                     "coreml_artifact_path": str(coreml),
+                    "pytorch_artifact_path": str(pytorch),
                     "semver": "0.1.test",
                 },
                 callback_url="https://registry.example/functions/v1/training-callback",
@@ -89,8 +92,9 @@ class TrainingWorkerTests(unittest.TestCase):
         self.assertEqual(callback_events[-1]["type"], "succeeded")
         self.assertEqual(callback_events[-1]["tflite_r2_key"], f"runs/{RUN_ID}/0.1.test.tflite")
         self.assertEqual(callback_events[-1]["mlmodel_r2_key"], f"runs/{RUN_ID}/0.1.test.mlpackage.zip")
+        self.assertEqual(callback_events[-1]["pytorch_r2_key"], f"runs/{RUN_ID}/0.1.test.pt")
         self.assertEqual(result["size_bytes"], 5)
-        self.assertEqual([req["method"] for req in transport.requests if "r2.example" in req["url"]], ["PUT", "PUT"])
+        self.assertEqual([req["method"] for req in transport.requests if "r2.example" in req["url"]], ["PUT", "PUT", "PUT"])
 
     def test_worker_reports_failed_event_when_training_raises(self):
         transport = RecordingTransport()

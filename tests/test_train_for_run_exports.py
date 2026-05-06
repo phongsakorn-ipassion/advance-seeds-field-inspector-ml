@@ -63,6 +63,17 @@ class TrainForRunExportTests(unittest.TestCase):
         self.assertEqual(metadata["r2_key"], "runs/x/model.tflite")
         self.assertEqual(metadata["quantization"]["precision"], "int8")
 
+    def test_artifact_metadata_records_pytorch_fp32(self):
+        metadata = self.module.artifact_metadata(
+            kind="pytorch",
+            artifact=type("Artifact", (), {"r2_key": "runs/x/model.pt", "size_bytes": 20, "content_hash": "sha256:pt"})(),
+            quantization={"precision": "fp32", "method": "none"},
+        )
+
+        self.assertEqual(metadata["r2_key"], "runs/x/model.pt")
+        self.assertEqual(metadata["size_bytes"], 20)
+        self.assertEqual(metadata["quantization"]["precision"], "fp32")
+
     def test_dataset_bundle_root_layout_extracts_to_dataset_root(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)

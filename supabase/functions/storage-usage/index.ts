@@ -49,7 +49,7 @@ async function handleUsage(): Promise<Response> {
     .from("versions")
     .select("size_bytes, metadata");
   if (error) return json({ error: error.message }, 500);
-  const used = (data ?? []).reduce((sum, row) => isArchivedMetadata(row.metadata) ? sum : sum + (row.size_bytes ?? 0), 0);
+  const used = (data ?? []).reduce((sum, row) => isArchivedMetadata(row.metadata) ? sum : sum + artifactBytes(row), 0);
   const quota = Number(Deno.env.get("STORAGE_QUOTA_BYTES") ?? 512 * 1024 * 1024);
   return json({ used_bytes: used, quota_bytes: quota });
 }
@@ -58,7 +58,7 @@ async function handleDelete(versionId: string): Promise<Response> {
   const sb = serviceClient();
   const { data: version, error } = await sb
     .from("versions")
-    .select("id, tflite_r2_key, mlmodel_r2_key")
+    .select("id, tflite_r2_key, mlmodel_r2_key, pytorch_r2_key")
     .eq("id", versionId)
     .single();
   if (error || !version) return json({ error: "version not found" }, 404);
@@ -86,6 +86,7 @@ async function handleDelete(versionId: string): Promise<Response> {
   try {
     if (version.tflite_r2_key) await deleteObject(version.tflite_r2_key);
     if (version.mlmodel_r2_key) await deleteObject(version.mlmodel_r2_key);
+    if (version.pytorch_r2_key) await deleteObject(version.pytorch_r2_key);
   } catch (err) {
     return json({ error: `r2 delete failed: ${err instanceof Error ? err.message : String(err)}` }, 502);
   }
@@ -111,7 +112,7 @@ async function handleArchive(versionId: string, archivedBy: string | null): Prom
   const sb = serviceClient();
   const { data: version, error } = await sb
     .from("versions")
-    .select("id, tflite_r2_key, mlmodel_r2_key, size_bytes, content_hash, metadata")
+    .select("id, tflite_r2_key, mlmodel_r2_key, pytorch_r2_key, size_bytes, content_hash, metadata")
     .eq("id", versionId)
     .single();
   if (error || !version) return json({ error: "version not found" }, 404);
@@ -139,6 +140,7 @@ async function handleArchive(versionId: string, archivedBy: string | null): Prom
   try {
     if (version.tflite_r2_key) await deleteObject(version.tflite_r2_key);
     if (version.mlmodel_r2_key) await deleteObject(version.mlmodel_r2_key);
+    if (version.pytorch_r2_key) await deleteObject(version.pytorch_r2_key);
   } catch (err) {
     return json({ error: `r2 delete failed: ${err instanceof Error ? err.message : String(err)}` }, 502);
   }
@@ -153,6 +155,7 @@ async function handleArchive(versionId: string, archivedBy: string | null): Prom
     archived_artifacts: {
       tflite_r2_key: version.tflite_r2_key,
       mlmodel_r2_key: version.mlmodel_r2_key,
+      pytorch_r2_key: version.pytorch_r2_key,
       size_bytes: version.size_bytes,
       content_hash: version.content_hash,
     },
@@ -169,6 +172,16 @@ function isArchivedMetadata(metadata: unknown): boolean {
   if (!metadata || typeof metadata !== "object") return false;
   const md = metadata as Record<string, unknown>;
   return Boolean(md.archived_at ?? md.artifacts_deleted_at ?? md.artifacts_archived_at);
+}
+
+function artifactBytes(row: { size_bytes?: number | null; metadata?: unknown }): number {
+  const md = row.metadata && typeof row.metadata === "object" ? row.metadata as Record<string, unknown> : {};
+  const artifacts = md.artifacts && typeof md.artifacts === "object" ? md.artifacts as Record<string, unknown> : {};
+  const sizes = Object.values(artifacts)
+    .map((artifact) => artifact && typeof artifact === "object" ? (artifact as Record<string, unknown>).size_bytes : null)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (sizes.length > 0) return sizes.reduce((sum, value) => sum + value, 0);
+  return row.size_bytes ?? 0;
 }
 
 function json(b: unknown, status = 200): Response {

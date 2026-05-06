@@ -426,6 +426,8 @@ def main(argv: list[str] | None = None) -> int:
         best = save_dir / "weights" / "last.pt"
 
     semver = f"1.0.0-{args.run_id[:8]}"
+    append_log(f"Preserving original PyTorch weights for local segmentation QA: {best.name}")
+
     tflite_path: Path
     tflite_export_kwargs = export_kwargs("tflite", config)
     tflite_quantization = quantization_metadata("tflite", tflite_export_kwargs)
@@ -460,6 +462,13 @@ def main(argv: list[str] | None = None) -> int:
         finalize_run("failed")
         raise
 
+    pytorch_artifact = client.upload_artifact(
+        best,
+        kind="pytorch",
+        run_id=args.run_id,
+        semver=semver,
+        content_type="application/octet-stream",
+    )
     tflite_artifact = client.upload_artifact(
         tflite_path,
         kind="tflite",
@@ -483,12 +492,20 @@ def main(argv: list[str] | None = None) -> int:
             "dataset": run_row.get("config_yaml", {}).get("dataset"),
             "source_weights": run_row.get("config_yaml", {}).get("source_weights"),
             "class_names": run_row.get("config_yaml", {}).get("classes", []),
+            "input_size": int(config.get("imgsz", 640)),
+            "output_kind": "segmentation-mask",
+            "task": "segmentation",
             "hyperparameters": run_row.get("config_yaml", {}).get("hyperparameters", {}),
             "metrics": {
                 "map50": float(metrics_dict.get("metrics/mAP50(B)", 0.0)),
                 "mask_map": float(metrics_dict.get("metrics/mAP50-95(M)", 0.0)),
             },
             "artifacts": {
+                "pytorch": artifact_metadata(
+                    kind="pytorch",
+                    artifact=pytorch_artifact,
+                    quantization={"precision": "fp32", "method": "none", "source": "best_weights"},
+                ),
                 "tflite": artifact_metadata(
                     kind="tflite",
                     artifact=tflite_artifact,
@@ -507,6 +524,7 @@ def main(argv: list[str] | None = None) -> int:
         },
         tflite_r2_key=tflite_artifact.r2_key,
         mlmodel_r2_key=coreml_artifact.r2_key,
+        pytorch_r2_key=pytorch_artifact.r2_key,
         size_bytes=tflite_artifact.size_bytes,
         content_hash=tflite_artifact.content_hash,
     )

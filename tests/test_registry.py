@@ -164,6 +164,7 @@ class RegistryClientTests(unittest.TestCase):
             semver="1.0.0",
             metadata={"class_names": ["banana"], "input_size": 640, "output_kind": "end2end_nms_free", "task": "segment"},
             tflite_r2_key="runs/run-1/1.0.0.tflite",
+            pytorch_r2_key="runs/run-1/1.0.0.pt",
             size_bytes=11,
             content_hash="sha256:abc",
         )
@@ -177,6 +178,7 @@ class RegistryClientTests(unittest.TestCase):
         self.assertEqual(body["semver"], "1.0.0")
         self.assertEqual(body["metadata"]["class_names"], ["banana"])
         self.assertEqual(body["tflite_r2_key"], "runs/run-1/1.0.0.tflite")
+        self.assertEqual(body["pytorch_r2_key"], "runs/run-1/1.0.0.pt")
         self.assertEqual(body["size_bytes"], 11)
         self.assertEqual(body["content_hash"], "sha256:abc")
 

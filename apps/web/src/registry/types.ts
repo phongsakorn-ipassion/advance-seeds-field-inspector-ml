@@ -93,6 +93,10 @@ export type RegistryVersion = {
   coremlSizeMb?: number | null;
   coremlContentHash?: string | null;
   coremlPrecision?: string | null;
+  pytorchR2Key?: string | null;
+  pytorchSizeMb?: number | null;
+  pytorchContentHash?: string | null;
+  pytorchPrecision?: string | null;
   compatSignature: string;
   createdAt: string;
   description?: string;
@@ -103,7 +107,7 @@ export type StorageObject = {
   id: string;
   versionId: string;
   key: string;
-  kind: "tflite" | "coreml" | "metadata";
+  kind: "tflite" | "coreml" | "pytorch" | "metadata";
   sizeMb: number;
   active: boolean;
 };

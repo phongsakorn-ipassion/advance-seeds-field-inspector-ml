@@ -1240,14 +1240,17 @@ function TrainWorkflow({
         <label>
           <span className="label-text">
             Source weights
-            <Hint text="Pretrained YOLO checkpoint to fine-tune. n is fastest and smallest, s is slightly larger but more accurate. Pick n for tight latency budgets, s when you have headroom." />
+            <Hint text="Pretrained YOLO26 segmentation checkpoint to fine-tune. Larger variants improve capacity but increase training/export cost and mobile latency." />
           </span>
           <select
             value={config.sourceWeights}
             onChange={(event) => setConfig({ ...config, sourceWeights: event.target.value })}
           >
             <option value="yolo26n-seg.pt">yolo26n-seg.pt — nano (fast, smallest)</option>
-            <option value="yolo26s-seg.pt">yolo26s-seg.pt — small (more accurate)</option>
+            <option value="yolo26s-seg.pt">yolo26s-seg.pt — small (balanced mobile baseline)</option>
+            <option value="yolo26m-seg.pt">yolo26m-seg.pt — medium (better accuracy, higher cost)</option>
+            <option value="yolo26l-seg.pt">yolo26l-seg.pt — large (high accuracy, slower export)</option>
+            <option value="yolo26x-seg.pt">yolo26x-seg.pt — extra large (maximum capacity)</option>
           </select>
         </label>
         <div className="readonly-field">
@@ -1507,7 +1510,7 @@ function ColabManualSteps({ runId }: { runId: string }) {
         <li>
           <details>
             <summary><span>Review exported artifacts</span></summary>
-            <p>On success, the script exports INT8 TF Lite and optimized Core ML, uploads both to R2, and creates the model version.</p>
+            <p>On success, the script exports INT8 TF Lite, optimized Core ML, and the original PyTorch .pt weights, uploads all artifacts to R2, and creates the model version.</p>
             <p>Closing the Colab tab terminates the runtime and stops training.</p>
           </details>
         </li>
@@ -2100,45 +2103,41 @@ function ModelDetail({
 function PerformanceArtifactCard({ version }: { version: RegistryVersion }) {
   const packages = [
     {
-      platform: "Android",
+      label: "Android runtime",
       sizeMb: version.sizeMb,
       ready: Boolean(version.tfliteR2Key),
     },
     {
-      platform: "iOS",
+      label: "iOS runtime",
       sizeMb: version.coremlSizeMb,
       ready: Boolean(version.coremlR2Key),
+    },
+    {
+      label: "Local QA",
+      sizeMb: version.pytorchSizeMb,
+      ready: Boolean(version.pytorchR2Key),
     },
   ];
   const totalSizeMb = packages.reduce((total, artifact) => total + (typeof artifact.sizeMb === "number" ? artifact.sizeMb : 0), 0);
   const readyCount = packages.filter((artifact) => artifact.ready).length;
+  const mobileReady = packages.slice(0, 2).filter((artifact) => artifact.ready).length;
+  const qaReady = packages[2]?.ready ?? false;
 
   return (
     <article className="metric-card performance-artifact-card">
       <span>Artifact</span>
       <strong>{totalSizeMb > 0 ? `${totalSizeMb.toFixed(1)} MB` : "—"}</strong>
-      <div className="performance-artifact-list" aria-label="Platform artifacts">
-        {packages.map((artifact) => (
-          <div className={artifact.ready ? "performance-artifact-row ready" : "performance-artifact-row missing"} key={artifact.platform}>
-            <div>
-              <b>{artifact.platform}</b>
-            </div>
-            {!artifact.ready && <span>Missing</span>}
-            <em>{typeof artifact.sizeMb === "number" ? `${artifact.sizeMb.toFixed(1)} MB` : "—"}</em>
-          </div>
-        ))}
-      </div>
-      <small className="performance-artifact-summary">{readyCount}/2 platform packages ready</small>
+      <small className="performance-artifact-summary">Mobile {mobileReady}/2 · QA {qaReady ? "ready" : "pending"} · {readyCount}/3 total</small>
     </article>
   );
 }
 
 function PlatformReadiness({ version, store }: { version: RegistryVersion; store: RegistryStore }) {
   const isArchived = version.state === "archived";
-  const [downloading, setDownloading] = useState<"android" | "ios" | null>(null);
+  const [downloading, setDownloading] = useState<"android" | "ios" | "pytorch" | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
-  async function downloadArtifact(platform: "android" | "ios", r2Key: string | null | undefined) {
+  async function downloadArtifact(platform: "android" | "ios" | "pytorch", r2Key: string | null | undefined) {
     if (!r2Key || isArchived) return;
     setDownloading(platform);
     setDownloadError(null);
@@ -2154,29 +2153,40 @@ function PlatformReadiness({ version, store }: { version: RegistryVersion; store
 
   return (
     <div>
-      <SectionMiniHeading title="Platform readiness" hint="Native runtime artifacts packaged with this logical model version." />
+      <SectionMiniHeading title="Artifact readiness" hint="Runtime downloads for devices and the original PyTorch weights for local segmentation checks." />
       <div className="platform-grid">
         <PlatformArtifactCard
           icon={<Smartphone size={16} aria-hidden="true" />}
-          title="Android TF Lite"
-          status={isArchived ? "Archived" : `Ready · ${(version.tflitePrecision ?? "int8").toUpperCase()}`}
+          title="Android runtime"
+          status={isArchived ? "Archived" : version.tfliteR2Key ? `TF Lite · ${(version.tflitePrecision ?? "int8").toUpperCase()}` : "Missing"}
           detail={isArchived ? "Artifact deleted" : version.tfliteR2Key}
-          size={`${version.sizeMb.toFixed(1)} MB`}
-          ready={!isArchived}
-          disabled={isArchived || downloading !== null}
+          size={version.tfliteR2Key ? `${version.sizeMb.toFixed(1)} MB` : "—"}
+          ready={!isArchived && Boolean(version.tfliteR2Key)}
+          disabled={isArchived || !version.tfliteR2Key || downloading !== null}
           busy={downloading === "android"}
           onDownload={() => void downloadArtifact("android", version.tfliteR2Key)}
         />
         <PlatformArtifactCard
           icon={<Apple size={16} aria-hidden="true" />}
-          title="iOS Core ML"
-          status={isArchived ? "Archived" : version.coremlR2Key ? `Ready · ${(version.coremlPrecision ?? "fp16").toUpperCase()}` : "Missing"}
+          title="iOS runtime"
+          status={isArchived ? "Archived" : version.coremlR2Key ? `Core ML · ${(version.coremlPrecision ?? "fp16").toUpperCase()}` : "Missing"}
           detail={isArchived ? "Artifact deleted" : version.coremlR2Key ?? "Core ML artifact missing"}
           size={version.coremlSizeMb ? `${version.coremlSizeMb.toFixed(1)} MB` : "—"}
           ready={!isArchived && Boolean(version.coremlR2Key)}
           disabled={isArchived || !version.coremlR2Key || downloading !== null}
           busy={downloading === "ios"}
           onDownload={() => void downloadArtifact("ios", version.coremlR2Key)}
+        />
+        <PlatformArtifactCard
+          icon={<Notebook size={16} aria-hidden="true" />}
+          title="Local QA weights"
+          status={isArchived ? "Archived" : version.pytorchR2Key ? `.pt · ${(version.pytorchPrecision ?? "fp32").toUpperCase()}` : "Missing"}
+          detail={isArchived ? "Artifact deleted" : version.pytorchR2Key ?? "Original .pt artifact missing"}
+          size={version.pytorchSizeMb ? `${version.pytorchSizeMb.toFixed(1)} MB` : "—"}
+          ready={!isArchived && Boolean(version.pytorchR2Key)}
+          disabled={isArchived || !version.pytorchR2Key || downloading !== null}
+          busy={downloading === "pytorch"}
+          onDownload={() => void downloadArtifact("pytorch", version.pytorchR2Key)}
         />
       </div>
       {downloadError && <p className="form-error">{downloadError}</p>}

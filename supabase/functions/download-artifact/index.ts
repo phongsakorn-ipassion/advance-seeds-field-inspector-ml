@@ -5,7 +5,7 @@ interface Body {
   r2_key: string;
 }
 
-const KEY_PATTERN = /^runs\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\.(?:tflite|mlpackage\.zip)$/;
+const KEY_PATTERN = /^runs\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\.(?:tflite|mlpackage\.zip|pt)$/;
 
 Deno.serve(async (req) => {
   try {
@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
       return json({ error: "r2_key required" }, 400);
     }
     if (!KEY_PATTERN.test(body.r2_key)) {
-      return json({ error: "r2_key must look like runs/<run-id>/<artifact>.tflite or .mlpackage.zip" }, 400);
+      return json({ error: "r2_key must look like runs/<run-id>/<artifact>.tflite, .mlpackage.zip, or .pt" }, 400);
     }
 
     const download_url = await presignGet(body.r2_key, 900);

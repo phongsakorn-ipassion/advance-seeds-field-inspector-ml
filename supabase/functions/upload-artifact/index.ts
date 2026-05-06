@@ -2,7 +2,7 @@ import { corsHeaders } from "../_shared/cors.ts";
 import { presignPut } from "../_shared/r2.ts";
 
 interface Body {
-  kind: "tflite" | "mlmodel" | "coreml";
+  kind: "tflite" | "mlmodel" | "coreml" | "pytorch" | "pt";
   run_id: string;
   semver: string;
   content_type?: string;
@@ -23,12 +23,19 @@ Deno.serve(async (req) => {
     if (!body.kind || !body.run_id || !body.semver) {
       return json({ error: "kind, run_id, semver required" }, 400);
     }
+    if (!["tflite", "mlmodel", "coreml", "pytorch", "pt"].includes(body.kind)) {
+      return json({ error: "kind must be tflite, coreml, mlmodel, pytorch, or pt" }, 400);
+    }
     const SAFE_SEGMENT = /^[A-Za-z0-9._-]+$/;
     if (!SAFE_SEGMENT.test(body.run_id) || !SAFE_SEGMENT.test(body.semver)) {
       return json({ error: "invalid run_id or semver" }, 400);
     }
 
-    const ext = body.kind === "tflite" ? "tflite" : "mlpackage.zip";
+    const ext = body.kind === "tflite"
+      ? "tflite"
+      : body.kind === "pytorch" || body.kind === "pt"
+      ? "pt"
+      : "mlpackage.zip";
     const r2Key = `runs/${body.run_id}/${body.semver}.${ext}`;
     const uploadUrl = await presignPut(r2Key, body.content_type ?? "application/octet-stream");
     return json({ upload_url: uploadUrl, r2_key: r2Key });

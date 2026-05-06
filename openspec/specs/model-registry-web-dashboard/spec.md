@@ -164,8 +164,8 @@ the registry service.
 - **WHEN** a model version has platform artifacts
 - **THEN** the Performance section shows mAP50, mask mAP, and artifact cards
   with balanced proportions
-- **AND** the artifact card summarizes Android and iOS package sizes without
-  exposing sha256 details in the card body
+- **AND** the artifact card summarizes Android, iOS, and original PyTorch
+  artifact sizes without exposing sha256 details in the card body
 
 #### Scenario: Version is selectable but not default
 - **WHEN** a deployed version is selectable on a channel but is not the default

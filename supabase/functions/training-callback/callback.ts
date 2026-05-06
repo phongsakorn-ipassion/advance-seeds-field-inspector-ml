@@ -19,6 +19,9 @@ export type CallbackEvent =
       mlmodel_r2_key?: string | null;
       mlmodel_size_bytes?: number | null;
       mlmodel_content_hash?: string | null;
+      pytorch_r2_key?: string | null;
+      pytorch_size_bytes?: number | null;
+      pytorch_content_hash?: string | null;
       size_bytes: number;
       content_hash?: string;
       semver?: string;
@@ -92,6 +95,9 @@ export function parseCallbackEvent(value: unknown): CallbackEvent {
         mlmodel_r2_key: typeof event.mlmodel_r2_key === "string" ? event.mlmodel_r2_key : null,
         mlmodel_size_bytes: typeof event.mlmodel_size_bytes === "number" ? event.mlmodel_size_bytes : null,
         mlmodel_content_hash: typeof event.mlmodel_content_hash === "string" ? event.mlmodel_content_hash : null,
+        pytorch_r2_key: typeof event.pytorch_r2_key === "string" ? event.pytorch_r2_key : null,
+        pytorch_size_bytes: typeof event.pytorch_size_bytes === "number" ? event.pytorch_size_bytes : null,
+        pytorch_content_hash: typeof event.pytorch_content_hash === "string" ? event.pytorch_content_hash : null,
         size_bytes: sizeBytes,
         content_hash: typeof event.content_hash === "string" ? event.content_hash : undefined,
         semver: typeof event.semver === "string" ? event.semver : undefined,

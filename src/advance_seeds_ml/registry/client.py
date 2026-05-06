@@ -157,6 +157,7 @@ class RegistryClient:
         metadata: dict[str, Any],
         tflite_r2_key: str | None = None,
         mlmodel_r2_key: str | None = None,
+        pytorch_r2_key: str | None = None,
         size_bytes: int,
         content_hash: str,
     ) -> dict[str, Any]:
@@ -167,6 +168,7 @@ class RegistryClient:
             "metadata": metadata,
             "tflite_r2_key": tflite_r2_key,
             "mlmodel_r2_key": mlmodel_r2_key,
+            "pytorch_r2_key": pytorch_r2_key,
             "size_bytes": size_bytes,
             "content_hash": content_hash,
         }

@@ -54,11 +54,13 @@ operation.
 
 ### Requirement: Versions carry platform artifacts
 Each model version SHALL represent one logical segmentation model package with
-separate platform artifacts for Android TF Lite and iOS Core ML.
+separate platform artifacts for Android TF Lite, iOS Core ML, and the original
+non-quantized PyTorch `.pt` export for local segmentation QA.
 
 #### Scenario: Training registers both artifacts
 - **WHEN** training completes and both exports succeed
-- **THEN** the version row stores `tflite_r2_key` and `mlmodel_r2_key`
+- **THEN** the version row stores `tflite_r2_key`, `mlmodel_r2_key`, and
+  `pytorch_r2_key`
 - **AND** metadata records per-platform size and content hash
 
 #### Scenario: Training records mobile export optimization
@@ -66,6 +68,8 @@ separate platform artifacts for Android TF Lite and iOS Core ML.
 - **THEN** the Android TF Lite artifact SHALL use calibrated INT8 export with
   the training dataset YAML as representative calibration data
 - **AND** the iOS Core ML artifact SHALL use FP16 optimization by default
+- **AND** the PyTorch artifact SHALL preserve the original `.pt` weights without
+  quantization
 - **AND** version metadata SHALL record the quantization or precision mode for
   each platform artifact
 
@@ -110,13 +114,13 @@ models for a channel and returns platform-specific signed artifact URLs.
 - **AND** active deployment membership SHALL be shown separately from endpoint
   cards
 
-### Requirement: Archive deletes both platform artifacts
+### Requirement: Archive deletes all version artifacts
 Archiving or deleting a model version SHALL remove all stored artifacts for the
 version and SHALL be blocked while the version is deployed.
 
-#### Scenario: Inactive dual-artifact version is archived
-- **WHEN** an admin archives a version with TF Lite and Core ML artifacts
-- **THEN** both R2 objects are deleted
+#### Scenario: Inactive multi-artifact version is archived
+- **WHEN** an admin archives a version with TF Lite, Core ML, and PyTorch artifacts
+- **THEN** all R2 objects are deleted
 - **AND** the version metadata row is deleted
 
 #### Scenario: Deployed version archive is blocked

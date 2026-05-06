@@ -32,10 +32,15 @@ artifact bytes to the returned signed URL without using R2 credentials directly.
 
 ### Requirement: Model versions can be registered
 The SDK SHALL create version records with metadata, artifact keys, byte size,
-and content hash after a model artifact is uploaded.
+and content hash after model artifacts are uploaded.
 
 #### Scenario: Version registration stores app metadata
 - **WHEN** version metadata and artifact details are submitted
 - **THEN** the SDK creates a `versions` row whose `metadata`, `semver`,
   `tflite_r2_key`, `size_bytes`, and `content_hash` match the submitted values
 
+#### Scenario: Version registration stores original PyTorch artifact
+- **WHEN** an original `.pt` artifact is uploaded through the SDK
+- **THEN** the SDK can submit `pytorch_r2_key` on the `versions` row
+- **AND** metadata can record `artifacts.pytorch` with `precision=fp32` and no
+  quantization

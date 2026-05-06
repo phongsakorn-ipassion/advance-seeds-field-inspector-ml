@@ -1,11 +1,18 @@
 # Next Agent Hand-off - Model Registry Workflow
 
-**Date:** 2026-05-02  
+**Date:** 2026-05-06
 **Repo:** `/Users/ppungpong/Github/advance-seeds-field-inspector-ml`  
 **Current branch:** `main`  
 **Status:** local `main` is ahead of `origin/main`; push has not been done.
 
 ## Current State
+
+Update on 2026-05-06: model versions now carry a third artifact in addition to
+Android TF Lite and iOS Core ML. The original non-quantized PyTorch `.pt`
+weights are uploaded to R2, stored as `versions.pytorch_r2_key`, recorded under
+`metadata.artifacts.pytorch`, displayed/downloadable in the dashboard, and
+deleted when a version is archived. Mobile-facing endpoints still return only
+platform runtime packages.
 
 This repo now contains the first three layers of the Advance Seeds model
 registry workflow:
