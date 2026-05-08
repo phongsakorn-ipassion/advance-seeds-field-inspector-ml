@@ -3,6 +3,9 @@ import type {
   AuthSession,
   ChannelName,
   DatasetStats,
+  MetricKey,
+  MetricPoint,
+  MetricSummary,
   RegistryRun,
   RegistrySnapshot,
   TrainConfig,
@@ -42,42 +45,55 @@ export const defaultConfig: TrainConfig = {
   datasetBundleDeletedAt: undefined,
   datasetBundleDeletedKey: undefined,
   datasetStats: undefined,
-  sourceWeights: "yolo26n-seg.pt",
+  sourceWeights: "",
   classes: [],
   hyperParameters: {
     epochs: 50,
     imgsz: 640,
     batch: "auto",
     patience: 20,
-    optimizer: "auto",
     lr0: 0.001,
-    lrf: 0.0495,
-    momentum: 0.947,
-    weightDecay: 0.00064,
-    warmupEpochs: 1.0,
-    cosLr: true,
-    closeMosaic: 10,
-    mosaic: 0.5,
-    mixup: 0.0,
-    copyPaste: 0.0,
-    scale: 0.56,
-    translate: 0.07,
-    fliplr: 0.5,
-    flipud: 0.0,
-    degrees: 2.0,
-    shear: 0.0,
-    hsvH: 0.014,
-    hsvS: 0.5,
-    hsvV: 0.4,
-    maskRatio: 4,
-    overlapMask: true,
-    box: 7.5,
-    cls: 0.5,
-    multiScale: 0.0,
   },
-  colabAccelerator: "T4",
   note: "",
 };
+
+function metricPoint(key: MetricKey, value: number, epoch: number, rawName: string = key): MetricPoint {
+  const labels: Record<MetricKey, string> = {
+    map50: "mAP50",
+    map5095: "mAP50-95",
+    precision: "Precision",
+    recall: "Recall",
+    maskMap50: "Mask mAP50",
+    maskMap5095: "Mask mAP50-95",
+    maskPrecision: "Mask precision",
+    maskRecall: "Mask recall",
+  };
+  return { key, label: labels[key], step: epoch, epoch, value, rawName };
+}
+
+function demoSummary(map50: number, map5095: number, precision: number, recall: number): MetricSummary {
+  return {
+    map50,
+    map5095,
+    precision,
+    recall,
+    maskMap50: Math.max(0, map50 - 0.02),
+    maskMap5095: map5095,
+    maskPrecision: Math.max(0, precision - 0.01),
+    maskRecall: Math.max(0, recall - 0.01),
+  };
+}
+
+function demoHistory(summary: MetricSummary): MetricPoint[] {
+  const points: MetricPoint[] = [];
+  for (let epoch = 10; epoch <= 50; epoch += 10) {
+    const factor = epoch / 50;
+    for (const [key, value] of Object.entries(summary) as Array<[MetricKey, number | undefined]>) {
+      if (typeof value === "number") points.push(metricPoint(key, Number((value * (0.55 + factor * 0.45)).toFixed(3)), epoch));
+    }
+  }
+  return points;
+}
 
 const initialSnapshot: RegistrySnapshot = {
   quotaMb: 512,
@@ -97,13 +113,15 @@ const initialSnapshot: RegistrySnapshot = {
       modelLine: "seeds-poc",
       dataset: "configs/dataset.seeds-v2.yaml",
       datasetStats: seedsV2Stats,
-      hardware: "Colab T4",
+      hardware: "Manual Colab",
       startedAt: "2026-05-02 09:12",
       finishedAt: "2026-05-02 10:47",
       progress: 100,
       map50: 0.88,
       maskMap: 0.82,
-      config: defaultConfig,
+      metricsSummary: demoSummary(0.88, 0.84, 0.86, 0.82),
+      metricsHistory: demoHistory(demoSummary(0.88, 0.84, 0.86, 0.82)),
+      config: { ...defaultConfig, sourceWeights: "yolo26n-seg.pt" },
       colabNotebook: "Colab MCP / seeds-v2-poc.ipynb",
       logs: ["Mounted workspace", "Prepared dataset images", "Epoch 50/50 complete", "Exported TFLite artifact"],
     },
@@ -114,15 +132,17 @@ const initialSnapshot: RegistrySnapshot = {
       modelLine: "seeds-poc",
       dataset: "configs/dataset.seeds-v2.yaml",
       datasetStats: seedsV2Stats,
-      hardware: "Colab L4",
+      hardware: "Manual Colab",
       startedAt: "2026-05-02 11:28",
       finishedAt: null,
       progress: 62,
       map50: 0.84,
       maskMap: 0.78,
-      config: { ...defaultConfig, colabAccelerator: "L4" },
+      metricsSummary: demoSummary(0.84, 0.79, 0.82, 0.78),
+      metricsHistory: demoHistory(demoSummary(0.84, 0.79, 0.82, 0.78)).filter((p) => p.epoch !== null && p.epoch <= 30),
+      config: { ...defaultConfig, sourceWeights: "yolo26s-seg.pt" },
       colabNotebook: "Colab MCP / seeds-v2-quantized-check.ipynb",
-      logs: ["Runtime set to L4", "Epoch 31/50", "mAP50=0.84 mask_mAP=0.78"],
+      logs: ["Notebook started", "Epoch 31/50", "mAP50=0.84 mask_mAP=0.78"],
     },
   ],
   versions: [
@@ -138,6 +158,7 @@ const initialSnapshot: RegistrySnapshot = {
       hyperParameters: defaultConfig.hyperParameters,
       map50: 0.88,
       maskMap: 0.82,
+      metricsSummary: demoSummary(0.88, 0.84, 0.86, 0.82),
       sizeMb: 12.4,
       contentHash: "sha256:357e5d6f...",
       tfliteR2Key: "runs/run-seeds-v2-041/1.0.0-seeds-v2.tflite",
@@ -162,9 +183,10 @@ const initialSnapshot: RegistrySnapshot = {
       dataset: "configs/dataset.seeds-v1.yaml",
       datasetStats: seedsV1Stats,
       classes: defaultConfig.classes,
-      hyperParameters: { ...defaultConfig.hyperParameters, epochs: 40, mosaic: 0.5 },
+      hyperParameters: { ...defaultConfig.hyperParameters, epochs: 40 },
       map50: 0.81,
       maskMap: 0.75,
+      metricsSummary: demoSummary(0.81, 0.76, 0.8, 0.74),
       sizeMb: 12.1,
       contentHash: "sha256:94a772bb...",
       tfliteR2Key: "runs/run-seeds-v1-039/0.9.2-seeds-v1.tflite",
@@ -192,6 +214,7 @@ const initialSnapshot: RegistrySnapshot = {
       hyperParameters: { ...defaultConfig.hyperParameters, epochs: 25 },
       map50: 0.74,
       maskMap: 0.69,
+      metricsSummary: demoSummary(0.74, 0.69, 0.72, 0.67),
       sizeMb: 10.8,
       contentHash: "sha256:7110a0ed...",
       tfliteR2Key: "runs/run-old-070/0.7.0-archive.tflite",
@@ -242,14 +265,32 @@ function loadPersistedSnapshot(): RegistrySnapshot | null {
     return {
       quotaMb: initialSnapshot.quotaMb,
       channels: parsed.channels,
-      runs: parsed.runs,
-      versions: parsed.versions,
+      runs: parsed.runs.map(hydrateRun),
+      versions: parsed.versions.map(hydrateVersion),
       deployments: parsed.deployments ?? initialSnapshot.deployments,
       storage: parsed.storage,
     };
   } catch {
     return null;
   }
+}
+
+function hydrateRun(run: RegistryRun): RegistryRun {
+  const summary = run.metricsSummary ?? demoSummary(run.map50 ?? 0, run.maskMap ?? 0, run.map50 ?? 0, run.maskMap ?? 0);
+  return {
+    ...run,
+    hardware: run.hardware?.replace(/^Colab\s+\w+$/, "Manual Colab") || "Manual Colab",
+    config: { ...defaultConfig, ...run.config, sourceWeights: run.config?.sourceWeights ?? "yolo26n-seg.pt" },
+    metricsSummary: summary,
+    metricsHistory: run.metricsHistory ?? demoHistory(summary),
+  };
+}
+
+function hydrateVersion(version: RegistrySnapshot["versions"][number]): RegistrySnapshot["versions"][number] {
+  return {
+    ...version,
+    metricsSummary: version.metricsSummary ?? demoSummary(version.map50, version.maskMap, version.map50, version.maskMap),
+  };
 }
 
 function persistSnapshot(snapshot: RegistrySnapshot) {
@@ -285,19 +326,31 @@ export function createDemoStore(): RegistryStore {
       const progress = Math.min(100, run.progress + 7);
       const map50 = Math.min(0.91, (run.map50 ?? 0.35) + 0.025);
       const maskMap = Math.min(0.84, (run.maskMap ?? 0.31) + 0.022);
+      const map5095 = Math.max(0, maskMap - 0.01);
+      const precision = Math.min(0.92, map50 + 0.01);
+      const recall = Math.max(0, maskMap - 0.02);
+      const totalEpochs = run.config.hyperParameters.epochs || 1;
+      const epoch = Math.max(1, Math.min(totalEpochs, Math.ceil((progress / 100) * totalEpochs)));
+      const metricsSummary = demoSummary(map50, map5095, precision, recall);
+      const metricsHistory = [
+        ...run.metricsHistory,
+        metricPoint("map50", map50, epoch, "metrics/mAP50(B)"),
+        metricPoint("map5095", map5095, epoch, "metrics/mAP50-95(B)"),
+        metricPoint("precision", precision, epoch, "metrics/precision(B)"),
+        metricPoint("recall", recall, epoch, "metrics/recall(B)"),
+        metricPoint("maskMap5095", maskMap, epoch, "metrics/mAP50-95(M)"),
+      ];
       if (progress >= 100) {
         const done: RegistryRun = {
-          ...run, progress, map50, maskMap,
+          ...run, progress, map50, maskMap, metricsSummary, metricsHistory,
           status: "succeeded", finishedAt: nowStamp(),
           logs: [...run.logs, "Epochs complete", "Artifact uploaded through signed R2 URL"],
         };
         completed.push(done);
         return done;
       }
-      const totalEpochs = run.config.hyperParameters.epochs || 1;
-      const epoch = Math.max(1, Math.min(totalEpochs, Math.ceil((progress / 100) * totalEpochs)));
       return {
-        ...run, progress, map50, maskMap,
+        ...run, progress, map50, maskMap, metricsSummary, metricsHistory,
         logs: [...run.logs.slice(-49), `Epoch ${epoch}/${totalEpochs} (${progress}%) / mAP50=${map50.toFixed(2)} mask=${maskMap.toFixed(2)}`],
       };
     });
@@ -320,6 +373,7 @@ export function createDemoStore(): RegistryStore {
         hyperParameters: run.config.hyperParameters,
         map50: run.map50 ?? 0,
         maskMap: run.maskMap ?? 0,
+        metricsSummary: run.metricsSummary,
         sizeMb: 12.2,
         contentHash: `sha256:${run.id.slice(-8)}...`,
         tfliteR2Key: `runs/${run.id}/${semver}.tflite`,
@@ -418,16 +472,22 @@ export function createDemoStore(): RegistryStore {
         modelLine: config.modelLine,
         dataset: config.dataset,
         datasetStats: config.datasetStats,
-        hardware: `Colab ${config.colabAccelerator}`,
+        hardware: "Manual Colab",
         startedAt: nowStamp(),
         finishedAt: null,
         progress: 4,
         map50: 0.35,
         maskMap: 0.31,
+        metricsSummary: demoSummary(0.35, 0.31, 0.34, 0.3),
+        metricsHistory: [
+          metricPoint("map50", 0.35, 1, "metrics/mAP50(B)"),
+          metricPoint("map5095", 0.31, 1, "metrics/mAP50-95(B)"),
+          metricPoint("precision", 0.34, 1, "metrics/precision(B)"),
+          metricPoint("recall", 0.3, 1, "metrics/recall(B)"),
+        ],
         config,
         colabNotebook: `Colab MCP / ${id}.ipynb`,
         logs: [
-          `Runtime requested: ${config.colabAccelerator}`,
           "Notebook cells prepared through Colab MCP",
           "Training command queued",
         ],

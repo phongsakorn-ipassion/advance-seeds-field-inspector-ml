@@ -26,6 +26,8 @@ import {
 import {
   ChannelName,
   DatasetStats,
+  MetricKey,
+  MetricPoint,
   defaultConfig,
   RegistryRun,
   RegistryStore,
@@ -48,6 +50,18 @@ type ActivityNotification = {
   section?: Section;
   runId?: string;
   toast?: boolean;
+};
+type TrainingFieldErrors = Partial<Record<"dataset" | "datasetBundle" | "sourceWeights", string>>;
+const metricDisplayOrder: MetricKey[] = ["map50", "map5095", "precision", "recall", "maskMap50", "maskMap5095", "maskPrecision", "maskRecall"];
+const metricDisplayLabels: Record<MetricKey, string> = {
+  map50: "mAP50",
+  map5095: "mAP50-95",
+  precision: "Precision",
+  recall: "Recall",
+  maskMap50: "Mask mAP50",
+  maskMap5095: "Mask mAP50-95",
+  maskPrecision: "Mask precision",
+  maskRecall: "Mask recall",
 };
 
 const MODEL_REGISTRY_POSTMAN_GUIDE_URL =
@@ -161,15 +175,16 @@ function compareVersions(a: RegistryVersion, b: RegistryVersion, sort: VersionSo
 
 function expertLogLines(run: RegistryRun): string[] {
   const stats = resolveDatasetStats(run.dataset, run.datasetStats ?? run.config.datasetStats);
-  const map50 = run.map50 === null ? "pending" : run.map50.toFixed(3);
-  const maskMap = run.maskMap === null ? "pending" : run.maskMap.toFixed(3);
+  const map50 = run.metricsSummary.map50 === undefined ? "pending" : run.metricsSummary.map50.toFixed(3);
+  const map5095 = run.metricsSummary.map5095 === undefined ? "pending" : run.metricsSummary.map5095.toFixed(3);
+  const precision = run.metricsSummary.precision === undefined ? "pending" : run.metricsSummary.precision.toFixed(3);
+  const recall = run.metricsSummary.recall === undefined ? "pending" : run.metricsSummary.recall.toFixed(3);
+  const maskMap = run.metricsSummary.maskMap5095 === undefined ? "pending" : run.metricsSummary.maskMap5095.toFixed(3);
   return [
     `[registry] run=${run.id} status=${run.status} progress=${run.progress}% hardware="${run.hardware || "pending"}"`,
     `[dataset] config=${run.dataset || "pending"} total=${formatCount(stats?.total)} train=${formatCount(stats?.train)} val=${formatCount(stats?.validation)} test=${formatCount(stats?.testing)}`,
-    `[training] epochs=${run.config.hyperParameters.epochs} imgsz=${run.config.hyperParameters.imgsz} batch=${run.config.hyperParameters.batch} patience=${run.config.hyperParameters.patience}`,
-    `[optimization] optimizer=${run.config.hyperParameters.optimizer} lr0=${run.config.hyperParameters.lr0} lrf=${run.config.hyperParameters.lrf} cos_lr=${run.config.hyperParameters.cosLr}`,
-    `[augmentation] mosaic=${run.config.hyperParameters.mosaic} close_mosaic=${run.config.hyperParameters.closeMosaic} mixup=${run.config.hyperParameters.mixup} copyPaste=${run.config.hyperParameters.copyPaste}`,
-    `[metrics] mAP50=${map50} mask_mAP=${maskMap} source_weights=${run.config.sourceWeights || "pending"}`,
+    `[training] epochs=${run.config.hyperParameters.epochs} imgsz=${run.config.hyperParameters.imgsz} batch=${run.config.hyperParameters.batch} patience=${run.config.hyperParameters.patience} lr0=${run.config.hyperParameters.lr0}`,
+    `[metrics] mAP50=${map50} mAP50-95=${map5095} precision=${precision} recall=${recall} mask_mAP50-95=${maskMap} source_weights=${run.config.sourceWeights || "pending"}`,
     `[timing] started_at="${run.startedAt || "pending"}" finished_at="${run.finishedAt ?? "running"}" notebook="${displayColabNotebook(run) || "pending"}"`,
     ...run.logs.map((line, index) => `[log ${String(index + 1).padStart(2, "0")}] ${line}`),
   ];
@@ -1095,6 +1110,7 @@ function TrainWorkflow({
   const showColabHandoff = focused ? focused.status !== "succeeded" && focused.status !== "failed" : false;
   const [howOpen, setHowOpen] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<TrainingFieldErrors>({});
   const [pendingDelete, setPendingDelete] = useState<RegistryRun | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -1119,6 +1135,19 @@ function TrainWorkflow({
     } finally {
       setDeleteBusy(false);
     }
+  }
+
+  function setConfigField(next: TrainConfig, clear?: keyof TrainingFieldErrors) {
+    setConfig(next);
+    if (clear) setFieldErrors((current) => ({ ...current, [clear]: undefined }));
+  }
+
+  function validateTrainingConfig(): TrainingFieldErrors {
+    const errors: TrainingFieldErrors = {};
+    if (!config.dataset.trim()) errors.dataset = "Dataset config is required.";
+    if (!config.datasetBundle?.trim()) errors.datasetBundle = "Dataset image bundle is required.";
+    if (!config.sourceWeights.trim()) errors.sourceWeights = "Source weights are required.";
+    return errors;
   }
 
   const detailPanel = (
@@ -1192,6 +1221,9 @@ function TrainWorkflow({
         event.preventDefault();
         if (!isAdmin) return;
         setStartError(null);
+        const errors = validateTrainingConfig();
+        setFieldErrors(errors);
+        if (Object.keys(errors).length > 0) return;
         try {
           await onStart();
           setTab("live");
@@ -1208,35 +1240,37 @@ function TrainWorkflow({
           </span>
           <DatasetConfigField
             value={config.dataset}
-            onChange={(next) => setConfig({ ...config, dataset: next, datasetStats: undefined })}
+            onChange={(next) => setConfigField({ ...config, dataset: next, datasetStats: undefined }, "dataset")}
             modelLineSlug={config.modelLine}
             disabled={!isAdmin}
-            onDatasetParsed={({ dataset, classes, stats }) => setConfig({
+            onDatasetParsed={({ dataset, classes, stats }) => setConfigField({
               ...config,
               dataset: dataset ?? config.dataset,
               classes: classes ?? config.classes,
               datasetStats: stats,
-            })}
+            }, "dataset")}
           />
+          {fieldErrors.dataset && <p className="form-error field-error">{fieldErrors.dataset}</p>}
         </label>
         <label>
           <span className="label-text">
             Dataset image bundle
-            <Hint text="Optional ZIP containing the image/label folders referenced by the YAML. Recommended layout is images/train, images/val, labels/train, labels/val at the ZIP root, or the full data/processed/... path." />
+            <Hint text="Required ZIP containing the image/label folders referenced by the YAML. Recommended layout is images/train, images/val, labels/train, labels/val at the ZIP root, or the full data/processed/... path." />
           </span>
           <DatasetBundleField
             value={config.datasetBundle}
             filename={config.datasetBundleFilename}
             sizeBytes={config.datasetBundleSizeBytes}
-            onChange={({ r2Key, filename, sizeBytes }) => setConfig({
+            onChange={({ r2Key, filename, sizeBytes }) => setConfigField({
               ...config,
               datasetBundle: r2Key,
               datasetBundleFilename: filename,
               datasetBundleSizeBytes: sizeBytes,
-            })}
+            }, "datasetBundle")}
             modelLineSlug={config.modelLine}
             disabled={!isAdmin}
           />
+          {fieldErrors.datasetBundle && <p className="form-error field-error">{fieldErrors.datasetBundle}</p>}
         </label>
         <label>
           <span className="label-text">
@@ -1245,14 +1279,16 @@ function TrainWorkflow({
           </span>
           <select
             value={config.sourceWeights}
-            onChange={(event) => setConfig({ ...config, sourceWeights: event.target.value })}
+            onChange={(event) => setConfigField({ ...config, sourceWeights: event.target.value }, "sourceWeights")}
           >
+            <option value="">Select source weights...</option>
             <option value="yolo26n-seg.pt">yolo26n-seg.pt — nano (fast, smallest)</option>
             <option value="yolo26s-seg.pt">yolo26s-seg.pt — small (balanced mobile baseline)</option>
             <option value="yolo26m-seg.pt">yolo26m-seg.pt — medium (better accuracy, higher cost)</option>
             <option value="yolo26l-seg.pt">yolo26l-seg.pt — large (high accuracy, slower export)</option>
             <option value="yolo26x-seg.pt">yolo26x-seg.pt — extra large (maximum capacity)</option>
           </select>
+          {fieldErrors.sourceWeights && <p className="form-error field-error">{fieldErrors.sourceWeights}</p>}
         </label>
         <div className="readonly-field">
           <span className="label-text">
@@ -1275,29 +1311,12 @@ function TrainWorkflow({
         <div className="form-grid">
           <NumberField label="Epochs" value={config.hyperParameters.epochs} onChange={(value) => updateHp(config, setConfig, "epochs", value)} hint="Number of full passes over the dataset. More epochs = more learning, but risk of overfitting. 50 is a sane default for fine-tuning." />
           <NumberField label="Image size" value={config.hyperParameters.imgsz} onChange={(value) => updateHp(config, setConfig, "imgsz", value)} hint="Input image side length in pixels. Larger = better small-object recall but slower training and inference. 640 is the YOLO default." />
-          <NumberField label="Patience" value={config.hyperParameters.patience} onChange={(value) => updateHp(config, setConfig, "patience", value)} hint="Early-stopping patience: number of epochs with no improvement before the run stops. Set lower to fail fast on bad runs." />
-          <NumberField label="LR0" value={config.hyperParameters.lr0} step="0.0001" onChange={(value) => updateHp(config, setConfig, "lr0", value)} hint="Initial learning rate. Lower = more stable but slower; higher = faster but may diverge. Start at 0.001 for fine-tuning, raise only if loss plateaus." />
-          <NumberField label="Mosaic" value={config.hyperParameters.mosaic} step="0.1" onChange={(value) => updateHp(config, setConfig, "mosaic", value)} hint="Mosaic augmentation probability (0–1). Tiles four images into one for richer context. Helps small-object recall; turn down if memory is tight." />
-          <NumberField label="Mixup" value={config.hyperParameters.mixup} step="0.1" onChange={(value) => updateHp(config, setConfig, "mixup", value)} hint="MixUp augmentation probability (0–1). Blends two images together. Adds regularization; usually low (0.0–0.2) for detection/segmentation." />
         </div>
         <details className="advanced-disclosure">
           <summary>Advanced hyperparameters</summary>
           <div className="form-grid">
-            <label>
-              <span className="label-text">
-                Optimizer
-                <Hint text="YOLO optimizer selection. Keep auto unless comparing a controlled trial; Ultralytics can select optimizer based on run length and model." />
-              </span>
-              <select
-                value={config.hyperParameters.optimizer}
-                onChange={(event) => updateHp(config, setConfig, "optimizer", event.target.value)}
-              >
-                <option value="auto">auto</option>
-                <option value="AdamW">AdamW</option>
-                <option value="SGD">SGD</option>
-                <option value="MuSGD">MuSGD</option>
-              </select>
-            </label>
+            <NumberField label="Patience" value={config.hyperParameters.patience} onChange={(value) => updateHp(config, setConfig, "patience", value)} hint="Early-stopping patience: number of epochs with no improvement before the run stops. Set lower to fail fast on bad runs." />
+            <NumberField label="LR0" value={config.hyperParameters.lr0} step="0.0001" onChange={(value) => updateHp(config, setConfig, "lr0", value)} hint="Initial learning rate. Lower = more stable but slower; higher = faster but may diverge. Start at 0.001 for fine-tuning, raise only if loss plateaus." />
             <label>
               <span className="label-text">
                 Batch
@@ -1314,102 +1333,8 @@ function TrainWorkflow({
                 <option value="64">64</option>
               </select>
             </label>
-            <NumberField
-              label="LRF"
-              value={config.hyperParameters.lrf}
-              step="0.0001"
-              onChange={(value) => updateHp(config, setConfig, "lrf", value)}
-              hint="Final learning-rate factor. Final LR = LR0 × LRF. Smaller (e.g. 0.01) means more aggressive cosine annealing toward the end of training."
-            />
-            <NumberField
-              label="Momentum"
-              value={config.hyperParameters.momentum}
-              step="0.001"
-              onChange={(value) => updateHp(config, setConfig, "momentum", value)}
-              hint="Momentum for SGD-style optimizers or beta1 for Adam-style optimizers. Keep near the baseline unless tuning."
-            />
-            <NumberField
-              label="Weight decay"
-              value={config.hyperParameters.weightDecay}
-              step="0.00001"
-              onChange={(value) => updateHp(config, setConfig, "weightDecay", value)}
-              hint="L2 regularization. Increase only if overfitting is visible; reduce if the model underfits."
-            />
-            <NumberField
-              label="Warmup epochs"
-              value={config.hyperParameters.warmupEpochs}
-              step="0.1"
-              onChange={(value) => updateHp(config, setConfig, "warmupEpochs", value)}
-              hint="Gradual learning-rate ramp at the start of training to stabilize early updates."
-            />
-            <label>
-              <span className="label-text">
-                Cosine LR
-                <Hint text="Use cosine learning-rate decay. Keep enabled for the baseline profile." />
-              </span>
-              <select
-                value={config.hyperParameters.cosLr ? "true" : "false"}
-                onChange={(event) => updateHp(config, setConfig, "cosLr", event.target.value === "true")}
-              >
-                <option value="true">true</option>
-                <option value="false">false</option>
-              </select>
-            </label>
-            <NumberField
-              label="Close mosaic"
-              value={config.hyperParameters.closeMosaic}
-              onChange={(value) => updateHp(config, setConfig, "closeMosaic", value)}
-              hint="Disable mosaic during the last N epochs to stabilize final masks."
-            />
-            <NumberField
-              label="Copy-paste"
-              value={config.hyperParameters.copyPaste}
-              step="0.1"
-              onChange={(value) => updateHp(config, setConfig, "copyPaste", value)}
-              hint="Copy-paste augmentation probability (0–1). Pastes instances from one image onto another to boost rare-class recall. Usually 0–0.3."
-            />
-            <NumberField label="Scale" value={config.hyperParameters.scale} step="0.01" onChange={(value) => updateHp(config, setConfig, "scale", value)} hint="Random image scale augmentation. Helps distance and seed-size variation." />
-            <NumberField label="Translate" value={config.hyperParameters.translate} step="0.01" onChange={(value) => updateHp(config, setConfig, "translate", value)} hint="Random translation augmentation. Keep low for tightly framed seed images." />
-            <NumberField label="Flip LR" value={config.hyperParameters.fliplr} step="0.1" onChange={(value) => updateHp(config, setConfig, "fliplr", value)} hint="Left-right flip probability." />
-            <NumberField label="Flip UD" value={config.hyperParameters.flipud} step="0.1" onChange={(value) => updateHp(config, setConfig, "flipud", value)} hint="Up-down flip probability. Keep at zero unless capture orientation makes this realistic." />
-            <NumberField label="Degrees" value={config.hyperParameters.degrees} step="0.1" onChange={(value) => updateHp(config, setConfig, "degrees", value)} hint="Small random rotation in degrees." />
-            <NumberField label="Shear" value={config.hyperParameters.shear} step="0.1" onChange={(value) => updateHp(config, setConfig, "shear", value)} hint="Shear augmentation. Keep zero unless validated." />
-            <NumberField label="HSV H" value={config.hyperParameters.hsvH} step="0.001" onChange={(value) => updateHp(config, setConfig, "hsvH", value)} hint="Hue augmentation for lighting variation." />
-            <NumberField label="HSV S" value={config.hyperParameters.hsvS} step="0.01" onChange={(value) => updateHp(config, setConfig, "hsvS", value)} hint="Saturation augmentation for lighting and camera variation." />
-            <NumberField label="HSV V" value={config.hyperParameters.hsvV} step="0.01" onChange={(value) => updateHp(config, setConfig, "hsvV", value)} hint="Brightness/value augmentation." />
-            <NumberField label="Mask ratio" value={config.hyperParameters.maskRatio} onChange={(value) => updateHp(config, setConfig, "maskRatio", value)} hint="Mask downsample ratio. Lower values can improve masks but cost memory and speed." />
-            <label>
-              <span className="label-text">
-                Overlap mask
-                <Hint text="YOLO segmentation mask overlap handling. Keep enabled unless an experiment proves otherwise." />
-              </span>
-              <select
-                value={config.hyperParameters.overlapMask ? "true" : "false"}
-                onChange={(event) => updateHp(config, setConfig, "overlapMask", event.target.value === "true")}
-              >
-                <option value="true">true</option>
-                <option value="false">false</option>
-              </select>
-            </label>
-            <NumberField label="Box loss" value={config.hyperParameters.box} step="0.1" onChange={(value) => updateHp(config, setConfig, "box", value)} hint="Box loss gain. Tune only in controlled experiments." />
-            <NumberField label="Cls loss" value={config.hyperParameters.cls} step="0.1" onChange={(value) => updateHp(config, setConfig, "cls", value)} hint="Class loss gain. Relevant to banana vs banana_spot separation." />
-            <NumberField label="Multi-scale" value={config.hyperParameters.multiScale} step="0.05" onChange={(value) => updateHp(config, setConfig, "multiScale", value)} hint="Randomly varies training image size by this fraction. Keep zero unless testing scale robustness." />
           </div>
         </details>
-        <label>
-          <span className="label-text">
-            Colab accelerator
-            <Hint text="GPU class to select in Colab before Run all. T4 is free-tier and fine for YOLO-n. L4 is faster and worth it for longer runs. A100 is overkill for the PoC unless you're benchmarking." />
-          </span>
-          <select
-            value={config.colabAccelerator}
-            onChange={(event) => setConfig({ ...config, colabAccelerator: event.target.value as TrainConfig["colabAccelerator"] })}
-          >
-            <option value="T4">T4 — free tier</option>
-            <option value="L4">L4 — faster, paid</option>
-            <option value="A100">A100 — overkill, paid</option>
-          </select>
-        </label>
         <label>
           <span className="label-text">Note</span>
           <textarea
@@ -1524,6 +1449,48 @@ function TrainWorkflow({
 
 function ColabManualSteps({ runId }: { runId: string }) {
   const [copied, setCopied] = useState(false);
+  const steps = [
+    {
+      title: "Open notebook",
+      body: <p>Click <em>Open in Colab</em>. The notebook URL already includes this run id.</p>,
+    },
+    {
+      title: "Run all notebook cells",
+      body: (
+        <>
+          <p>Click <em>Runtime, Run all</em> or press <code>Cmd/Ctrl + F9</code>. Colab does not auto-run on open.</p>
+          <p>The setup cell syncs the latest <code>main</code> checkout before training. Confirm the run log shows a git SHA before export starts.</p>
+        </>
+      ),
+    },
+    {
+      title: "Authenticate the Colab session",
+      body: <p>Cell 7 asks for the Supabase service-role key. Paste it once; it stays inside that Colab session.</p>,
+    },
+    {
+      title: "Confirm dataset image path",
+      body: (
+        <>
+          <p>Cell 10 fetches the YAML from R2. If this run has a dataset ZIP, the training script downloads and unzips it automatically before YOLO starts.</p>
+          <pre>{`# Fallback only when no dashboard ZIP was attached:\nfrom google.colab import drive\ndrive.mount('/content/drive')\n!unzip -q /content/drive/MyDrive/<your-dataset>.zip -d /content/advance-seeds-field-inspector-ml/data/processed/`}</pre>
+        </>
+      ),
+    },
+    {
+      title: "Start training",
+      body: <p>Cell 12 runs <code>scripts/train_for_run.py --run-id {runId.slice(0, 8)}...</code>. Per-epoch metrics stream back here.</p>,
+    },
+    {
+      title: "Review exported artifacts",
+      body: (
+        <>
+          <p>On success, the script exports INT8 TF Lite, optimized Core ML, and the original PyTorch .pt weights, uploads all artifacts to R2, and creates the model version.</p>
+          <p>If Local QA is missing, rerun the latest notebook or backfill the Colab <code>best.pt</code> with <code>scripts/backfill_pytorch_artifact.py</code>.</p>
+          <p>Closing the Colab tab terminates the runtime and stops training.</p>
+        </>
+      ),
+    },
+  ];
   async function copyRunId() {
     try {
       await navigator.clipboard.writeText(runId);
@@ -1556,49 +1523,26 @@ function ColabManualSteps({ runId }: { runId: string }) {
           <Copy size={13} aria-hidden="true" />
         </button>
       </div>
-      <ol className="manual-step-list">
-        <li>
-          <details>
-            <summary><span>Open notebook and choose GPU</span></summary>
-            <p>Click <em>Open in Colab</em>. The notebook URL already includes this run id.</p>
-            <p>In Colab, set <em>Runtime, Change runtime type, GPU</em>. T4 is enough for YOLO-n; L4 or A100 is faster.</p>
-          </details>
-        </li>
-        <li>
-          <details>
-            <summary><span>Run all notebook cells</span></summary>
-            <p>Click <em>Runtime, Run all</em> or press <code>Cmd/Ctrl + F9</code>. Colab does not auto-run on open.</p>
-            <p>The setup cell syncs the latest <code>main</code> checkout before training. Confirm the run log shows a git SHA before export starts.</p>
-          </details>
-        </li>
-        <li>
-          <details>
-            <summary><span>Authenticate the Colab session</span></summary>
-            <p>Cell 7 asks for the Supabase service-role key. Paste it once; it stays inside that Colab session.</p>
-          </details>
-        </li>
-        <li>
-          <details>
-            <summary><span>Confirm dataset image path</span></summary>
-            <p>Cell 10 fetches the YAML from R2. If this run has a dataset ZIP, the training script downloads and unzips it automatically before YOLO starts.</p>
-            <pre>{`# Fallback only when no dashboard ZIP was attached:\nfrom google.colab import drive\ndrive.mount('/content/drive')\n!unzip -q /content/drive/MyDrive/<your-dataset>.zip -d /content/advance-seeds-field-inspector-ml/data/processed/`}</pre>
-          </details>
-        </li>
-        <li>
-          <details>
-            <summary><span>Start training</span></summary>
-            <p>Cell 12 runs <code>scripts/train_for_run.py --run-id {runId.slice(0, 8)}...</code>. Per-epoch metrics stream back here.</p>
-          </details>
-        </li>
-        <li>
-          <details>
-            <summary><span>Review exported artifacts</span></summary>
-            <p>On success, the script exports INT8 TF Lite, optimized Core ML, and the original PyTorch .pt weights, uploads all artifacts to R2, and creates the model version.</p>
-            <p>If Local QA is missing, rerun the latest notebook or backfill the Colab <code>best.pt</code> with <code>scripts/backfill_pytorch_artifact.py</code>.</p>
-            <p>Closing the Colab tab terminates the runtime and stops training.</p>
-          </details>
-        </li>
-      </ol>
+      <details className="manual-steps-disclosure">
+        <summary>
+          <span>6-step checklist</span>
+          <small>Open when ready to run Colab</small>
+        </summary>
+        <div className="manual-steps-content">
+          <ol className="manual-step-list">
+            {steps.map((step) => (
+              <li key={step.title}>
+                <div className="manual-step-title">
+                  <span>{step.title}</span>
+                </div>
+                <div className="manual-step-body">
+                  {step.body}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </details>
     </div>
   );
 }
@@ -2112,8 +2056,12 @@ function ModelDetail({
       <div>
         <SectionMiniHeading title="Performance" hint="Final validation metrics and artifact identity for this version. Use mAP50 and mask mAP to compare model quality before promotion." />
         <div className="metrics-row performance-metrics-row">
-          <MetricCard label="mAP50" value={pct(version.map50)} detail="Box metric" />
-          <MetricCard label="Mask mAP" value={pct(version.maskMap)} detail="Segmentation metric" />
+          <MetricCard label="mAP50" value={pctMetric(version.metricsSummary.map50)} detail="Box metric" />
+          <MetricCard label="mAP50-95" value={pctMetric(version.metricsSummary.map5095)} detail="Box metric" />
+          <MetricCard label="Precision" value={pctMetric(version.metricsSummary.precision)} detail="Box metric" />
+          <MetricCard label="Recall" value={pctMetric(version.metricsSummary.recall)} detail="Box metric" />
+          <MetricCard label="Mask mAP50" value={pctMetric(version.metricsSummary.maskMap50)} detail="Segmentation metric" />
+          <MetricCard label="Mask mAP50-95" value={pctMetric(version.metricsSummary.maskMap5095)} detail="Segmentation metric" />
           <PerformanceArtifactCard version={version} />
         </div>
       </div>
@@ -2124,7 +2072,6 @@ function ModelDetail({
         dataset={version.dataset}
         datasetStats={resolveDatasetStats(version.dataset, version.datasetStats ?? run?.config.datasetStats)}
         sourceWeights={version.sourceWeights}
-        accelerator={run ? `Colab ${run.config.colabAccelerator}` : undefined}
         classes={version.classes}
         hyperParameters={version.hyperParameters}
       />
@@ -2561,19 +2508,224 @@ function RunList({
 function RunDetail({ run }: { run: RegistryRun }) {
   return (
     <div className="run-detail">
-      <div className="progress-track">
-        <div style={{ width: `${run.progress}%` }} />
-      </div>
       <RunNote note={run.config.note} />
+      <RunMetricsPanel run={run} />
+      <RunProgress run={run} />
       <RunLogs run={run} />
       <InfoSection
         dataset={run.config.dataset}
         datasetStats={resolveDatasetStats(run.config.dataset, run.config.datasetStats ?? run.datasetStats)}
         sourceWeights={run.config.sourceWeights}
-        accelerator={`Colab ${run.config.colabAccelerator}`}
         classes={run.config.classes}
         hyperParameters={run.config.hyperParameters}
       />
+    </div>
+  );
+}
+
+function RunProgress({ run }: { run: RegistryRun }) {
+  return (
+    <section className="run-progress-block" aria-label="Run progress">
+      <div className="run-progress-label">
+        <span>Progress</span>
+        <strong>{run.progress}%</strong>
+      </div>
+      <div className="progress-track">
+        <div style={{ width: `${run.progress}%` }} />
+      </div>
+    </section>
+  );
+}
+
+function RunMetricsPanel({ run }: { run: RegistryRun }) {
+  const visibleKeys = metricDisplayOrder.filter((key) => run.metricsSummary[key] !== undefined || run.metricsHistory.some((point) => point.key === key));
+  const [selectedKeys, setSelectedKeys] = useState<MetricKey[]>(() => visibleKeys.slice(0, 5));
+  useEffect(() => {
+    setSelectedKeys((current) => {
+      const stillVisible = current.filter((key) => visibleKeys.includes(key));
+      return stillVisible.length > 0 ? stillVisible : visibleKeys.slice(0, 5);
+    });
+  }, [visibleKeys.join("|")]);
+  function toggleMetric(key: MetricKey) {
+    setSelectedKeys((current) => (
+      current.includes(key)
+        ? current.filter((item) => item !== key)
+        : [...current, key]
+    ));
+  }
+  return (
+    <section className="run-metrics-panel" aria-label="Training metrics">
+      <SectionMiniHeading title="Training metrics" hint="Latest values and per-epoch trend from run_metrics. mAP50-95 uses the standard Ultralytics metric." />
+      {visibleKeys.length > 0 ? (
+        <>
+          <div className="metrics-row compact-metrics-row">
+            {visibleKeys.slice(0, 8).map((key) => (
+              <button
+                key={key}
+                type="button"
+                className={selectedKeys.includes(key) ? "metric-toggle-card active" : "metric-toggle-card"}
+                onClick={() => toggleMetric(key)}
+                aria-pressed={selectedKeys.includes(key)}
+              >
+                <span>{metricDisplayLabels[key]}</span>
+                <strong>{pctMetric(run.metricsSummary[key])}</strong>
+                <small>{selectedKeys.includes(key) ? "shown in chart" : "show in chart"}</small>
+              </button>
+            ))}
+          </div>
+          <MetricTrendChart points={run.metricsHistory} keys={selectedKeys} onToggleMetric={toggleMetric} />
+        </>
+      ) : (
+        <MetricEmptyState />
+      )}
+    </section>
+  );
+}
+
+function MetricEmptyState() {
+  return (
+    <div className="metrics-empty-state">
+      <div className="metrics-empty-cards" aria-hidden="true">
+        {["mAP50", "mAP50-95", "Precision", "Recall"].map((label) => (
+          <article key={label}>
+            <span>{label}</span>
+            <strong>--</strong>
+            <small>waiting</small>
+          </article>
+        ))}
+      </div>
+      <div className="metric-chart empty">
+        <svg viewBox="0 0 380 164" aria-hidden="true">
+          <line x1="28" y1="24" x2="28" y2="142" />
+          <line x1="28" y1="142" x2="352" y2="142" />
+          {[0.25, 0.5, 0.75, 1].map((tick) => (
+            <line key={tick} className="grid-line" x1="28" y1={142 - tick * 118} x2="352" y2={142 - tick * 118} />
+          ))}
+          <path className="empty-chart-path" d="M 38 126 L 96 112 L 154 94 L 212 66 L 270 54 L 346 36" />
+        </svg>
+        <div className="metric-empty-copy">
+          <strong>Awaiting training metrics</strong>
+          <span>Run metrics will appear here after Colab writes mAP, precision, and recall rows.</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MetricTrendChart({ points, keys, onToggleMetric }: { points: MetricPoint[]; keys: MetricKey[]; onToggleMetric: (key: MetricKey) => void }) {
+  const [hovered, setHovered] = useState<MetricPoint | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [showPoints, setShowPoints] = useState(true);
+  const selected = points
+    .filter((point) => keys.includes(point.key))
+    .sort((a, b) => (a.epoch ?? a.step) - (b.epoch ?? b.step));
+  if (selected.length === 0 || keys.length === 0) return <MetricEmptyState />;
+  const xs = selected.map((point) => point.epoch ?? point.step);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const fullSpanX = Math.max(1, maxX - minX);
+  const clampedZoom = Math.max(1, Math.min(4, zoom));
+  const visibleSpan = fullSpanX / clampedZoom;
+  const visibleMinX = maxX - visibleSpan;
+  const chartPoints = selected.filter((point) => (point.epoch ?? point.step) >= visibleMinX);
+  const spanX = Math.max(1, maxX - visibleMinX);
+  const canZoomIn = clampedZoom < 4 && fullSpanX > 1;
+  const canZoomOut = clampedZoom > 1;
+  function zoomIn() {
+    setZoom((value) => Math.min(4, value * 2));
+  }
+  function zoomOut() {
+    setZoom((value) => Math.max(1, value / 2));
+  }
+  function resetZoom() {
+    setZoom(1);
+  }
+  const colors: Record<MetricKey, string> = {
+    map50: "#2563eb",
+    map5095: "#7c3aed",
+    precision: "#0891b2",
+    recall: "#16a34a",
+    maskMap50: "#ea580c",
+    maskMap5095: "#dc2626",
+    maskPrecision: "#be123c",
+    maskRecall: "#4d7c0f",
+  };
+  const coordsFor = (point: MetricPoint) => ({
+    x: 28 + (((point.epoch ?? point.step) - visibleMinX) / spanX) * 324,
+    y: 142 - Math.max(0, Math.min(1, point.value)) * 118,
+  });
+  const pathFor = (key: MetricKey) => {
+    const series = chartPoints.filter((point) => point.key === key);
+    if (series.length === 0) return "";
+    return series.map((point, index) => {
+      const { x, y } = coordsFor(point);
+      return `${index === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    }).join(" ");
+  };
+  return (
+    <div className="metric-chart">
+      <div className="metric-chart-toolbar">
+        <span>{clampedZoom === 1 ? "Full range" : `${clampedZoom}x zoom`} · {showPoints ? "Epoch points on" : "Epoch points off"}</span>
+        <div className="metric-chart-actions">
+          <button type="button" onClick={() => setShowPoints((value) => !value)} aria-pressed={showPoints} aria-label={showPoints ? "Hide epoch points" : "Show epoch points"}>
+            {showPoints ? "Hide points" : "Show points"}
+          </button>
+          <button type="button" onClick={zoomOut} disabled={!canZoomOut} aria-label="Zoom out chart">-</button>
+          <button type="button" onClick={resetZoom} disabled={!canZoomOut} aria-label="Reset chart zoom">Reset</button>
+          <button type="button" onClick={zoomIn} disabled={!canZoomIn} aria-label="Zoom in chart">+</button>
+        </div>
+      </div>
+      <svg viewBox="0 0 380 164" role="img" aria-label="Training metric trend chart">
+        <line x1="28" y1="24" x2="28" y2="142" />
+        <line x1="28" y1="142" x2="352" y2="142" />
+        {[0.25, 0.5, 0.75, 1].map((tick) => (
+          <g key={tick}>
+            <line className="grid-line" x1="28" y1={142 - tick * 118} x2="352" y2={142 - tick * 118} />
+            <text x="6" y={146 - tick * 118}>{Math.round(tick * 100)}</text>
+          </g>
+        ))}
+        {keys.map((key) => {
+          const path = pathFor(key);
+          return path ? <path key={key} d={path} style={{ stroke: colors[key] }} /> : null;
+        })}
+        {showPoints && chartPoints.map((point) => {
+          const { x, y } = coordsFor(point);
+          return (
+            <circle
+              key={`${point.key}-${point.step}-${point.epoch ?? "x"}-${point.value}`}
+              cx={x}
+              cy={y}
+              r={hovered === point ? 5 : 3}
+              tabIndex={0}
+              style={{ fill: colors[point.key] }}
+              onMouseEnter={() => setHovered(point)}
+              onMouseLeave={() => setHovered(null)}
+              onFocus={() => setHovered(point)}
+              onBlur={() => setHovered(null)}
+            >
+              <title>{`${metricDisplayLabels[point.key]} ${pctMetric(point.value)} at ${point.epoch ? `epoch ${point.epoch}` : `step ${point.step}`}`}</title>
+            </circle>
+          );
+        })}
+      </svg>
+      <div className="metric-chart-readout" aria-live="polite">
+        {hovered ? (
+          <>
+            <strong>{metricDisplayLabels[hovered.key]}</strong>
+            <span>{pctMetric(hovered.value)}</span>
+            <small>{hovered.epoch ? `Epoch ${hovered.epoch}` : `Step ${hovered.step}`}</small>
+          </>
+        ) : (
+          <span>Hover or focus a point to inspect a metric value.</span>
+        )}
+      </div>
+      <div className="metric-chart-legend">
+        {keys.map((key) => (
+          <button key={key} type="button" onClick={() => onToggleMetric(key)}>
+            <i style={{ background: colors[key] }} />{metricDisplayLabels[key]}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -2687,14 +2839,12 @@ function InfoSection({
   dataset,
   datasetStats,
   sourceWeights,
-  accelerator,
   classes,
   hyperParameters,
 }: {
   dataset: string;
   datasetStats?: DatasetStats;
   sourceWeights: string;
-  accelerator?: string;
   classes: string[];
   hyperParameters: TrainConfig["hyperParameters"];
 }) {
@@ -2703,13 +2853,12 @@ function InfoSection({
   return (
     <div className="info-section">
       <div className="info-block">
-        <SectionMiniHeading title="Training config" hint="Dataset source, checkpoint, accelerator, and image size used when this run or model version was created." />
+        <SectionMiniHeading title="Training config" hint="Dataset source, checkpoint, and image size used when this run or model version was created." />
         <dl className="info-grid">
           <dt>Dataset</dt>
           <dd className="mono">{dataset || "—"}</dd>
           <dt>Source weights</dt>
           <dd className="mono">{sourceWeights || "—"}</dd>
-          {accelerator && <><dt>Accelerator</dt><dd>{accelerator}</dd></>}
           <dt>Image size</dt>
           <dd>{hyperParameters.imgsz} px</dd>
         </dl>
@@ -2938,6 +3087,10 @@ function sectionDescription(section: Section) {
 
 function pct(value: number) {
   return `${Math.round(value * 100)}%`;
+}
+
+function pctMetric(value?: number | null) {
+  return typeof value === "number" && Number.isFinite(value) ? pct(value) : "—";
 }
 
 const COLAB_NOTEBOOK_URL =

@@ -74,6 +74,25 @@ class TrainForRunExportTests(unittest.TestCase):
         self.assertEqual(metadata["size_bytes"], 20)
         self.assertEqual(metadata["quantization"]["precision"], "fp32")
 
+    def test_normalize_metric_summary_preserves_raw_and_skips_missing(self):
+        summary = self.module.normalize_metric_summary({
+            "metrics/mAP50(B)": 0.82,
+            "metrics/mAP50-95(B)": 0.74,
+            "metrics/precision(B)": 0.8,
+            "metrics/recall(B)": 0.76,
+            "metrics/mAP50(M)": 0.72,
+            "metrics/mAP50-95(M)": 0.7,
+            "ignored": "not numeric",
+        })
+
+        self.assertEqual(summary["map50"], 0.82)
+        self.assertEqual(summary["map5095"], 0.74)
+        self.assertEqual(summary["precision"], 0.8)
+        self.assertEqual(summary["recall"], 0.76)
+        self.assertEqual(summary["maskMap50"], 0.72)
+        self.assertEqual(summary["maskMap5095"], 0.7)
+        self.assertNotIn("ignored", summary["raw"])
+
     def test_resolve_pytorch_weights_prefers_best(self):
         with tempfile.TemporaryDirectory() as tmp:
             save_dir = Path(tmp)
@@ -143,6 +162,43 @@ class TrainForRunExportTests(unittest.TestCase):
             )
 
         self.assertEqual(target, repo)
+
+    def test_build_training_config_uses_dashboard_hyperparameter_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            dataset = repo / "dataset.yaml"
+            dataset.write_text("path: .\ntrain: images/train\nval: images/val\nnames:\n  0: banana\n", encoding="utf-8")
+
+            config = self.module.build_training_config(
+                {
+                    "id": "run-1",
+                    "config_yaml": {
+                        "dataset": str(dataset),
+                        "source_weights": "yolo26n-seg.pt",
+                        "hyperparameters": {
+                            "epochs": 3,
+                            "imgsz": 320,
+                            "batch": 16,
+                            "patience": 7,
+                            "lr0": 0.002,
+                            "optimizer": "AdamW",
+                            "mosaic": 0.5,
+                            "maskRatio": 2,
+                        },
+                    },
+                },
+                repo,
+                client=None,
+            )
+
+        self.assertEqual(config["epochs"], 3)
+        self.assertEqual(config["imgsz"], 320)
+        self.assertEqual(config["batch"], 16)
+        self.assertEqual(config["patience"], 7)
+        self.assertEqual(config["lr0"], 0.002)
+        self.assertNotIn("optimizer", config)
+        self.assertNotIn("mosaic", config)
+        self.assertNotIn("mask_ratio", config)
 
 
 if __name__ == "__main__":

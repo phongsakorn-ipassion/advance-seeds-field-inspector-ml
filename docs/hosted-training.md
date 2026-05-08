@@ -139,10 +139,17 @@ Response body:
 
 ## Dataset Boundary
 
-The worker can consume a local/path-like dataset YAML, a public HTTPS dataset
-YAML, or `dataset_url` supplied in the config. Full unattended hosted training
-still needs the dashboard to upload image zips and pass a presigned dataset
-bundle URL. That is the next follow-up after the hosted trigger foundation.
+The dashboard requires both the dataset YAML and dataset image ZIP before run
+creation. Manual Colab downloads the YAML and, when the bundle is an R2 dataset
+key, `scripts/train_for_run.py` downloads and extracts the ZIP before training.
+
+The dashboard no longer stores a Colab accelerator choice. Any runtime/GPU
+selection is made in Colab or the hosted worker environment itself.
+
+Final version metadata stores normalized model-quality metrics in
+`metadata.metrics` (`map50`, `map5095`, `precision`, `recall`, and mask
+equivalents) and preserves raw Ultralytics metric names under
+`metadata.metrics.raw`.
 
 ## Validation
 

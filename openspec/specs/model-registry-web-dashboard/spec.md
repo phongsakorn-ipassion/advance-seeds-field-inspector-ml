@@ -114,6 +114,19 @@ hyperparameters, editable settings, live progress tracking, and, when the
 hosted training trigger is configured, the ability to dispatch a real training
 job from the browser.
 
+#### Scenario: Required training inputs are missing
+- **WHEN** an admin submits Train new model without a dataset config, dataset
+  image bundle, or source weights
+- **THEN** the dashboard SHALL block run creation
+- **AND** field-level errors SHALL identify the missing inputs
+
+#### Scenario: Training form shows current hyperparameter grouping
+- **WHEN** the Train new model form is displayed
+- **THEN** epochs and image size SHALL be the only primary hyperparameter
+  fields
+- **AND** Advanced hyperparameters SHALL contain only patience, LR0, and batch
+- **AND** no Colab accelerator selector SHALL be shown
+
 #### Scenario: Training starts with defaults via hosted trigger
 - **WHEN** an admin starts a training job with default settings
 - **AND** `TRAINING_PROVIDER_BASE_URL` is configured on the Supabase Functions
@@ -170,8 +183,8 @@ the registry service.
 
 #### Scenario: Operator reviews model performance artifacts
 - **WHEN** a model version has platform artifacts
-- **THEN** the Performance section shows mAP50, mask mAP, and artifact cards
-  with balanced proportions
+- **THEN** the Performance section shows available mAP50, mAP50-95,
+  precision, recall, mask metrics, and artifact cards with balanced proportions
 - **AND** the artifact card summarizes Android, iOS, and original PyTorch
   artifact sizes without exposing sha256 details in the card body
 
@@ -190,6 +203,8 @@ once the Python SDK reports them.
 - **WHEN** the SDK inserts a row into `run_metrics` for a running run
 - **THEN** the dashboard's live tracking panel updates to reflect the new
   metric within a few seconds
+- **AND** Run detail SHALL show latest numeric values and a compact chart for
+  available mAP50, mAP50-95, precision, recall, and mask metrics
 
 #### Scenario: Run finishes
 - **WHEN** the SDK marks a run as `succeeded`
@@ -219,6 +234,22 @@ once the Python SDK reports them.
   trained model
 - **AND** selecting the shortcut SHALL open the Models workflow with that
   version selected
+
+#### Scenario: Model detail shows final metric summary
+- **WHEN** a model version metadata object contains normalized metric fields
+- **THEN** Model detail SHALL show mAP50, mAP50-95, precision, recall, and mask
+  metric values when available
+- **AND** unavailable historical metrics SHALL render as unavailable rather
+  than `0%`
+
+#### Scenario: Model detail fills metadata gaps from linked run metrics
+- **WHEN** a model version is linked to a training run that has normalized
+  `run_metrics` rows
+- **AND** version metadata is missing mAP50-95, precision, recall, Mask mAP50,
+  or another normalized metric
+- **THEN** Model detail SHALL use the linked run metric summary for the missing
+  values
+- **AND** version metadata values SHALL take precedence over run fallback values
 
 ### Requirement: Channel writes update Supabase
 The dashboard SHALL write deploy and undeploy actions to the `channels` table

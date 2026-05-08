@@ -91,6 +91,12 @@ non-quantized PyTorch `.pt` export for local segmentation QA.
 - **AND** version metadata SHALL record the quantization or precision mode for
   each platform artifact
 
+#### Scenario: Training records final model-quality metrics
+- **WHEN** a successful training run creates a version
+- **THEN** `versions.metadata.metrics` SHALL include normalized metric keys for
+  available mAP50, mAP50-95, precision, recall, and mask metrics
+- **AND** raw training metric names SHALL remain available in metadata
+
 #### Scenario: Core ML export is missing
 - **WHEN** a version has no Core ML artifact
 - **THEN** the dashboard marks iOS as missing while Android remains deployable

@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packages" / "training-worker" / "src"))
 
 from advance_seeds_training_worker.callbacks import CallbackClient
-from advance_seeds_training_worker.runner import HostedTrainingWorker, WorkerConfig, parse_metric_line
+from advance_seeds_training_worker.runner import HostedTrainingWorker, WorkerConfig, parse_metric_line, parse_metric_lines
 
 
 RUN_ID = "00000000-0000-4000-8000-000000000001"
@@ -43,6 +43,19 @@ class TrainingWorkerTests(unittest.TestCase):
             {"step": 2, "epoch": 2, "name": "mAP50", "value": 0.61},
         )
 
+    def test_parse_metric_lines_extracts_related_metrics(self):
+        self.assertEqual(
+            parse_metric_lines("epoch=2 mAP50=0.61 mAP50-95=0.52 precision=0.7 recall=0.8 mask_mAP50=0.5 mask_mAP=0.49"),
+            [
+                {"step": 2, "epoch": 2, "name": "mAP50", "value": 0.61},
+                {"step": 2, "epoch": 2, "name": "metrics/mAP50-95(B)", "value": 0.52},
+                {"step": 2, "epoch": 2, "name": "metrics/precision(B)", "value": 0.7},
+                {"step": 2, "epoch": 2, "name": "metrics/recall(B)", "value": 0.8},
+                {"step": 2, "epoch": 2, "name": "metrics/mAP50(M)", "value": 0.5},
+                {"step": 2, "epoch": 2, "name": "metrics/mAP50-95(M)", "value": 0.49},
+            ],
+        )
+
     def test_worker_streams_logs_metrics_uploads_artifact_and_succeeds(self):
         transport = RecordingTransport()
         with tempfile.TemporaryDirectory() as tmp:
@@ -62,13 +75,18 @@ class TrainingWorkerTests(unittest.TestCase):
                 self.assertEqual(cwd, root)
                 self.assertIn("--config", command)
                 train_config = Path(command[command.index("--config") + 1]).read_text(encoding="utf-8")
-                self.assertIn("optimizer: AdamW", train_config)
-                self.assertIn("weight_decay: 0.00064", train_config)
-                self.assertIn("cos_lr: true", train_config)
-                self.assertIn("close_mosaic: 10", train_config)
-                self.assertIn("mask_ratio: 2", train_config)
-                self.assertIn("overlap_mask: true", train_config)
-                self.assertIn("multi_scale: 0.1", train_config)
+                self.assertIn("epochs: 1", train_config)
+                self.assertIn("imgsz: 32", train_config)
+                self.assertIn("batch: auto", train_config)
+                self.assertIn("patience: 12", train_config)
+                self.assertIn("lr0: 0.002", train_config)
+                self.assertNotIn("optimizer:", train_config)
+                self.assertNotIn("weight_decay:", train_config)
+                self.assertNotIn("cos_lr:", train_config)
+                self.assertNotIn("close_mosaic:", train_config)
+                self.assertNotIn("mask_ratio:", train_config)
+                self.assertNotIn("overlap_mask:", train_config)
+                self.assertNotIn("multi_scale:", train_config)
                 yield "epoch=1 mAP50=0.42\n"
                 yield "progress=100\n"
 
@@ -84,6 +102,8 @@ class TrainingWorkerTests(unittest.TestCase):
                     "hyperparameters": {
                         "epochs": 1,
                         "imgsz": 32,
+                        "patience": 12,
+                        "lr0": 0.002,
                         "optimizer": "AdamW",
                         "weightDecay": 0.00064,
                         "cosLr": True,

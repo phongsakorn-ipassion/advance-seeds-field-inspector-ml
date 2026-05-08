@@ -3,6 +3,7 @@ import {
   actionsForEvent,
   appendTrimmedLogs,
   hmacHex,
+  normalizeMetricSummary,
   parseCallbackEvent,
   verifySignature,
 } from "./callback.ts";
@@ -13,6 +14,32 @@ Deno.test("verifySignature accepts exact sha256 HMAC", async () => {
   const body = JSON.stringify({ type: "metric", run_id: RUN_ID, step: 1, name: "mAP50", value: 0.42 });
   const sig = await hmacHex("secret", body);
   assertEquals(await verifySignature("secret", body, `sha256=${sig}`), true);
+});
+
+Deno.test("normalizeMetricSummary maps Ultralytics metrics and preserves raw names", () => {
+  assertEquals(normalizeMetricSummary({
+    "metrics/mAP50(B)": 0.71,
+    "metrics/mAP50-95(B)": 0.63,
+    "metrics/precision(B)": 0.8,
+    "metrics/recall(B)": 0.77,
+    "metrics/mAP50(M)": 0.61,
+    "metrics/mAP50-95(M)": 0.59,
+  }), {
+    raw: {
+      "metrics/mAP50(B)": 0.71,
+      "metrics/mAP50-95(B)": 0.63,
+      "metrics/precision(B)": 0.8,
+      "metrics/recall(B)": 0.77,
+      "metrics/mAP50(M)": 0.61,
+      "metrics/mAP50-95(M)": 0.59,
+    },
+    map50: 0.71,
+    map5095: 0.63,
+    precision: 0.8,
+    recall: 0.77,
+    maskMap50: 0.61,
+    maskMap5095: 0.59,
+  });
 });
 
 Deno.test("verifySignature rejects missing or mismatched signature", async () => {

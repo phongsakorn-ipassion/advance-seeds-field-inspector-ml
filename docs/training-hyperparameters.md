@@ -55,7 +55,11 @@ CLI overrides are forwarded to `scripts/train_yolo26n_seg.py`, for example:
 scripts/train_local_banana.sh --epochs 3 --name banana-v2-smoke
 ```
 
-## Defaults
+## Local YAML Defaults
+
+These defaults describe the checked-in local training YAML and direct
+`scripts/train_yolo26n_seg.py` workflow. Dashboard-created manual Colab runs
+use the smaller dashboard contract in [Dashboard Run Requirements](#dashboard-run-requirements).
 
 | Parameter | Value | Rationale |
 | --- | --- | --- |
@@ -120,11 +124,13 @@ python3 scripts/evaluate_model_summary.py \
 ## YOLO26 Source Weights
 
 The dashboard source-weight selector offers the YOLO26 segmentation size
-ladder:
+ladder, but it intentionally starts with no selection. Operators must choose a
+checkpoint before creating a run so the registry row records an explicit
+training source.
 
 | Weight | Use when |
 | --- | --- |
-| `yolo26n-seg.pt` | Default mobile-oriented fine-tuning baseline. |
+| `yolo26n-seg.pt` | Mobile-oriented fine-tuning baseline. |
 | `yolo26s-seg.pt` | Balanced option when latency budget allows a larger model. |
 | `yolo26m-seg.pt` | Accuracy-focused experiments with higher training/export cost. |
 | `yolo26l-seg.pt` | Large-model validation runs before deciding whether mobile cost is acceptable. |
@@ -147,6 +153,41 @@ before training:
 
 Use `--no-auto-hardware` to print or run the raw config values without resolving
 `device`, `batch`, `workers`, `amp`, and `cache`.
+
+## Dashboard Run Requirements
+
+The Train new model page now requires all three inputs before it creates a run:
+
+- Dataset config: uploaded YOLO dataset YAML.
+- Dataset image bundle: uploaded ZIP containing images/labels referenced by
+  the YAML.
+- Source weights: explicit YOLO26 segmentation checkpoint selection.
+
+Only `epochs` and `imgsz` are primary hyperparameters in the form. Advanced
+hyperparameters contains only `patience`, `lr0`, and `batch`. New dashboard
+runs persist only those five hyperparameter values, and the manual Colab
+`scripts/train_for_run.py` path builds its training config from the same set.
+Other YOLO tuning defaults belong to checked-in training YAML files, direct CLI
+experiments, or Ultralytics defaults rather than the dashboard run config.
+
+Colab accelerator selection is not stored in the dashboard run config. Runtime
+choice stays in the actual Colab environment or training host.
+
+## Registry Metric Names
+
+Final model metadata stores normalized metrics in `metadata.metrics` while
+preserving raw Ultralytics names under `metadata.metrics.raw`.
+
+| Normalized key | Ultralytics source |
+| --- | --- |
+| `map50` | `metrics/mAP50(B)` |
+| `map5095` | `metrics/mAP50-95(B)` |
+| `precision` | `metrics/precision(B)` |
+| `recall` | `metrics/recall(B)` |
+| `maskMap50` | `metrics/mAP50(M)`, `mask_mAP50`, or `mask.map50` |
+| `maskMap5095` | `metrics/mAP50-95(M)`, `mask_mAP`, or `mask.map50-95` |
+| `maskPrecision` | `metrics/precision(M)` |
+| `maskRecall` | `metrics/recall(M)` |
 
 ## Notes
 

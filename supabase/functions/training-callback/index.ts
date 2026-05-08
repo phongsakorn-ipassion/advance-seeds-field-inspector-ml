@@ -2,6 +2,7 @@ import { corsHeaders } from "../_shared/cors.ts";
 import { serviceClient } from "../_shared/supabase.ts";
 import {
   appendTrimmedLogs,
+  normalizeMetricSummary,
   parseCallbackEvent,
   verifySignature,
   type CallbackEvent,
@@ -70,7 +71,7 @@ async function applyEvent(event: CallbackEvent): Promise<void> {
 
   const cfg = run.config_yaml ?? {};
   const hp = cfg.hyperparameters ?? {};
-  const metrics = event.metrics ?? {};
+  const metrics = normalizeMetricSummary(event.metrics);
   const semver = event.semver ?? inferSemver();
   const contentHash = event.content_hash ?? await sha256Hex(event.tflite_r2_key);
   const metadata = {

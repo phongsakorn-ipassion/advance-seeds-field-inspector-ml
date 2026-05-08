@@ -112,6 +112,40 @@ def artifact_metadata(*, kind: str, artifact, quantization: dict) -> dict:
     }
 
 
+METRIC_ALIASES = {
+    "map50": ("map50", "box.map50", "bbox.map50", "metrics/map50(b)"),
+    "map5095": ("map5095", "map50-95", "map50_95", "box.map50-95", "bbox.map50-95", "metrics/map50-95(b)"),
+    "precision": ("precision", "box.precision", "bbox.precision", "metrics/precision(b)"),
+    "recall": ("recall", "box.recall", "bbox.recall", "metrics/recall(b)"),
+    "maskMap50": ("maskmap50", "mask_map50", "mask.map50", "seg.map50", "segment.map50", "metrics/map50(m)"),
+    "maskMap5095": ("maskmap5095", "maskmap50-95", "mask_map50_95", "maskmap", "mask_map", "mask.map50-95", "seg.map50-95", "segment.map50-95", "metrics/map50-95(m)"),
+    "maskPrecision": ("maskprecision", "mask_precision", "mask.precision", "seg.precision", "segment.precision", "metrics/precision(m)"),
+    "maskRecall": ("maskrecall", "mask_recall", "mask.recall", "seg.recall", "segment.recall", "metrics/recall(m)"),
+}
+
+
+def _metric_name(value: str) -> str:
+    return "".join(ch for ch in value.strip().lower() if ch.isalnum())
+
+
+def normalize_metric_summary(raw_metrics: dict) -> dict:
+    numeric_raw = {}
+    for key, value in raw_metrics.items():
+        try:
+            numeric_raw[str(key)] = float(value)
+        except (TypeError, ValueError):
+            continue
+    summary = {"raw": numeric_raw}
+    normalized_raw = {_metric_name(key): value for key, value in numeric_raw.items()}
+    for target, aliases in METRIC_ALIASES.items():
+        for alias in aliases:
+            normalized_alias = _metric_name(alias)
+            if normalized_alias in normalized_raw:
+                summary[target] = normalized_raw[normalized_alias]
+                break
+    return summary
+
+
 def current_git_sha(repo_root: Path) -> str | None:
     try:
         result = subprocess.run(
@@ -157,10 +191,7 @@ def build_version_metadata(
         "output_kind": "segmentation-mask",
         "task": "segmentation",
         "hyperparameters": run_row.get("config_yaml", {}).get("hyperparameters", {}),
-        "metrics": {
-            "map50": float(metrics_dict.get("metrics/mAP50(B)", 0.0)),
-            "mask_map": float(metrics_dict.get("metrics/mAP50-95(M)", 0.0)),
-        },
+        "metrics": normalize_metric_summary(metrics_dict),
         "artifacts": {
             "pytorch": artifact_metadata(
                 kind="pytorch",
@@ -409,61 +440,11 @@ def build_training_config(run_row: dict, repo_root: Path, client: RegistryClient
         "batch": hp.get("batch", "auto"),
         "patience": int(hp.get("patience", 10)),
         "lr0": float(hp.get("lr0", 0.001)),
-        "lrf": float(hp.get("lrf", 0.01)),
-        "mosaic": float(hp.get("mosaic", 0.0)),
-        "mixup": float(hp.get("mixup", 0.0)),
-        "copy_paste": float(hp.get("copy_paste", hp.get("copyPaste", 0.0))),
     }
-    for target, aliases, coercer in optional_training_hyperparameters():
-        value = first_present(hp, *aliases)
-        if value is not None:
-            config[target] = coercer(value)
     config = apply_hardware_profile(config, detect_hardware())
     config = resolve_training_paths(config, repo_root)
     config = materialize_ultralytics_dataset_config(config, repo_root / "runs" / "_runtime_datasets")
     return config
-
-
-def optional_training_hyperparameters():
-    return (
-        ("optimizer", ("optimizer",), str),
-        ("momentum", ("momentum",), float),
-        ("weight_decay", ("weight_decay", "weightDecay"), float),
-        ("warmup_epochs", ("warmup_epochs", "warmupEpochs"), float),
-        ("cos_lr", ("cos_lr", "cosLr"), coerce_bool),
-        ("close_mosaic", ("close_mosaic", "closeMosaic"), int),
-        ("scale", ("scale",), float),
-        ("translate", ("translate",), float),
-        ("fliplr", ("fliplr",), float),
-        ("flipud", ("flipud",), float),
-        ("degrees", ("degrees",), float),
-        ("shear", ("shear",), float),
-        ("hsv_h", ("hsv_h", "hsvH"), float),
-        ("hsv_s", ("hsv_s", "hsvS"), float),
-        ("hsv_v", ("hsv_v", "hsvV"), float),
-        ("mask_ratio", ("mask_ratio", "maskRatio"), int),
-        ("overlap_mask", ("overlap_mask", "overlapMask"), coerce_bool),
-        ("box", ("box",), float),
-        ("cls", ("cls",), float),
-        ("multi_scale", ("multi_scale", "multiScale"), float),
-    )
-
-
-def first_present(mapping: dict, *keys: str):
-    for key in keys:
-        if key in mapping:
-            return mapping[key]
-    return None
-
-
-def coerce_bool(value) -> bool:
-    if isinstance(value, bool):
-        return value
-    if str(value).lower() in {"true", "1", "yes"}:
-        return True
-    if str(value).lower() in {"false", "0", "no"}:
-        return False
-    raise ValueError(f"expected boolean value, got {value!r}")
 
 
 def main(argv: list[str] | None = None) -> int:

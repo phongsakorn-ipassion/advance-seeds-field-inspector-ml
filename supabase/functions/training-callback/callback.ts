@@ -39,6 +39,17 @@ export type CallbackAction =
   | { kind: "mark_succeeded"; runId: string; event: Extract<CallbackEvent, { type: "succeeded" }> }
   | { kind: "mark_failed"; runId: string; error: string };
 
+const METRIC_ALIASES: Record<string, string[]> = {
+  map50: ["map50", "box.map50", "bbox.map50", "metrics/map50(b)"],
+  map5095: ["map5095", "map50-95", "map50_95", "box.map50-95", "bbox.map50-95", "metrics/map50-95(b)"],
+  precision: ["precision", "box.precision", "bbox.precision", "metrics/precision(b)"],
+  recall: ["recall", "box.recall", "bbox.recall", "metrics/recall(b)"],
+  maskMap50: ["maskmap50", "mask_map50", "mask.map50", "seg.map50", "segment.map50", "metrics/map50(m)"],
+  maskMap5095: ["maskmap5095", "maskmap50-95", "mask_map50_95", "maskmap", "mask_map", "mask.map50-95", "seg.map50-95", "segment.map50-95", "metrics/map50-95(m)"],
+  maskPrecision: ["maskprecision", "mask_precision", "mask.precision", "seg.precision", "segment.precision", "metrics/precision(m)"],
+  maskRecall: ["maskrecall", "mask_recall", "mask.recall", "seg.recall", "segment.recall", "metrics/recall(m)"],
+};
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function hmacHex(secret: string, body: string): Promise<string> {
@@ -138,6 +149,28 @@ export function appendTrimmedLogs(existing: unknown, lines: string[]): Record<st
   const prev = Array.isArray(base.logs) ? base.logs.filter((line) => typeof line === "string") as string[] : [];
   base.logs = [...prev, ...lines].slice(-500);
   return base;
+}
+
+export function normalizeMetricSummary(metrics: Record<string, number> | undefined): Record<string, unknown> {
+  const raw = metrics ?? {};
+  const normalizedRaw = Object.fromEntries(
+    Object.entries(raw).map(([key, value]) => [normalizeMetricName(key), value]),
+  );
+  const summary: Record<string, unknown> = { raw };
+  for (const [target, aliases] of Object.entries(METRIC_ALIASES)) {
+    for (const alias of aliases) {
+      const value = normalizedRaw[normalizeMetricName(alias)];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        summary[target] = value;
+        break;
+      }
+    }
+  }
+  return summary;
+}
+
+function normalizeMetricName(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
 function stringField(event: Record<string, unknown>, key: string): string {

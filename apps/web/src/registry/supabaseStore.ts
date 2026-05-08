@@ -1,5 +1,6 @@
 import { createClient, RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import type { RegistryStore } from "./api";
+import { metricPointFromRow, metricSummaryFromMetadata, summarizeMetricPoints } from "./metrics";
 import type {
   AuthSession,
   ChannelName,
@@ -10,6 +11,7 @@ import type {
   RegistryRun,
   RegistrySnapshot,
   RegistryVersion,
+  MetricSummary,
   StorageObject,
   TrainConfig,
   VersionState,
@@ -128,7 +130,6 @@ function configFromRun(run: DbRun): TrainConfig {
     sourceWeights: cfg.source_weights ?? cfg.sourceWeights ?? "",
     classes: cfg.classes ?? cfg.class_names ?? [],
     hyperParameters: hp,
-    colabAccelerator: cfg.colab_accelerator ?? cfg.colabAccelerator ?? "T4",
     note: typeof cfg.note === "string" ? cfg.note : "",
   };
 }
@@ -139,40 +140,12 @@ function hyperParametersFrom(hp: any, inputSize?: number): HyperParameters {
     imgsz: numberOr(hp.imgsz ?? inputSize, 0),
     batch: String(hp.batch ?? "auto"),
     patience: numberOr(hp.patience, 0),
-    optimizer: String(hp.optimizer ?? "auto"),
     lr0: numberOr(hp.lr0, 0),
-    lrf: numberOr(hp.lrf, 0),
-    momentum: numberOr(hp.momentum, 0),
-    weightDecay: numberOr(hp.weightDecay ?? hp.weight_decay, 0),
-    warmupEpochs: numberOr(hp.warmupEpochs ?? hp.warmup_epochs, 0),
-    cosLr: booleanOr(hp.cosLr ?? hp.cos_lr, false),
-    closeMosaic: numberOr(hp.closeMosaic ?? hp.close_mosaic, 0),
-    mosaic: numberOr(hp.mosaic, 0),
-    mixup: numberOr(hp.mixup, 0),
-    copyPaste: numberOr(hp.copyPaste ?? hp.copy_paste, 0),
-    scale: numberOr(hp.scale, 0),
-    translate: numberOr(hp.translate, 0),
-    fliplr: numberOr(hp.fliplr, 0),
-    flipud: numberOr(hp.flipud, 0),
-    degrees: numberOr(hp.degrees, 0),
-    shear: numberOr(hp.shear, 0),
-    hsvH: numberOr(hp.hsvH ?? hp.hsv_h, 0),
-    hsvS: numberOr(hp.hsvS ?? hp.hsv_s, 0),
-    hsvV: numberOr(hp.hsvV ?? hp.hsv_v, 0),
-    maskRatio: numberOr(hp.maskRatio ?? hp.mask_ratio, 0),
-    overlapMask: booleanOr(hp.overlapMask ?? hp.overlap_mask, false),
-    box: numberOr(hp.box, 0),
-    cls: numberOr(hp.cls, 0),
-    multiScale: numberOr(hp.multiScale ?? hp.multi_scale, 0),
   };
 }
 
 function numberOr(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function booleanOr(value: unknown, fallback: boolean): boolean {
-  return typeof value === "boolean" ? value : fallback;
 }
 
 // Derive 0-100 progress from run_metrics. Default: use the latest reported
@@ -194,26 +167,17 @@ function deriveProgress(run: DbRun, metrics: DbRunMetric[]): number {
   return run.status === "running" ? 0 : 0;
 }
 
-function latestMetric(metrics: DbRunMetric[], runId: string, names: string[]): number | null {
-  const allowed = new Set(names.map(normalizeMetricName));
-  const filtered = metrics.filter((m) => m.run_id === runId && allowed.has(normalizeMetricName(m.name)));
-  if (filtered.length === 0) return null;
-  return filtered.sort(compareMetricRecency)[0].value;
-}
-
-function compareMetricRecency(a: DbRunMetric, b: DbRunMetric): number {
-  const recorded = Date.parse(b.recorded_at ?? "") - Date.parse(a.recorded_at ?? "");
-  if (Number.isFinite(recorded) && recorded !== 0) return recorded;
-  if (b.step !== a.step) return b.step - a.step;
-  return (b.epoch ?? -1) - (a.epoch ?? -1);
-}
-
 function normalizeMetricName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, "");
 }
 
 function mapRun(run: DbRun, metrics: DbRunMetric[]): RegistryRun {
   const config = configFromRun(run);
+  const metricsHistory = metrics
+    .filter((m) => m.run_id === run.id)
+    .map(metricPointFromRow)
+    .filter((point): point is NonNullable<typeof point> => point !== null);
+  const metricsSummary = summarizeMetricPoints(metricsHistory);
   return {
     id: run.id,
     name: run.config_yaml?.name ?? run.id.slice(0, 8),
@@ -225,8 +189,10 @@ function mapRun(run: DbRun, metrics: DbRunMetric[]): RegistryRun {
     startedAt: fmt(run.started_at),
     finishedAt: run.finished_at ? fmt(run.finished_at) : null,
     progress: deriveProgress(run, metrics),
-    map50: latestMetric(metrics, run.id, ["mAP50", "map50", "metrics/mAP50(B)", "metrics/map50(b)"]),
-    maskMap: latestMetric(metrics, run.id, ["mask_mAP", "mask_map", "metrics/mAP50-95(M)", "metrics/map50-95(m)"]),
+    map50: metricsSummary.map50 ?? null,
+    maskMap: metricsSummary.maskMap5095 ?? null,
+    metricsSummary,
+    metricsHistory,
     config,
     colabNotebook: run.config_yaml?.colab_notebook ?? "",
     logs: (run.config_yaml?.logs ?? []) as string[],
@@ -236,6 +202,7 @@ function mapRun(run: DbRun, metrics: DbRunMetric[]): RegistryRun {
 function mapVersion(v: DbVersion, channelByVersion: Map<string, ChannelName>): RegistryVersion {
   const md = v.metadata ?? {};
   const hp = md.hyperparameters ?? {};
+  const metricsSummary = metricSummaryFromMetadata(md.metrics);
   const tfliteArtifact = md.artifacts?.tflite ?? {};
   const coremlArtifact = md.artifacts?.coreml ?? {};
   const pytorchArtifact = md.artifacts?.pytorch ?? {};
@@ -252,8 +219,9 @@ function mapVersion(v: DbVersion, channelByVersion: Map<string, ChannelName>): R
     datasetStats: datasetStatsFrom(md),
     classes: md.class_names ?? [],
     hyperParameters: hyperParametersFrom(hp, md.input_size),
-    map50: md.metrics?.map50 ?? 0,
-    maskMap: md.metrics?.mask_map ?? 0,
+    map50: metricsSummary.map50 ?? 0,
+    maskMap: metricsSummary.maskMap5095 ?? md.metrics?.mask_map ?? 0,
+    metricsSummary,
     sizeMb: v.size_bytes / (1024 * 1024),
     contentHash: v.content_hash,
     tfliteR2Key: v.tflite_r2_key,
@@ -270,6 +238,20 @@ function mapVersion(v: DbVersion, channelByVersion: Map<string, ChannelName>): R
     createdAt: fmt(v.created_at),
     description: typeof md.description === "string" ? md.description : "",
     originalSemver: typeof md.original_semver === "string" ? md.original_semver : v.semver,
+  };
+}
+
+function withRunMetricFallback(version: RegistryVersion, run?: RegistryRun): RegistryVersion {
+  if (!run) return version;
+  const metricsSummary: MetricSummary = {
+    ...run.metricsSummary,
+    ...version.metricsSummary,
+  };
+  return {
+    ...version,
+    metricsSummary,
+    map50: metricsSummary.map50 ?? version.map50,
+    maskMap: metricsSummary.maskMap5095 ?? metricsSummary.maskMap50 ?? version.maskMap,
   };
 }
 
@@ -397,10 +379,16 @@ export function createSupabaseStore(env: Env): RegistryStore {
       if (!channelByVersion.has(dep.version_id)) channelByVersion.set(dep.version_id, dep.channel_name);
     }
 
+    const mappedRuns = (runs ?? []).map((r) => mapRun(r as DbRun, metrics));
+    const runById = new Map(mappedRuns.map((run) => [run.id, run]));
+    const mappedVersions = (versions ?? [])
+      .map((v) => mapVersion(v as DbVersion, channelByVersion))
+      .map((version) => withRunMetricFallback(version, runById.get(version.runId)));
+
     snapshot = {
       quotaMb: env.quotaMb,
-      runs: (runs ?? []).map((r) => mapRun(r as DbRun, metrics)),
-      versions: (versions ?? []).map((v) => mapVersion(v as DbVersion, channelByVersion)),
+      runs: mappedRuns,
+      versions: mappedVersions,
       channels: (channels ?? []).map((c) => mapChannel(c as DbChannel)),
       deployments: (deployments as DbDeployment[]).map(mapDeployment),
       storage: storageFromVersions((versions ?? []) as DbVersion[], (channels ?? []) as DbChannel[], deployments as DbDeployment[]),
@@ -473,12 +461,11 @@ export function createSupabaseStore(env: Env): RegistryStore {
     const classPreview = config.classes.slice(0, 6).join(", ") + (config.classes.length > 6 ? "..." : "");
     const bootstrapLogs = [
       `Run queued by dashboard for model_line=${config.modelLine}`,
-      `Runtime: Colab ${config.colabAccelerator}`,
       `Source weights: ${config.sourceWeights}`,
       `Dataset: ${config.dataset}`,
       config.datasetBundle ? `Dataset bundle: ${config.datasetBundle}` : "Dataset bundle: manual Colab image hand-off",
       `Classes (${config.classes.length}): ${classPreview}`,
-      `Epochs=${config.hyperParameters.epochs} | imgsz=${config.hyperParameters.imgsz} | lr0=${config.hyperParameters.lr0}`,
+      `Epochs=${config.hyperParameters.epochs} | imgsz=${config.hyperParameters.imgsz} | batch=${config.hyperParameters.batch} | patience=${config.hyperParameters.patience} | lr0=${config.hyperParameters.lr0}`,
       "Hosted trigger is not configured. Awaiting Python SDK / Colab MCP to stream run_metrics...",
     ];
     const { error } = await client.from("runs").insert({
@@ -495,12 +482,11 @@ export function createSupabaseStore(env: Env): RegistryStore {
         source_weights: config.sourceWeights,
         classes: config.classes,
         hyperparameters: config.hyperParameters,
-        colab_accelerator: config.colabAccelerator,
         colab_notebook: `Colab MCP / ${runName}.ipynb (pending)`,
         note: config.note ?? "",
         logs: bootstrapLogs,
       },
-      hardware: { label: `Colab ${config.colabAccelerator}` },
+      hardware: { label: "Manual Colab" },
     });
     if (error) throw error;
   }
@@ -556,11 +542,13 @@ export function createSupabaseStore(env: Env): RegistryStore {
             config: {
               model_line: config.modelLine,
               dataset: config.dataset,
+              dataset_bundle: config.datasetBundle,
+              dataset_bundle_filename: config.datasetBundleFilename,
+              dataset_bundle_size_bytes: config.datasetBundleSizeBytes,
               dataset_stats: config.datasetStats,
               source_weights: config.sourceWeights,
               classes: config.classes,
               hyperparameters: config.hyperParameters,
-              colab_accelerator: config.colabAccelerator,
               note: config.note ?? "",
             },
           }),

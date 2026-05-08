@@ -66,8 +66,7 @@ class HostedTrainingWorker:
                     if not line:
                         continue
                     callback.log(run_id=run_id, lines=[line])
-                    metric = parse_metric_line(line)
-                    if metric is not None:
+                    for metric in parse_metric_lines(line):
                         final_metrics[metric["name"]] = metric["value"]
                         callback.metric(run_id=run_id, **metric)
 
@@ -125,60 +124,10 @@ class HostedTrainingWorker:
             "batch": hp.get("batch", "auto"),
             "patience": int(hp.get("patience", 10)),
             "lr0": float(hp.get("lr0", 0.001)),
-            "lrf": float(hp.get("lrf", 0.01)),
-            "mosaic": float(hp.get("mosaic", 0.0)),
-            "mixup": float(hp.get("mixup", 0.0)),
-            "copy_paste": float(hp.get("copyPaste", hp.get("copy_paste", 0.0))),
         }
-        for target, aliases, coercer in optional_training_hyperparameters():
-            value = first_present(hp, *aliases)
-            if value is not None:
-                train_config[target] = coercer(value)
         target = workdir / "train.yaml"
         target.write_text(yaml.safe_dump(train_config, sort_keys=False), encoding="utf-8")
         return target
-
-
-def optional_training_hyperparameters():
-    return (
-        ("optimizer", ("optimizer",), str),
-        ("momentum", ("momentum",), float),
-        ("weight_decay", ("weight_decay", "weightDecay"), float),
-        ("warmup_epochs", ("warmup_epochs", "warmupEpochs"), float),
-        ("cos_lr", ("cos_lr", "cosLr"), coerce_bool),
-        ("close_mosaic", ("close_mosaic", "closeMosaic"), int),
-        ("scale", ("scale",), float),
-        ("translate", ("translate",), float),
-        ("fliplr", ("fliplr",), float),
-        ("flipud", ("flipud",), float),
-        ("degrees", ("degrees",), float),
-        ("shear", ("shear",), float),
-        ("hsv_h", ("hsv_h", "hsvH"), float),
-        ("hsv_s", ("hsv_s", "hsvS"), float),
-        ("hsv_v", ("hsv_v", "hsvV"), float),
-        ("mask_ratio", ("mask_ratio", "maskRatio"), int),
-        ("overlap_mask", ("overlap_mask", "overlapMask"), coerce_bool),
-        ("box", ("box",), float),
-        ("cls", ("cls",), float),
-        ("multi_scale", ("multi_scale", "multiScale"), float),
-    )
-
-
-def first_present(mapping: dict[str, Any], *keys: str) -> Any:
-    for key in keys:
-        if key in mapping:
-            return mapping[key]
-    return None
-
-
-def coerce_bool(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    if str(value).lower() in {"true", "1", "yes"}:
-        return True
-    if str(value).lower() in {"false", "0", "no"}:
-        return False
-    raise ValueError(f"expected boolean value, got {value!r}")
 
 
 def materialize_dataset(config: dict[str, Any], workdir: Path) -> Path:
@@ -227,15 +176,33 @@ def latest_matching(root: Path, pattern: str) -> Path | None:
 
 
 def parse_metric_line(line: str) -> dict[str, Any] | None:
+    metrics = parse_metric_lines(line)
+    return metrics[0] if metrics else None
+
+
+def parse_metric_lines(line: str) -> list[dict[str, Any]]:
     match = re.search(r"epoch[=/:\s]+(?P<epoch>\d+).*?(?:mAP50|map50)[=:\s]+(?P<map50>\d+(?:\.\d+)?)", line, re.I)
+    metrics: list[dict[str, Any]] = []
+    epoch = int(match.group("epoch")) if match else None
     if match:
-        epoch = int(match.group("epoch"))
-        return {"step": epoch, "epoch": epoch, "name": "mAP50", "value": float(match.group("map50"))}
+        metrics.append({"step": epoch, "epoch": epoch, "name": "mAP50", "value": float(match.group("map50"))})
+    if epoch is not None:
+        patterns = {
+            "metrics/mAP50-95(B)": r"(?:mAP50-95|map50-95)[=:\s]+(?P<value>\d+(?:\.\d+)?)",
+            "metrics/precision(B)": r"(?:precision|prec)[=:\s]+(?P<value>\d+(?:\.\d+)?)",
+            "metrics/recall(B)": r"(?:recall)[=:\s]+(?P<value>\d+(?:\.\d+)?)",
+            "metrics/mAP50(M)": r"(?:mask_mAP50|mask-map50|maskMap50|mask_map50)[=:\s]+(?P<value>\d+(?:\.\d+)?)",
+            "metrics/mAP50-95(M)": r"(?:mask_mAP50-95|mask-map50-95|maskMap50-95|mask_map50-95|mask_mAP|mask-map|maskMap)[=:\s]+(?P<value>\d+(?:\.\d+)?)",
+        }
+        for name, pattern in patterns.items():
+            found = re.search(pattern, line, re.I)
+            if found:
+                metrics.append({"step": epoch, "epoch": epoch, "name": name, "value": float(found.group("value"))})
     progress = re.search(r"progress[=:\s]+(?P<progress>\d+(?:\.\d+)?)", line, re.I)
     if progress:
         value = float(progress.group("progress"))
-        return {"step": int(value), "epoch": None, "name": "progress", "value": value}
-    return None
+        metrics.append({"step": int(value), "epoch": None, "name": "progress", "value": value})
+    return metrics
 
 
 def upload_artifact(

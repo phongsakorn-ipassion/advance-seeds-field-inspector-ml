@@ -2,36 +2,34 @@ export type ChannelName = "staging" | "production";
 export type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 export type VersionState = "candidate" | "staging" | "production" | "inactive" | "archived";
 
+export type MetricKey =
+  | "map50"
+  | "map5095"
+  | "precision"
+  | "recall"
+  | "maskMap50"
+  | "maskMap5095"
+  | "maskPrecision"
+  | "maskRecall";
+
+export type MetricPoint = {
+  key: MetricKey;
+  label: string;
+  step: number;
+  epoch: number | null;
+  value: number;
+  rawName: string;
+  recordedAt?: string;
+};
+
+export type MetricSummary = Partial<Record<MetricKey, number>>;
+
 export type HyperParameters = {
   epochs: number;
   imgsz: number;
   batch: string;
   patience: number;
-  optimizer: string;
   lr0: number;
-  lrf: number;
-  momentum: number;
-  weightDecay: number;
-  warmupEpochs: number;
-  cosLr: boolean;
-  closeMosaic: number;
-  mosaic: number;
-  mixup: number;
-  copyPaste: number;
-  scale: number;
-  translate: number;
-  fliplr: number;
-  flipud: number;
-  degrees: number;
-  shear: number;
-  hsvH: number;
-  hsvS: number;
-  hsvV: number;
-  maskRatio: number;
-  overlapMask: boolean;
-  box: number;
-  cls: number;
-  multiScale: number;
 };
 
 export type TrainConfig = {
@@ -46,7 +44,6 @@ export type TrainConfig = {
   sourceWeights: string;
   classes: string[];
   hyperParameters: HyperParameters;
-  colabAccelerator: "T4" | "L4" | "A100";
   note?: string;
 };
 
@@ -88,6 +85,8 @@ export type RegistryRun = {
   progress: number;
   map50: number | null;
   maskMap: number | null;
+  metricsSummary: MetricSummary;
+  metricsHistory: MetricPoint[];
   config: TrainConfig;
   colabNotebook: string;
   logs: string[];
@@ -105,6 +104,7 @@ export type RegistryVersion = {
   hyperParameters: HyperParameters;
   map50: number;
   maskMap: number;
+  metricsSummary: MetricSummary;
   sizeMb: number;
   contentHash: string;
   tfliteR2Key: string;
