@@ -1,12 +1,7 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { ExternalLink } from "lucide-react";
 import { buildOpenApiSpec, type OpenApiDoc } from "./openapi";
 import type { RegistryDeployment, RegistryVersion } from "./types";
-
-const SwaggerUI = lazy(async () => {
-  await import("swagger-ui-react/swagger-ui.css");
-  const mod = await import("swagger-ui-react");
-  return { default: mod.default };
-});
 
 export function DeploymentSwaggerPanel({
   version,
@@ -23,60 +18,57 @@ export function DeploymentSwaggerPanel({
     () => buildOpenApiSpec(version, deployments, { serverUrl, modelLineSlug }),
     [version, deployments, serverUrl, modelLineSlug],
   );
-  const [failed, setFailed] = useState(false);
+
+  function openInNewTab() {
+    const html = renderSwaggerStandaloneHtml(spec, version.semver);
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, "_blank", "noopener");
+    if (!win) {
+      URL.revokeObjectURL(url);
+      return;
+    }
+    window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
 
   return (
     <section className="deployment-swagger-panel" aria-label="API explorer">
-      <header className="deployment-swagger-heading">
+      <div className="deployment-swagger-heading">
         <strong>API explorer</strong>
-        <span>Interactive Swagger UI scoped to this model version. Use Try it out to issue real requests.</span>
-      </header>
-      {failed ? (
-        <SwaggerFallback spec={spec} />
-      ) : (
-        <Suspense fallback={<div className="deployment-swagger-loading">Loading Swagger UI…</div>}>
-          <SwaggerBoundary onError={() => setFailed(true)}>
-            <SwaggerUI spec={spec} />
-          </SwaggerBoundary>
-        </Suspense>
-      )}
+        <span>Open the live Swagger UI for this model version in a new tab.</span>
+      </div>
+      <button type="button" className="primary-button compact deployment-swagger-open" onClick={openInNewTab}>
+        Open Swagger <ExternalLink size={13} aria-hidden="true" />
+      </button>
     </section>
   );
 }
 
-function SwaggerBoundary({ children, onError }: { children: React.ReactNode; onError: () => void }) {
-  const [errored, setErrored] = useState(false);
-  useEffect(() => {
-    function handle(event: ErrorEvent) {
-      if (event.message?.includes("swagger")) {
-        setErrored(true);
-        onError();
-      }
-    }
-    window.addEventListener("error", handle);
-    return () => window.removeEventListener("error", handle);
-  }, [onError]);
-  if (errored) return null;
-  return <>{children}</>;
+function renderSwaggerStandaloneHtml(spec: OpenApiDoc, title: string): string {
+  const specJson = JSON.stringify(spec).replace(/</g, "\\u003c");
+  const safeTitle = title.replace(/[<>&"]/g, "");
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Swagger · ${safeTitle}</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  <style>html, body { margin: 0; background: #fafafa; } #swagger { max-width: 1280px; margin: 0 auto; }</style>
+</head>
+<body>
+  <div id="swagger"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js" crossorigin></script>
+  <script>
+    window.addEventListener('load', function () {
+      window.ui = SwaggerUIBundle({
+        spec: ${specJson},
+        dom_id: '#swagger',
+        deepLinking: true,
+        layout: 'BaseLayout',
+        tryItOutEnabled: true,
+      });
+    });
+  </script>
+</body>
+</html>`;
 }
-
-function SwaggerFallback({ spec }: { spec: OpenApiDoc }) {
-  const paths = (spec.paths ?? {}) as Record<string, Record<string, OpenApiOperation>>;
-  return (
-    <div className="deployment-swagger-fallback" role="alert">
-      <strong>Swagger UI failed to load. Showing endpoint summary instead.</strong>
-      <ul>
-        {Object.entries(paths).flatMap(([path, methods]) =>
-          Object.entries(methods).map(([method, op]) => (
-            <li key={`${method}-${path}`}>
-              <code>{method.toUpperCase()} {path}</code>
-              <span>{op.summary ?? ""}</span>
-            </li>
-          )),
-        )}
-      </ul>
-    </div>
-  );
-}
-
-type OpenApiOperation = { summary?: string };
