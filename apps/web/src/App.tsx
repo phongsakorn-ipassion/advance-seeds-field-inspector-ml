@@ -1544,47 +1544,56 @@ function ColabManualSteps({ runId }: { runId: string }) {
 
 function DatasetSplitScroller({ stats }: { stats?: DatasetStats }) {
   const splits = [
-    { label: "Training", count: stats?.train, path: stats?.trainPath, role: "Model fitting" },
-    { label: "Validation", count: stats?.validation, path: stats?.validationPath, role: "Early stopping and tuning" },
-    { label: "Testing", count: stats?.testing, path: stats?.testingPath, role: "Final holdout check" },
-  ];
+    { key: "training", label: "Training", count: stats?.train, role: "Model fitting" },
+    { key: "validation", label: "Validation", count: stats?.validation, role: "Early stopping" },
+    { key: "testing", label: "Testing", count: stats?.testing, role: "Final holdout" },
+  ] as const;
   const total = stats?.total ?? sumKnownCounts(stats);
   const hasAnyPath = Boolean(stats?.trainPath || stats?.validationPath || stats?.testingPath);
   const hasAnyCount = typeof total === "number";
   const totalDisplay = hasAnyCount ? formatCount(total) : (hasAnyPath ? "—" : "No dataset");
   const knownTotal = typeof total === "number" && total > 0 ? total : null;
+  const pctFor = (count?: number) => (knownTotal && typeof count === "number" ? (count / knownTotal) * 100 : 0);
   return (
-    <div className="dataset-split-scroller" aria-label="Dataset split summary">
-      <div className="dataset-split-total">
-        <div>
-          <span>
-            DATASET IMAGES
-            <Hint text="Paths come from the YOLO YAML's train, val, and test fields. Image counts only appear once the trainer scans the dataset on disk — the browser can't count images in a remote folder." />
+    <section className="dataset-images" aria-label="Dataset split summary">
+      <header className="dataset-images-head">
+        <div className="dataset-images-title">
+          <span className="dataset-images-eyebrow">
+            Dataset images
+            <Hint text="Paths come from the YOLO YAML's train, val, and test fields. Image counts only appear once the trainer scans the dataset on disk." />
           </span>
-          <small>{hasAnyCount ? "Trainer-scanned image inventory" : hasAnyPath ? "Waiting for trainer-side scan" : "No dataset paths available"}</small>
+          <strong className="dataset-images-total">{totalDisplay}</strong>
+          <small className="dataset-images-note">
+            {hasAnyCount ? "Trainer-scanned image inventory" : hasAnyPath ? "Waiting for trainer-side scan" : "No dataset paths available"}
+          </small>
         </div>
-        <strong>{totalDisplay}</strong>
-      </div>
-      {hasAnyPath && !hasAnyCount && (
-        <p className="dataset-split-note">
-          Paths parsed from YAML. Image counts will populate once the trainer scans the dataset.
-        </p>
+      </header>
+      {knownTotal && (
+        <div className="dataset-images-bar" role="img" aria-label="Train / validation / testing distribution">
+          {splits.map((split) => {
+            const pct = pctFor(split.count);
+            return pct > 0 ? (
+              <span key={split.key} className={`dataset-images-bar-seg seg-${split.key}`} style={{ width: `${pct}%` }} />
+            ) : null;
+          })}
+        </div>
       )}
-      <div className="dataset-split-rail" tabIndex={0}>
-        {splits.map((split) => (
-          <article className="dataset-split-card" key={split.label}>
-            <div className="dataset-split-card-head">
-              <span>{split.label}</span>
+      <div className="dataset-images-legend">
+        {splits.map((split) => {
+          const pct = pctFor(split.count);
+          return (
+            <article className="dataset-images-legend-card" key={split.key}>
+              <span className="dataset-images-legend-name">
+                <span className={`dataset-images-dot seg-${split.key}`} aria-hidden="true" />
+                {split.label}
+              </span>
               <strong>{typeof split.count === "number" ? formatCount(split.count) : "—"}</strong>
-            </div>
-            <div className="dataset-split-meter" aria-hidden="true">
-              <div style={{ width: `${knownTotal && typeof split.count === "number" ? Math.max(3, Math.round((split.count / knownTotal) * 100)) : 0}%` }} />
-            </div>
-            <small>{split.role}</small>
-          </article>
-        ))}
+              <small>{knownTotal && typeof split.count === "number" ? `${pct.toFixed(0)}% · ${split.role}` : split.role}</small>
+            </article>
+          );
+        })}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -2058,11 +2067,8 @@ function ModelDetail({
           <MetricCard label="F1-score" value={pctMetric(f1FromPrecisionRecall(version.metricsSummary.precision, version.metricsSummary.recall))} detail="Derived from P & R" />
           <MetricCard label="Mask mAP50" value={pctMetric(version.metricsSummary.maskMap50)} detail="Segmentation metric" />
           <MetricCard label="Mask mAP50-95" value={pctMetric(version.metricsSummary.maskMap5095)} detail="Segmentation metric" />
-          <MetricCard label="PyTorch latency" value={msMetric(version.pytorchInferenceMs)} detail="Inference time" />
-          <MetricCard label="TFLite latency" value={msMetric(version.tfliteInferenceMs)} detail="Inference time" />
-          <MetricCard label="CoreML latency" value={msMetric(version.coremlInferenceMs)} detail="Inference time" />
-          <PerformanceArtifactCard version={version} />
         </div>
+        <PerformanceInferenceArtifacts version={version} />
       </div>
       <PlatformReadiness version={version} store={store} />
       <DescriptionSection version={version} isAdmin={isAdmin} />
@@ -2127,6 +2133,44 @@ function ModelDetail({
         )}
       </div>
     </div>
+  );
+}
+
+function PerformanceInferenceArtifacts({ version }: { version: RegistryVersion }) {
+  const latencies = [
+    version.pytorchInferenceMs,
+    version.tfliteInferenceMs,
+    version.coremlInferenceMs,
+  ].filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const fastest = latencies.length > 0 ? Math.min(...latencies) : null;
+  const totalSizeMb = (version.sizeMb ?? 0) + (version.coremlSizeMb ?? 0) + (version.pytorchSizeMb ?? 0);
+  const packageCount = [version.tfliteR2Key, version.coremlR2Key, version.pytorchR2Key].filter(Boolean).length;
+  return (
+    <details className="perf-collapsible">
+      <summary>
+        <span className="perf-collapsible-left">
+          <span className="perf-chev" aria-hidden="true">›</span>
+          <strong>Inference time & artifacts</strong>
+        </span>
+        <span className="perf-collapsible-right">
+          <span>{fastest !== null ? `Fastest ${fastest.toFixed(1)} ms` : "Latency pending"}</span>
+          <span aria-hidden="true">·</span>
+          <span>{packageCount > 0 ? `${packageCount} package${packageCount === 1 ? "" : "s"} · ${totalSizeMb.toFixed(1)} MB` : "No artifacts"}</span>
+        </span>
+      </summary>
+      <div className="perf-collapsible-body">
+        <p className="perf-collapsible-group">Inference time</p>
+        <div className="metrics-row performance-metrics-row">
+          <MetricCard label="PyTorch latency" value={msMetric(version.pytorchInferenceMs)} detail="Inference time" />
+          <MetricCard label="TFLite latency" value={msMetric(version.tfliteInferenceMs)} detail="Inference time" />
+          <MetricCard label="CoreML latency" value={msMetric(version.coremlInferenceMs)} detail="Inference time" />
+        </div>
+        <p className="perf-collapsible-group">Artifacts</p>
+        <div className="metrics-row performance-metrics-row">
+          <PerformanceArtifactCard version={version} />
+        </div>
+      </div>
+    </details>
   );
 }
 
@@ -2248,10 +2292,10 @@ function PlatformArtifactCard({
   return (
     <article className={ready ? "platform-card ready" : "platform-card missing"}>
       <div className="platform-card-top">
+        <span className="platform-card-icon" aria-hidden="true">{icon}</span>
         <div className="platform-card-title">
-          {icon}
           <strong>{title}</strong>
-          <Hint text={detail} />
+          <small>{status}</small>
         </div>
         <button
           type="button"
@@ -2265,8 +2309,9 @@ function PlatformArtifactCard({
         </button>
       </div>
       <div className="platform-card-meta">
-        <span>{status}</span>
-        <small>{size}</small>
+        <span className={`platform-status-chip ${ready ? "ready" : "missing"}`}>{ready ? "Ready" : "Missing"}</span>
+        <span className="platform-card-size">{size}</span>
+        <Hint text={detail} />
       </div>
       {busy && <small className="platform-download-status">Preparing signed download...</small>}
     </article>
@@ -2325,30 +2370,21 @@ function DeploymentSection({
       {deployments.length > 0 && (
         <div className="deployment-list-block">
           <div className="deployment-list-heading">
-            <div>
-              <strong>Active deployments</strong>
-              <span>Where this version is available to mobile clients.</span>
-            </div>
+            <strong>Active deployments</strong>
           </div>
-          <div className="deployment-list">
+          <ul className="deployment-list-compact">
             {deployments.map((deployment) => (
-              <article className="deployment-row" key={deployment.id}>
-                <div className="deployment-row-main">
-                  <span className={`status-pill ${deployment.channel}`}>{deployment.channel}</span>
-                  <div>
-                    <strong>{deployment.isDefault ? "Default model" : "Selectable model"}</strong>
-                    <span>{deployment.deployedAt ? `Deployed ${deployment.deployedAt}` : "Deployed recently"}</span>
-                  </div>
-                </div>
-                <div className="deployment-platforms">
-                  <span className="status-pill succeeded">Android TF Lite</span>
-                  <span className={canServeIos ? "status-pill succeeded" : "status-pill failed"}>
-                    {canServeIos ? "iOS Core ML" : "iOS missing"}
-                  </span>
-                </div>
-              </article>
+              <li className="deployment-row-compact" key={deployment.id}>
+                <span className={`status-pill ${deployment.channel}`}>{deployment.channel}</span>
+                {deployment.isDefault && <span className="deployment-default-tag">Default</span>}
+                <span className="deployment-platforms-dots" aria-label="Available platforms">
+                  <span className="platform-dot ready" title="Android TF Lite ready" />
+                  <span className={`platform-dot ${canServeIos ? "ready" : "miss"}`} title={canServeIos ? "iOS Core ML ready" : "iOS Core ML missing"} />
+                </span>
+                <span className="deployment-time">{deployment.deployedAt ?? "recently"}</span>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
       {deployments.length > 0 && !version.coremlR2Key && (
