@@ -14,9 +14,10 @@ export function DeploymentSwaggerPanel({
   serverUrl: string;
   modelLineSlug: string;
 }) {
+  const absoluteServerUrl = useMemo(() => toAbsoluteUrl(serverUrl), [serverUrl]);
   const spec = useMemo(
-    () => buildOpenApiSpec(version, deployments, { serverUrl, modelLineSlug }),
-    [version, deployments, serverUrl, modelLineSlug],
+    () => buildOpenApiSpec(version, deployments, { serverUrl: absoluteServerUrl, modelLineSlug }),
+    [version, deployments, absoluteServerUrl, modelLineSlug],
   );
 
   function openInNewTab() {
@@ -42,6 +43,17 @@ export function DeploymentSwaggerPanel({
       </button>
     </section>
   );
+}
+
+function toAbsoluteUrl(value: string): string {
+  if (!value) return typeof window !== "undefined" ? window.location.origin : "https://example.invalid";
+  try {
+    return new URL(value).toString();
+  } catch {
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://example.invalid";
+    const path = value.startsWith("/") ? value : `/${value}`;
+    return `${origin}${path}`;
+  }
 }
 
 function renderSwaggerStandaloneHtml(spec: OpenApiDoc, title: string): string {
