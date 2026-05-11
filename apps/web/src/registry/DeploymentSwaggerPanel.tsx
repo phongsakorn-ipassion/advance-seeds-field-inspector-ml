@@ -90,14 +90,18 @@ function renderSwaggerStandaloneHtml(spec: OpenApiDoc, title: string): string {
             report(new Error('swagger-ui-bundle.js did not load from unpkg'));
             return;
           }
+          var specObject = ${specJson};
+          var specBlob = new Blob([JSON.stringify(specObject)], { type: 'application/json' });
+          var specUrl = URL.createObjectURL(specBlob);
           window.ui = SwaggerUIBundle({
-            spec: ${specJson},
+            url: specUrl,
             dom_id: '#swagger',
             presets: [SwaggerUIBundle.presets.apis],
             layout: 'BaseLayout',
-            deepLinking: true,
+            deepLinking: false,
             defaultModelsExpandDepth: -1,
             docExpansion: 'list',
+            requestInterceptor: function (req) { return req; },
           });
         } catch (err) {
           report(err);

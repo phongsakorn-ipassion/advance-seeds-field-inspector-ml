@@ -74,22 +74,28 @@ export function buildOpenApiSpec(
 }
 
 function enumParam(name: string, location: "query" | "path", description: string, options: string[], defaultValue: string) {
+  const schema: Record<string, unknown> = { type: "string", enum: options };
+  if (location !== "path") schema.default = defaultValue;
   return {
     name,
     in: location,
     required: location === "path",
     description,
-    schema: { type: "string", enum: options, default: defaultValue },
+    example: defaultValue,
+    schema,
   };
 }
 
 function stringParam(name: string, location: "query" | "path", description: string, defaultValue: string) {
+  const schema: Record<string, unknown> = { type: "string" };
+  if (location !== "path" && defaultValue) schema.default = defaultValue;
   return {
     name,
     in: location,
     required: location === "path",
     description,
-    schema: { type: "string", default: defaultValue },
+    example: defaultValue,
+    schema,
   };
 }
 
