@@ -203,7 +203,7 @@ and export-script automation.
 **Location:** `apps/web/`  
 **Stack:** Vite + React + TypeScript + TanStack Query + TanStack Router + Zustand + shadcn/ui + Recharts  
 **Hosting:** GitHub Pages (static SPA)  
-**What it does:** Live training run metrics, version comparison, channel promotion / rollback.  
+**What it does:** Live training run metrics (incl. derived F1-score and per-platform inference time), version comparison, channel promotion / rollback, in-dashboard API explorer that opens Swagger UI in a new tab scoped to each deployed model version (anon key auto-injected into Try-it-out).  
 **Depends on:** All backend tables and Edge Functions.
 
 ### Plan 4 — Mobile OTA Client

@@ -408,7 +408,7 @@ The dashboard SHALL keep model lifecycle cards focused on operator decisions whi
 - **AND** the full R2 key SHALL NOT occupy the artifact card body
 
 ### Requirement: Dashboard provides mobile API handoff
-The repository SHALL provide Postman-ready instructions for the mobile-facing registry endpoints.
+The repository SHALL provide Postman-ready instructions for the mobile-facing registry endpoints and an in-dashboard API explorer scoped to each deployed version.
 
 #### Scenario: Mobile developer imports the collection
 - **WHEN** a developer imports the Postman collection
@@ -417,6 +417,55 @@ The repository SHALL provide Postman-ready instructions for the mobile-facing re
 
 #### Scenario: Mobile developer reviews deployment handoff
 - **WHEN** a deployed model detail renders the Deployment section
-- **THEN** the section SHALL show Postman import, variable setup, and endpoint usage steps
+- **THEN** the section SHALL show Postman import and an API explorer card
 - **AND** it SHALL link to the Postman guide and collection source
-- **AND** model picker, default model, and app field details SHALL be hidden behind expandable content by default
+- **AND** the API explorer card SHALL provide an Open Swagger action that opens a new tab containing Swagger UI rendered from a dynamically-built OpenAPI 3.0.3 document scoped to the version
+
+#### Scenario: Operator exercises the API explorer
+- **WHEN** an operator clicks Open Swagger on a deployed model version
+- **THEN** a new browser tab SHALL render Swagger UI for that version's endpoints
+- **AND** Try-it-out requests SHALL carry the configured Supabase anon key as both the `apikey` header and the `Authorization: Bearer` header so Edge Function calls do not return 401
+
+### Requirement: Run detail surfaces F1-score and inference time
+Run detail Training Metrics SHALL surface a derived F1-score and per-platform inference time alongside the existing mAP and mask metrics.
+
+#### Scenario: Precision and recall arrive for the same epoch
+- **WHEN** `run_metrics` contains both a precision and a recall row for the same epoch of a run
+- **THEN** Run detail SHALL render an F1 toggle card and an F1 trend-chart line
+- **AND** the F1 value SHALL equal `2 * precision * recall / (precision + recall)`, or `0` when `precision + recall === 0`
+
+#### Scenario: Only one of precision or recall is present
+- **WHEN** an epoch has a precision MetricPoint but no recall MetricPoint, or vice versa
+- **THEN** no F1 point SHALL be emitted for that epoch
+- **AND** the F1 toggle card SHALL render `--` when no F1 points exist for the run
+
+#### Scenario: Version metadata contains inference_ms entries
+- **WHEN** the version produced by a run carries `metrics.inference_ms.pytorch`, `metrics.inference_ms.tflite`, or `metrics.inference_ms.coreml`
+- **THEN** Run detail SHALL render a static three-card Inference Time row below the trend chart
+- **AND** each card SHALL show the numeric value formatted as `<value> ms`
+
+#### Scenario: Inference time missing for a platform
+- **WHEN** a platform inference_ms field is absent from version metadata
+- **THEN** the corresponding card SHALL render `--`
+- **AND** the card SHALL show a `pending export` hint
+
+### Requirement: Model detail Performance shows F1-score and inference time
+Model detail Performance SHALL include a derived F1-score and per-platform inference time alongside the existing metric cards.
+
+#### Scenario: Version has precision and recall in summary
+- **WHEN** `version.metricsSummary.precision` and `version.metricsSummary.recall` are both numbers
+- **THEN** the Performance row SHALL include an F1-score `MetricCard`
+- **AND** the value SHALL equal `2 * precision * recall / (precision + recall)`, or `0` when `precision + recall === 0`
+
+#### Scenario: Version lacks one of precision or recall
+- **WHEN** either precision or recall is missing from the version metricsSummary
+- **THEN** the F1-score card SHALL render `--`
+
+#### Scenario: Version metadata exposes inference_ms entries
+- **WHEN** a version carries `metrics.inference_ms.pytorch`, `metrics.inference_ms.tflite`, or `metrics.inference_ms.coreml`
+- **THEN** the Performance row SHALL include three additional `MetricCard`s labeled by platform
+- **AND** each card SHALL show the numeric value formatted as `<value> ms`
+
+#### Scenario: Inference time missing for a platform
+- **WHEN** a platform inference_ms field is absent from version metadata
+- **THEN** the corresponding card SHALL render `--`

@@ -2,6 +2,8 @@
 
 Import `docs/model-registry-postman-collection.json` into Postman to test the mobile-facing model registry services.
 
+> **In-dashboard alternative.** The model-registry web dashboard renders an API explorer on every deployed model version's detail page. Click **Open Swagger** to open a new tab with Swagger UI scoped to that exact version (`current_version` and `current_compat` are pre-filled, only operations for artifacts that exist on the version are listed). The dashboard auto-injects the configured Supabase anon key into Try-it-out requests, so endpoints are testable without copying headers. Postman is still the recommended path for engineering handoff and CI; the in-dashboard explorer is for spot-checks tied to a specific model version.
+
 ## Environment variables
 
 Set these collection variables:
