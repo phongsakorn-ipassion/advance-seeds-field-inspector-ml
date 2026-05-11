@@ -60,7 +60,7 @@ export function buildOpenApiSpec(
   }
 
   return {
-    openapi: "3.1.0",
+    openapi: "3.0.3",
     info: {
       title: `Model registry · ${version.semver}`,
       version: version.semver,

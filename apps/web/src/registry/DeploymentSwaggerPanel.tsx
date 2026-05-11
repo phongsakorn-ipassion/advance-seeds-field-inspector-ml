@@ -52,29 +52,48 @@ function renderSwaggerStandaloneHtml(spec: OpenApiDoc, title: string): string {
 <head>
   <meta charset="utf-8" />
   <title>Swagger · ${safeTitle}</title>
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
-  <style>html, body { margin: 0; background: #fafafa; } #swagger { max-width: 1280px; margin: 0 auto; }</style>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui.css" />
+  <style>
+    html, body { margin: 0; background: #fafafa; font-family: system-ui, sans-serif; }
+    #swagger { max-width: 1280px; margin: 0 auto; }
+    #boot-error { padding: 16px; color: #b91c1c; white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; }
+  </style>
 </head>
 <body>
+  <div id="boot-error" hidden></div>
   <div id="swagger"></div>
-  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js" crossorigin></script>
-  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js" crossorigin></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
   <script>
-    window.addEventListener('load', function () {
-      window.ui = SwaggerUIBundle({
-        spec: ${specJson},
-        dom_id: '#swagger',
-        deepLinking: true,
-        presets: [
-          SwaggerUIBundle.presets.apis,
-          SwaggerUIStandalonePreset,
-        ],
-        plugins: [SwaggerUIBundle.plugins.DownloadUrl],
-        layout: 'StandaloneLayout',
-        tryItOutEnabled: true,
-        defaultModelsExpandDepth: -1,
-      });
-    });
+    (function () {
+      function report(err) {
+        var box = document.getElementById('boot-error');
+        box.hidden = false;
+        box.textContent = 'Swagger UI failed to initialize:\\n' + (err && err.stack ? err.stack : err);
+        console.error(err);
+      }
+      window.addEventListener('error', function (e) { report(e.error || e.message); });
+      function boot() {
+        try {
+          if (typeof SwaggerUIBundle !== 'function') {
+            report(new Error('swagger-ui-bundle.js did not load from unpkg'));
+            return;
+          }
+          window.ui = SwaggerUIBundle({
+            spec: ${specJson},
+            dom_id: '#swagger',
+            presets: [SwaggerUIBundle.presets.apis],
+            layout: 'BaseLayout',
+            deepLinking: true,
+            defaultModelsExpandDepth: -1,
+            docExpansion: 'list',
+          });
+        } catch (err) {
+          report(err);
+        }
+      }
+      if (document.readyState === 'complete') boot();
+      else window.addEventListener('load', boot);
+    })();
   </script>
 </body>
 </html>`;
