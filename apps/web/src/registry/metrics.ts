@@ -9,6 +9,7 @@ const labels: Record<MetricKey, string> = {
   maskMap5095: "Mask mAP50-95",
   maskPrecision: "Mask precision",
   maskRecall: "Mask recall",
+  f1: "F1-score",
 };
 
 const aliases: Array<[MetricKey, string[]]> = [
@@ -20,7 +21,44 @@ const aliases: Array<[MetricKey, string[]]> = [
   ["maskMap5095", ["maskmap5095", "maskmap50-95", "mask_map50_95", "maskmap", "mask_map", "mask.map50-95", "seg.map50-95", "segment.map50-95", "metrics/map50-95(m)"]],
   ["maskPrecision", ["maskprecision", "mask_precision", "mask.precision", "seg.precision", "segment.precision", "metrics/precision(m)"]],
   ["maskRecall", ["maskrecall", "mask_recall", "mask.recall", "seg.recall", "segment.recall", "metrics/recall(m)"]],
+  ["f1", ["f1", "f1score", "f1_score", "box.f1", "metrics/f1(b)"]],
 ];
+
+export function f1FromPrecisionRecall(precision: number | undefined | null, recall: number | undefined | null): number | null {
+  if (typeof precision !== "number" || typeof recall !== "number") return null;
+  if (!Number.isFinite(precision) || !Number.isFinite(recall)) return null;
+  const denom = precision + recall;
+  if (denom <= 0) return 0;
+  return (2 * precision * recall) / denom;
+}
+
+export function deriveF1Series(history: MetricPoint[]): MetricPoint[] {
+  const precisionByEpoch = new Map<number, MetricPoint>();
+  const recallByEpoch = new Map<number, MetricPoint>();
+  for (const point of history) {
+    const key = point.epoch ?? point.step;
+    if (point.key === "precision" && !precisionByEpoch.has(key)) precisionByEpoch.set(key, point);
+    if (point.key === "recall" && !recallByEpoch.has(key)) recallByEpoch.set(key, point);
+  }
+  const derived: MetricPoint[] = [];
+  for (const [epochKey, precisionPoint] of precisionByEpoch) {
+    const recallPoint = recallByEpoch.get(epochKey);
+    if (!recallPoint) continue;
+    const value = f1FromPrecisionRecall(precisionPoint.value, recallPoint.value);
+    if (value === null) continue;
+    derived.push({
+      key: "f1",
+      label: labels.f1,
+      step: precisionPoint.step,
+      epoch: precisionPoint.epoch,
+      value,
+      rawName: "f1(derived)",
+      recordedAt: precisionPoint.recordedAt,
+    });
+  }
+  derived.sort((a, b) => (a.epoch ?? a.step) - (b.epoch ?? b.step));
+  return derived;
+}
 
 export function normalizeMetricName(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");

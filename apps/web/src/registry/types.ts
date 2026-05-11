@@ -10,7 +10,8 @@ export type MetricKey =
   | "maskMap50"
   | "maskMap5095"
   | "maskPrecision"
-  | "maskRecall";
+  | "maskRecall"
+  | "f1";
 
 export type MetricPoint = {
   key: MetricKey;
@@ -117,6 +118,9 @@ export type RegistryVersion = {
   pytorchSizeMb?: number | null;
   pytorchContentHash?: string | null;
   pytorchPrecision?: string | null;
+  pytorchInferenceMs?: number | null;
+  tfliteInferenceMs?: number | null;
+  coremlInferenceMs?: number | null;
   compatSignature: string;
   createdAt: string;
   description?: string;

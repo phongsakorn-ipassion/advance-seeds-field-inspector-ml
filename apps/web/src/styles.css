@@ -676,6 +676,31 @@ button {
   display: grid;
   gap: var(--as-space-md);
 }
+.deployment-swagger-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--as-surface, #fff);
+  border: 1px solid var(--as-border, #e5e7eb);
+  border-radius: 8px;
+  padding: 12px;
+  overflow: hidden;
+}
+.deployment-swagger-heading { display: flex; flex-direction: column; gap: 2px; }
+.deployment-swagger-heading strong { font-size: 13px; }
+.deployment-swagger-heading span { font-size: 12px; opacity: 0.8; }
+.deployment-swagger-panel .swagger-ui { font-family: inherit; }
+.deployment-swagger-panel .swagger-ui .info { margin: 8px 0; }
+.deployment-swagger-loading { padding: 16px; font-size: 13px; opacity: 0.7; }
+.deployment-swagger-fallback {
+  padding: 12px;
+  border: 1px dashed var(--as-border, #e5e7eb);
+  border-radius: 6px;
+  font-size: 13px;
+}
+.deployment-swagger-fallback ul { margin: 8px 0 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; }
+.deployment-swagger-fallback li { display: flex; gap: 8px; align-items: baseline; }
+.run-inference-row { margin-top: 12px; }
 .mobile-integration-panel {
   display: grid;
   gap: var(--as-space-md);

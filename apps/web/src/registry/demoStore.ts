@@ -67,6 +67,7 @@ function metricPoint(key: MetricKey, value: number, epoch: number, rawName: stri
     maskMap5095: "Mask mAP50-95",
     maskPrecision: "Mask precision",
     maskRecall: "Mask recall",
+    f1: "F1-score",
   };
   return { key, label: labels[key], step: epoch, epoch, value, rawName };
 }
@@ -171,6 +172,9 @@ const initialSnapshot: RegistrySnapshot = {
       pytorchSizeMb: 42.6,
       pytorchContentHash: "sha256:pytorch357e...",
       pytorchPrecision: "fp32",
+      pytorchInferenceMs: 24.6,
+      tfliteInferenceMs: 71.2,
+      coremlInferenceMs: 38.4,
       compatSignature: "0256a143...a5f1a28d1",
       createdAt: "2026-05-02 10:51",
     },
@@ -199,6 +203,9 @@ const initialSnapshot: RegistrySnapshot = {
       pytorchSizeMb: 41.9,
       pytorchContentHash: "sha256:pytorch94a7...",
       pytorchPrecision: "fp32",
+      pytorchInferenceMs: 26.1,
+      tfliteInferenceMs: 78.5,
+      coremlInferenceMs: null,
       compatSignature: "0256a143...a5f1a28d1",
       createdAt: "2026-05-01 15:58",
     },

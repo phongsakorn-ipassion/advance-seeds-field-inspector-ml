@@ -171,6 +171,26 @@ function normalizeMetricName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, "");
 }
 
+function readInferenceMs(metrics: unknown, artifact: unknown, platform: "pytorch" | "tflite" | "coreml"): number | null {
+  const fromMetrics = readNumericPath(metrics, ["inference_ms", platform]);
+  if (fromMetrics !== null) return fromMetrics;
+  if (artifact && typeof artifact === "object") {
+    const fromArtifact = readNumericPath(artifact as Record<string, unknown>, ["inference_ms"])
+      ?? readNumericPath(artifact as Record<string, unknown>, ["latency", "inference_ms"]);
+    if (fromArtifact !== null) return fromArtifact;
+  }
+  return null;
+}
+
+function readNumericPath(source: unknown, path: string[]): number | null {
+  let cursor: unknown = source;
+  for (const segment of path) {
+    if (!cursor || typeof cursor !== "object") return null;
+    cursor = (cursor as Record<string, unknown>)[segment];
+  }
+  return typeof cursor === "number" && Number.isFinite(cursor) ? cursor : null;
+}
+
 function mapRun(run: DbRun, metrics: DbRunMetric[]): RegistryRun {
   const config = configFromRun(run);
   const metricsHistory = metrics
@@ -234,6 +254,9 @@ function mapVersion(v: DbVersion, channelByVersion: Map<string, ChannelName>): R
     pytorchSizeMb: typeof pytorchArtifact.size_bytes === "number" ? pytorchArtifact.size_bytes / (1024 * 1024) : null,
     pytorchContentHash: typeof pytorchArtifact.content_hash === "string" ? pytorchArtifact.content_hash : null,
     pytorchPrecision: typeof pytorchArtifact.quantization?.precision === "string" ? pytorchArtifact.quantization.precision : null,
+    pytorchInferenceMs: readInferenceMs(md.metrics, pytorchArtifact, "pytorch"),
+    tfliteInferenceMs: readInferenceMs(md.metrics, tfliteArtifact, "tflite"),
+    coremlInferenceMs: readInferenceMs(md.metrics, coremlArtifact, "coreml"),
     compatSignature: v.compat_signature ?? "",
     createdAt: fmt(v.created_at),
     description: typeof md.description === "string" ? md.description : "",

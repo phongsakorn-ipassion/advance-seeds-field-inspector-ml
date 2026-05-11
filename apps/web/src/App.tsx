@@ -35,6 +35,8 @@ import {
   TrainConfig,
   createRegistryStore,
 } from "./registry";
+import { deriveF1Series, f1FromPrecisionRecall } from "./registry/metrics";
+import { DeploymentSwaggerPanel } from "./registry/DeploymentSwaggerPanel";
 
 type Section = "overview" | "train" | "models" | "storage";
 type TrainTab = "form" | "live" | "recent";
@@ -52,7 +54,7 @@ type ActivityNotification = {
   toast?: boolean;
 };
 type TrainingFieldErrors = Partial<Record<"dataset" | "datasetBundle" | "sourceWeights", string>>;
-const metricDisplayOrder: MetricKey[] = ["map50", "map5095", "precision", "recall", "maskMap50", "maskMap5095", "maskPrecision", "maskRecall"];
+const metricDisplayOrder: MetricKey[] = ["map50", "map5095", "precision", "recall", "f1", "maskMap50", "maskMap5095", "maskPrecision", "maskRecall"];
 const metricDisplayLabels: Record<MetricKey, string> = {
   map50: "mAP50",
   map5095: "mAP50-95",
@@ -62,6 +64,7 @@ const metricDisplayLabels: Record<MetricKey, string> = {
   maskMap5095: "Mask mAP50-95",
   maskPrecision: "Mask precision",
   maskRecall: "Mask recall",
+  f1: "F1-score",
 };
 
 const MODEL_REGISTRY_POSTMAN_GUIDE_URL =
@@ -193,14 +196,6 @@ function expertLogLines(run: RegistryRun): string[] {
 function functionsBaseUrl(): string {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
   return supabaseUrl ? `${supabaseUrl.replace(/\/$/, "")}/functions/v1` : "/functions/v1";
-}
-
-function listModelsEndpoint(channel: ChannelName, platform: "android" | "ios"): string {
-  return `${functionsBaseUrl()}/list-deployed-models?model_line=seeds-poc&channel=${channel}&platform=${platform}`;
-}
-
-function resolveChannelEndpoint(channel: ChannelName, platform: "android" | "ios"): string {
-  return `${functionsBaseUrl()}/resolve-channel?model_line=seeds-poc&channel=${channel}&platform=${platform}&current_version={version_id}&current_compat={compat_signature}`;
 }
 
 function deriveActivityNotifications(snapshot: ReturnType<RegistryStore["getSnapshot"]>): ActivityNotification[] {
@@ -1188,7 +1183,7 @@ function TrainWorkflow({
               </span>
             </div>
           )}
-          <RunDetail run={focused} />
+          <RunDetail run={focused} version={versionByRunId.get(focused.id) ?? null} />
         </>
       )}
     </section>
@@ -2060,8 +2055,12 @@ function ModelDetail({
           <MetricCard label="mAP50-95" value={pctMetric(version.metricsSummary.map5095)} detail="Box metric" />
           <MetricCard label="Precision" value={pctMetric(version.metricsSummary.precision)} detail="Box metric" />
           <MetricCard label="Recall" value={pctMetric(version.metricsSummary.recall)} detail="Box metric" />
+          <MetricCard label="F1-score" value={pctMetric(f1FromPrecisionRecall(version.metricsSummary.precision, version.metricsSummary.recall))} detail="Derived from P & R" />
           <MetricCard label="Mask mAP50" value={pctMetric(version.metricsSummary.maskMap50)} detail="Segmentation metric" />
           <MetricCard label="Mask mAP50-95" value={pctMetric(version.metricsSummary.maskMap5095)} detail="Segmentation metric" />
+          <MetricCard label="PyTorch latency" value={msMetric(version.pytorchInferenceMs)} detail="Inference time" />
+          <MetricCard label="TFLite latency" value={msMetric(version.tfliteInferenceMs)} detail="Inference time" />
+          <MetricCard label="CoreML latency" value={msMetric(version.coremlInferenceMs)} detail="Inference time" />
           <PerformanceArtifactCard version={version} />
         </div>
       </div>
@@ -2281,20 +2280,7 @@ function DeploymentSection({
   version: RegistryVersion;
   deployments: ReturnType<RegistryStore["getSnapshot"]>["deployments"];
 }) {
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const deployedChannels = Array.from(new Set(deployments.map((deployment) => deployment.channel)));
-  const defaultChannels = Array.from(new Set(deployments.filter((deployment) => deployment.isDefault).map((deployment) => deployment.channel)));
   const canServeIos = Boolean(version.coremlR2Key);
-
-  async function copyValue(key: string, value: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopiedKey(key);
-      window.setTimeout(() => setCopiedKey((current) => current === key ? null : current), 1400);
-    } catch {
-      setCopiedKey(null);
-    }
-  }
 
   return (
     <div className="deployment-section">
@@ -2326,84 +2312,12 @@ function DeploymentSection({
             </div>
           </article>
           <div className="mobile-contract-stack">
-            <details className="mobile-contract-disclosure">
-              <summary>
-                <span>
-                  <strong>Model picker</strong>
-                  <small>List selectable models for a channel.</small>
-                </span>
-              </summary>
-              <div className="mobile-contract-content">
-              {deployedChannels.map((channel) => (
-                <div className="endpoint-group" key={`list-${channel}`}>
-                  <span className={`status-pill ${channel}`}>{channel}</span>
-                  <EndpointRow
-                    icon={<Smartphone size={13} aria-hidden="true" />}
-                    label="Android"
-                    value={listModelsEndpoint(channel, "android")}
-                    copied={copiedKey === `list-${channel}-android`}
-                    onCopy={() => void copyValue(`list-${channel}-android`, listModelsEndpoint(channel, "android"))}
-                  />
-                  <EndpointRow
-                    icon={<Apple size={13} aria-hidden="true" />}
-                    label="iOS"
-                    value={listModelsEndpoint(channel, "ios")}
-                    copied={copiedKey === `list-${channel}-ios`}
-                    onCopy={() => void copyValue(`list-${channel}-ios`, listModelsEndpoint(channel, "ios"))}
-                  />
-                </div>
-              ))}
-              </div>
-            </details>
-            <details className="mobile-contract-disclosure">
-              <summary>
-                <span>
-                  <strong>Default model</strong>
-                  <small>Resolve the channel default at startup or sync.</small>
-                </span>
-              </summary>
-              <div className="mobile-contract-content">
-              {defaultChannels.length === 0 ? (
-                <div className="deployment-default-note" role="status">
-                  <span className="status-pill inactive">Selectable</span>
-                  <p>This version is selectable but not the channel default.</p>
-                </div>
-              ) : defaultChannels.map((channel) => (
-                <div className="endpoint-group" key={`resolve-${channel}`}>
-                  <span className={`status-pill ${channel}`}>{channel}</span>
-                  <EndpointRow
-                    icon={<Smartphone size={13} aria-hidden="true" />}
-                    label="Android"
-                    value={resolveChannelEndpoint(channel, "android")}
-                    copied={copiedKey === `resolve-${channel}-android`}
-                    onCopy={() => void copyValue(`resolve-${channel}-android`, resolveChannelEndpoint(channel, "android"))}
-                  />
-                  <EndpointRow
-                    icon={<Apple size={13} aria-hidden="true" />}
-                    label="iOS"
-                    value={resolveChannelEndpoint(channel, "ios")}
-                    copied={copiedKey === `resolve-${channel}-ios`}
-                    onCopy={() => void copyValue(`resolve-${channel}-ios`, resolveChannelEndpoint(channel, "ios"))}
-                  />
-                </div>
-              ))}
-              </div>
-            </details>
-            <details className="mobile-contract-disclosure">
-              <summary>
-                <span>
-                  <strong>App fields</strong>
-                  <small>Keys the mobile app should persist or validate.</small>
-                </span>
-              </summary>
-              <div className="mobile-contract-content">
-                <div className="response-key-grid" aria-label="Response keys">
-                  {["version_id", "artifact_url / model_url", "content_hash", "compat_signature", "metadata"].map((key) => (
-                    <code key={key}>{key}</code>
-                  ))}
-                </div>
-              </div>
-            </details>
+            <DeploymentSwaggerPanel
+              version={version}
+              deployments={deployments}
+              serverUrl={functionsBaseUrl()}
+              modelLineSlug={(import.meta.env.VITE_MODEL_LINE_SLUG as string | undefined) ?? "seeds-poc"}
+            />
           </div>
         </div>
       )}
@@ -2443,36 +2357,6 @@ function DeploymentSection({
   );
 }
 
-function EndpointRow({
-  icon,
-  label,
-  value,
-  copied,
-  onCopy,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-  copied: boolean;
-  onCopy: () => void;
-}) {
-  return (
-    <div className="endpoint-row">
-      <span className="endpoint-label">{icon}{label}</span>
-      <code title={value}>{value}</code>
-      <button
-        type="button"
-        className={copied ? "icon-action-button endpoint-copy copied" : "icon-action-button endpoint-copy"}
-        onClick={onCopy}
-        aria-label={`Copy ${label} endpoint`}
-        title={copied ? "Copied" : "Copy endpoint"}
-      >
-        <Copy size={13} aria-hidden="true" />
-      </button>
-    </div>
-  );
-}
-
 function RunList({
   runs,
   onSelect,
@@ -2505,11 +2389,11 @@ function RunList({
   );
 }
 
-function RunDetail({ run }: { run: RegistryRun }) {
+function RunDetail({ run, version }: { run: RegistryRun; version: RegistryVersion | null }) {
   return (
     <div className="run-detail">
       <RunNote note={run.config.note} />
-      <RunMetricsPanel run={run} />
+      <RunMetricsPanel run={run} version={version} />
       <RunProgress run={run} />
       <RunLogs run={run} />
       <InfoSection
@@ -2537,8 +2421,15 @@ function RunProgress({ run }: { run: RegistryRun }) {
   );
 }
 
-function RunMetricsPanel({ run }: { run: RegistryRun }) {
-  const visibleKeys = metricDisplayOrder.filter((key) => run.metricsSummary[key] !== undefined || run.metricsHistory.some((point) => point.key === key));
+function RunMetricsPanel({ run, version }: { run: RegistryRun; version: RegistryVersion | null }) {
+  const f1Series = useMemo(() => deriveF1Series(run.metricsHistory), [run.metricsHistory]);
+  const metricsHistory = useMemo(() => [...run.metricsHistory, ...f1Series], [run.metricsHistory, f1Series]);
+  const summaryF1 = f1FromPrecisionRecall(run.metricsSummary.precision, run.metricsSummary.recall);
+  const metricsSummary = useMemo(
+    () => (summaryF1 !== null ? { ...run.metricsSummary, f1: summaryF1 } : run.metricsSummary),
+    [run.metricsSummary, summaryF1],
+  );
+  const visibleKeys = metricDisplayOrder.filter((key) => metricsSummary[key] !== undefined || metricsHistory.some((point) => point.key === key));
   const [selectedKeys, setSelectedKeys] = useState<MetricKey[]>(() => visibleKeys.slice(0, 5));
   useEffect(() => {
     setSelectedKeys((current) => {
@@ -2555,11 +2446,11 @@ function RunMetricsPanel({ run }: { run: RegistryRun }) {
   }
   return (
     <section className="run-metrics-panel" aria-label="Training metrics">
-      <SectionMiniHeading title="Training metrics" hint="Latest values and per-epoch trend from run_metrics. mAP50-95 uses the standard Ultralytics metric." />
+      <SectionMiniHeading title="Training metrics" hint="Latest values and per-epoch trend from run_metrics. F1-score is derived from precision and recall. Inference time is sourced from the run's exported artifacts." />
       {visibleKeys.length > 0 ? (
         <>
           <div className="metrics-row compact-metrics-row">
-            {visibleKeys.slice(0, 8).map((key) => (
+            {visibleKeys.slice(0, 9).map((key) => (
               <button
                 key={key}
                 type="button"
@@ -2568,17 +2459,37 @@ function RunMetricsPanel({ run }: { run: RegistryRun }) {
                 aria-pressed={selectedKeys.includes(key)}
               >
                 <span>{metricDisplayLabels[key]}</span>
-                <strong>{pctMetric(run.metricsSummary[key])}</strong>
+                <strong>{pctMetric(metricsSummary[key])}</strong>
                 <small>{selectedKeys.includes(key) ? "shown in chart" : "show in chart"}</small>
               </button>
             ))}
           </div>
-          <MetricTrendChart points={run.metricsHistory} keys={selectedKeys} onToggleMetric={toggleMetric} />
+          <MetricTrendChart points={metricsHistory} keys={selectedKeys} onToggleMetric={toggleMetric} />
         </>
       ) : (
         <MetricEmptyState />
       )}
+      <RunInferenceTimeRow version={version} />
     </section>
+  );
+}
+
+function RunInferenceTimeRow({ version }: { version: RegistryVersion | null }) {
+  const cards = [
+    { label: "PyTorch latency", value: version?.pytorchInferenceMs, hint: "Inference time" },
+    { label: "TFLite latency", value: version?.tfliteInferenceMs, hint: "Inference time" },
+    { label: "CoreML latency", value: version?.coremlInferenceMs, hint: "Inference time" },
+  ];
+  return (
+    <div className="metrics-row run-inference-row" aria-label="Inference time">
+      {cards.map((card) => (
+        <article className="metric-card" key={card.label}>
+          <span>{card.label}</span>
+          <strong>{msMetric(card.value)}</strong>
+          <small>{typeof card.value === "number" ? card.hint : "pending export"}</small>
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -2649,6 +2560,7 @@ function MetricTrendChart({ points, keys, onToggleMetric }: { points: MetricPoin
     maskMap5095: "#dc2626",
     maskPrecision: "#be123c",
     maskRecall: "#4d7c0f",
+    f1: "#0d9488",
   };
   const coordsFor = (point: MetricPoint) => ({
     x: 28 + (((point.epoch ?? point.step) - visibleMinX) / spanX) * 324,
@@ -3091,6 +3003,10 @@ function pct(value: number) {
 
 function pctMetric(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) ? pct(value) : "—";
+}
+
+function msMetric(value?: number | null): string {
+  return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(1)} ms` : "—";
 }
 
 const COLAB_NOTEBOOK_URL =
