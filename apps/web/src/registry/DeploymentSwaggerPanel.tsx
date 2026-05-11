@@ -58,14 +58,21 @@ function renderSwaggerStandaloneHtml(spec: OpenApiDoc, title: string): string {
 <body>
   <div id="swagger"></div>
   <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js" crossorigin></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js" crossorigin></script>
   <script>
     window.addEventListener('load', function () {
       window.ui = SwaggerUIBundle({
         spec: ${specJson},
         dom_id: '#swagger',
         deepLinking: true,
-        layout: 'BaseLayout',
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset,
+        ],
+        plugins: [SwaggerUIBundle.plugins.DownloadUrl],
+        layout: 'StandaloneLayout',
         tryItOutEnabled: true,
+        defaultModelsExpandDepth: -1,
       });
     });
   </script>
