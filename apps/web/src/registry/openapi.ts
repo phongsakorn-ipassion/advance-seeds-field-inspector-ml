@@ -64,11 +64,19 @@ export function buildOpenApiSpec(
     info: {
       title: `Model registry · ${version.semver}`,
       version: version.semver,
-      description: deployedChannels.length === 0
+      description: (deployedChannels.length === 0
         ? "This version is not yet deployed. Endpoints are listed for reference; calls will return empty results until the version is promoted to a channel."
-        : `Endpoints scoped to version ${version.id} on channel(s) ${deployedChannels.join(", ")}.`,
+        : `Endpoints scoped to version ${version.id} on channel(s) ${deployedChannels.join(", ")}.`)
+        + "\n\nAuthentication: the Supabase anon key is auto-injected into every Try-it-out request as both the `apikey` header and `Authorization: Bearer` header.",
     },
     servers: [{ url: serverUrl }],
+    components: {
+      securitySchemes: {
+        apikey: { type: "apiKey", in: "header", name: "apikey" },
+        bearer: { type: "http", scheme: "bearer" },
+      },
+    },
+    security: [{ apikey: [], bearer: [] }],
     paths,
   };
 }

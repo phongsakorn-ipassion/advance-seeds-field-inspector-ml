@@ -8,11 +8,13 @@ export function DeploymentSwaggerPanel({
   deployments,
   serverUrl,
   modelLineSlug,
+  apiKey,
 }: {
   version: RegistryVersion;
   deployments: RegistryDeployment[];
   serverUrl: string;
   modelLineSlug: string;
+  apiKey?: string;
 }) {
   const absoluteServerUrl = useMemo(() => toAbsoluteUrl(serverUrl), [serverUrl]);
   const spec = useMemo(
@@ -21,7 +23,7 @@ export function DeploymentSwaggerPanel({
   );
 
   function openInNewTab() {
-    const html = renderSwaggerStandaloneHtml(spec, version.semver);
+    const html = renderSwaggerStandaloneHtml(spec, version.semver, apiKey ?? "");
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const win = window.open(url, "_blank", "noopener");
@@ -56,9 +58,10 @@ function toAbsoluteUrl(value: string): string {
   }
 }
 
-function renderSwaggerStandaloneHtml(spec: OpenApiDoc, title: string): string {
+function renderSwaggerStandaloneHtml(spec: OpenApiDoc, title: string, apiKey: string): string {
   const specJson = JSON.stringify(spec).replace(/</g, "\\u003c");
   const safeTitle = title.replace(/[<>&"]/g, "");
+  const apiKeyJson = JSON.stringify(apiKey ?? "");
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -101,7 +104,15 @@ function renderSwaggerStandaloneHtml(spec: OpenApiDoc, title: string): string {
             deepLinking: false,
             defaultModelsExpandDepth: -1,
             docExpansion: 'list',
-            requestInterceptor: function (req) { return req; },
+            requestInterceptor: function (req) {
+              var key = ${apiKeyJson};
+              if (key && req.url && req.url.indexOf('blob:') !== 0) {
+                req.headers = req.headers || {};
+                if (!req.headers['apikey']) req.headers['apikey'] = key;
+                if (!req.headers['Authorization']) req.headers['Authorization'] = 'Bearer ' + key;
+              }
+              return req;
+            },
           });
         } catch (err) {
           report(err);

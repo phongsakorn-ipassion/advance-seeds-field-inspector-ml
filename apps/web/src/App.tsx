@@ -2317,6 +2317,7 @@ function DeploymentSection({
               deployments={deployments}
               serverUrl={functionsBaseUrl()}
               modelLineSlug={(import.meta.env.VITE_MODEL_LINE_SLUG as string | undefined) ?? "seeds-poc"}
+              apiKey={(import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? ""}
             />
           </div>
         </div>
