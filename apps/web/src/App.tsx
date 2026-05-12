@@ -1587,11 +1587,15 @@ function DatasetSplitScroller({ dataset, stats }: { dataset: string; stats?: Dat
         <div className="dataset-dna-splits">
           {splits.map((split) => {
             const pct = pctFor(split.count);
+            const countText = typeof split.count === "number" ? `${formatCount(split.count)} images` : "—";
+            const percentText = knownTotal && typeof split.count === "number" ? `${pct.toFixed(0)}%` : "pending";
             return (
               <article className="dataset-dna-card" key={split.key}>
                 <span className="dataset-dna-card-label">{split.label}</span>
-                <strong>{typeof split.count === "number" ? formatCount(split.count) : "—"}</strong>
-                <small>{knownTotal && typeof split.count === "number" ? `${pct.toFixed(0)}%` : "pending"}</small>
+                <div className="dataset-dna-card-metric">
+                  <strong>{countText}</strong>
+                  <small>{percentText}</small>
+                </div>
               </article>
             );
           })}
@@ -2283,6 +2287,7 @@ function DeploymentSection({
 }) {
   const canServeIos = Boolean(version.coremlR2Key);
   const channelLabel = deployments.map((deployment) => deployment.channel).join(" + ");
+  const defaultDeployment = deployments.find((deployment) => deployment.isDefault) ?? deployments[0];
 
   return (
     <div className="deployment-section">
@@ -2291,26 +2296,18 @@ function DeploymentSection({
         <p className="description-empty">Not deployed to staging or production. Mobile apps cannot list or resolve this model until it is deployed.</p>
       ) : (
         <div className="mobile-integration-panel">
-          <div className="deployment-dna-panel">
-            <div className="deployment-dna-main">
-              <span className="deployment-dna-kicker">Mobile release</span>
-              <strong>{channelLabel}</strong>
+          <div className="deployment-lean-panel">
+            <div className="deployment-lean-main">
+              <span className="deployment-lean-dot" aria-hidden="true" />
+              <div>
+                <span>Mobile deployment</span>
+                <strong>{defaultDeployment?.channel ?? channelLabel}</strong>
+              </div>
             </div>
-            <div className="deployment-dna-routes" aria-label="Deployment channels">
-              {deployments.map((deployment) => (
-                <div className="deployment-dna-route" key={deployment.id}>
-                  <span className={`deployment-dna-mark ${deployment.channel}`} aria-hidden="true" />
-                  <div>
-                    <strong>{deployment.channel}</strong>
-                    <small>{deployment.isDefault ? "Default" : "Selectable"}</small>
-                  </div>
-                  <time>{deployment.deployedAt ?? "recently"}</time>
-                </div>
-              ))}
-            </div>
-            <div className="deployment-dna-runtime" aria-label="Available runtime packages">
-              <span className="deployment-dna-chip ready">Android</span>
-              <span className={canServeIos ? "deployment-dna-chip ready" : "deployment-dna-chip missing"}>iOS</span>
+            <div className="deployment-lean-meta">
+              <time>{defaultDeployment?.deployedAt ?? "recently"}</time>
+              <span className="deployment-lean-chip ready"><Smartphone size={12} aria-hidden="true" /> Android</span>
+              <span className={canServeIos ? "deployment-lean-chip ready" : "deployment-lean-chip missing"}><Apple size={12} aria-hidden="true" /> iOS</span>
             </div>
           </div>
           <details className="deployment-tools-disclosure">
