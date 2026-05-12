@@ -7,7 +7,7 @@
 # banana export into the canonical six-class Advance Seeds contract.
 
 model: yolo26n-seg.pt
-data: configs/dataset.banana-v3.yaml
+data: configs/dataset.v3.yaml
 project: runs/banana-v3
 name: banana-v3-poc
 

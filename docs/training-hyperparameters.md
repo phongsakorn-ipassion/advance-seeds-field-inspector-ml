@@ -99,7 +99,7 @@ use the smaller dashboard contract in [Dashboard Run Requirements](#dashboard-ru
 Banana v4 is the next first-class dataset target:
 
 ```bash
-python3 scripts/validate_dataset.py configs/dataset.banana-v4.yaml
+python3 scripts/validate_dataset.py configs/dataset.v4.yaml
 ```
 
 Use `configs/train.banana-v4.yaml` as the production-candidate baseline. The
@@ -117,7 +117,7 @@ Evaluation summary after a full run:
 ```bash
 python3 scripts/evaluate_model_summary.py \
   --weights runs/banana-v4/banana-v4-baseline/weights/best.pt \
-  --data configs/dataset.banana-v4.yaml \
+  --data configs/dataset.v4.yaml \
   --output runs/banana-v4/banana-v4-baseline/evaluation-summary.json
 ```
 
@@ -138,7 +138,7 @@ training source.
 
 Banana v2 remains the local launcher default. Banana v3 configs are available
 for explicit runs once the processed dataset exists under
-`data/processed/advance-seeds-banana-v3`.
+`data/processed/advance-seeds-dataset-v3`.
 
 ## Hardware Auto-Tuning
 

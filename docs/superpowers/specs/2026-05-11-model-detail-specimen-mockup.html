@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Model detail · specimen card</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root {
+    --as-brand: #0F6E56;
+    --as-brand-soft: #E1F5EE;
+    --as-brand-deep: #04342C;
+    --as-brand-on: #FFFFFF;
+    --as-bg-primary: #FFFFFF;
+    --as-bg-secondary: #F4F4F1;
+    --as-bg-tertiary: #FAFAF9;
+    --as-text-primary: #1A1A1A;
+    --as-text-secondary: #6B6B68;
+    --as-text-tertiary: #9D9D9A;
+    --as-border-secondary: rgba(0, 0, 0, 0.12);
+    --as-border-tertiary: rgba(0, 0, 0, 0.06);
+    --as-success-bg: #EAF3DE;
+    --as-success-text: #27500A;
+    --as-warning-bg: #FAEEDA;
+    --as-warning-text: #633806;
+    --as-danger-bg: #FCEBEB;
+    --as-danger-text: #791F1F;
+    --as-info-bg: #E6F1FB;
+    --as-font-sans: system-ui, -apple-system, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    --as-font-display: "Iowan Old Style", "Charter", "Georgia", serif;
+    --as-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --as-radius-md: 10px;
+    --as-radius-lg: 14px;
+    --as-radius-xl: 18px;
+    --as-radius-2xl: 22px;
+    --as-radius-full: 9999px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--as-font-sans);
+    color: var(--as-text-primary);
+    background:
+      radial-gradient(circle at 20% 0%, var(--as-brand-soft) 0%, transparent 55%),
+      radial-gradient(circle at 95% 100%, rgba(225, 245, 238, 0.6) 0%, transparent 50%),
+      var(--as-bg-tertiary);
+    background-attachment: fixed;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  .stage {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 56px 24px 80px;
+  }
+
+  /* ── Specimen card ────────────────────────────── */
+  .specimen {
+    position: relative;
+    background: var(--as-bg-primary);
+    border-radius: var(--as-radius-2xl);
+    padding: 48px 56px 40px;
+    box-shadow:
+      0 1px 2px rgba(15, 30, 25, 0.04),
+      0 24px 48px -20px rgba(15, 30, 25, 0.16),
+      0 2px 8px rgba(15, 30, 25, 0.04);
+    overflow: hidden;
+  }
+  /* Decorative leaf in the corner */
+  .specimen::before {
+    content: "";
+    position: absolute;
+    top: -40px; right: -40px;
+    width: 220px; height: 220px;
+    background: radial-gradient(circle, var(--as-brand-soft) 0%, transparent 65%);
+    pointer-events: none;
+  }
+  .specimen-eyebrow {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--as-brand);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 8px;
+  }
+  .specimen-eyebrow::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--as-brand-soft) 0%, transparent 100%);
+  }
+  .specimen-title {
+    font-family: var(--as-font-display);
+    font-weight: 500;
+    font-size: 28px;
+    letter-spacing: -0.01em;
+    color: var(--as-brand-deep);
+    margin: 0 0 8px;
+  }
+  .specimen-id {
+    font-family: var(--as-font-mono);
+    font-size: 12px;
+    color: var(--as-text-tertiary);
+    margin: 0 0 36px;
+  }
+
+  /* ── Hero metric ──────────────────────────────── */
+  .specimen-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: flex-end;
+    gap: 32px;
+    margin-bottom: 36px;
+    position: relative;
+    z-index: 1;
+  }
+  .specimen-hero-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .specimen-hero-metric .display {
+    font-family: var(--as-font-display);
+    font-size: 96px;
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: -0.04em;
+    color: var(--as-brand-deep);
+  }
+  .specimen-hero-metric .display .unit {
+    font-size: 32px;
+    font-weight: 400;
+    color: var(--as-brand);
+    margin-left: 6px;
+  }
+  .specimen-hero-metric .label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--as-text-secondary);
+    font-weight: 600;
+    margin-top: 6px;
+  }
+  .specimen-hero-metric .sublabel {
+    font-size: 12px;
+    color: var(--as-text-tertiary);
+    font-style: italic;
+  }
+
+  .specimen-state {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 12px;
+  }
+  .state-dot-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: var(--as-radius-full);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .state-dot-pill .dot {
+    width: 8px; height: 8px;
+    border-radius: var(--as-radius-full);
+  }
+  .state-production { background: var(--as-success-bg); color: var(--as-success-text); }
+  .state-production .dot { background: var(--as-success-text); }
+
+  .specimen-actions {
+    display: flex;
+    gap: 8px;
+  }
+  .btn {
+    appearance: none;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 16px;
+    border-radius: var(--as-radius-full);
+    border: 1px solid var(--as-border-secondary);
+    background: var(--as-bg-primary);
+    color: var(--as-text-primary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn:hover { background: var(--as-bg-tertiary); }
+  .btn-primary { background: var(--as-brand); color: var(--as-brand-on); border-color: var(--as-brand); }
+  .btn-primary:hover { background: var(--as-brand-deep); }
+  .btn-quiet { background: transparent; border-color: transparent; color: var(--as-text-secondary); }
+  .btn-quiet:hover { color: var(--as-text-primary); background: var(--as-bg-tertiary); }
+
+  /* ── Divider (organic) ────────────────────────── */
+  .specimen-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 36px 0;
+    color: var(--as-text-tertiary);
+  }
+  .specimen-divider::before,
+  .specimen-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--as-border-tertiary);
+  }
+  .specimen-divider .ornament {
+    font-family: var(--as-font-display);
+    font-size: 14px;
+    opacity: 0.6;
+  }
+
+  /* ── Clusters ─────────────────────────────────── */
+  .clusters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 36px 48px;
+  }
+  .cluster-title {
+    font-family: var(--as-font-display);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--as-brand-deep);
+    margin: 0 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .cluster-title::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--as-brand-soft);
+  }
+
+  /* Quality cluster */
+  .metric-pair-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 24px;
+  }
+  .metric-pair {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px dotted var(--as-border-tertiary);
+  }
+  .metric-pair .name {
+    font-size: 12px;
+    color: var(--as-text-secondary);
+  }
+  .metric-pair .number {
+    font-family: var(--as-font-mono);
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--as-text-primary);
+  }
+
+  /* Deployment cluster */
+  .deployment-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    padding: 8px 0;
+    border-bottom: 1px dotted var(--as-border-tertiary);
+  }
+  .deployment-row:last-of-type { border-bottom: none; }
+  .channel-name {
+    font-weight: 600;
+    color: var(--as-text-primary);
+    min-width: 84px;
+  }
+  .platform-dots {
+    display: inline-flex;
+    gap: 4px;
+  }
+  .platform-dots .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--as-radius-full);
+    background: var(--as-brand);
+  }
+  .platform-dots .dot.miss { background: var(--as-border-secondary); }
+  .deployment-time {
+    margin-left: auto;
+    color: var(--as-text-tertiary);
+    font-size: 12px;
+  }
+
+  /* Artifacts cluster */
+  .artifact-line {
+    display: grid;
+    grid-template-columns: 24px 1fr auto auto;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px dotted var(--as-border-tertiary);
+    font-size: 13px;
+  }
+  .artifact-line:last-of-type { border-bottom: none; }
+  .artifact-line .glyph {
+    width: 24px; height: 24px;
+    border-radius: var(--as-radius-md);
+    background: var(--as-brand-soft);
+    color: var(--as-brand-deep);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px;
+  }
+  .artifact-line .name { color: var(--as-text-primary); }
+  .artifact-line .size { font-family: var(--as-font-mono); font-size: 12px; color: var(--as-text-secondary); }
+  .artifact-line .latency { font-family: var(--as-font-mono); font-size: 12px; color: var(--as-brand); }
+
+  /* Dataset cluster */
+  .dataset-display {
+    text-align: left;
+  }
+  .dataset-display .total {
+    font-family: var(--as-font-display);
+    font-size: 36px;
+    font-weight: 400;
+    color: var(--as-brand-deep);
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .dataset-display .total .unit {
+    font-size: 14px;
+    color: var(--as-text-secondary);
+    margin-left: 6px;
+  }
+  .dataset-display .name {
+    font-family: var(--as-font-mono);
+    font-size: 12px;
+    color: var(--as-text-tertiary);
+    margin: 4px 0 14px;
+  }
+  .dataset-bar {
+    height: 6px;
+    background: var(--as-bg-secondary);
+    border-radius: var(--as-radius-full);
+    overflow: hidden;
+    display: flex;
+    margin-bottom: 10px;
+  }
+  .dataset-bar .seg {
+    height: 100%;
+  }
+  .dataset-bar .seg-train { background: var(--as-brand); }
+  .dataset-bar .seg-val { background: #6BB89A; }
+  .dataset-bar .seg-test { background: #B27619; }
+  .dataset-legend {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--as-text-secondary);
+  }
+  .dataset-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .legend-dot {
+    width: 6px; height: 6px;
+    border-radius: var(--as-radius-full);
+  }
+  .legend-dot.train { background: var(--as-brand); }
+  .legend-dot.val { background: #6BB89A; }
+  .legend-dot.test { background: #B27619; }
+
+  /* Footer band */
+  .specimen-footer {
+    margin-top: 40px;
+    padding-top: 24px;
+    border-top: 1px solid var(--as-border-tertiary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--as-text-tertiary);
+  }
+  .specimen-footer .api-link {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--as-brand);
+    color: var(--as-brand);
+    padding: 6px 14px;
+    border-radius: var(--as-radius-full);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .specimen-footer .api-link:hover { background: var(--as-brand-soft); }
+  .specimen-footer .hyperparams-link {
+    font-family: var(--as-font-mono);
+    font-size: 11px;
+    color: var(--as-text-secondary);
+    cursor: pointer;
+    text-decoration: none;
+    border-bottom: 1px dotted var(--as-border-secondary);
+  }
+  .specimen-footer .hyperparams-link:hover { color: var(--as-brand); border-bottom-color: var(--as-brand); }
+
+  .footnote {
+    text-align: center;
+    margin-top: 32px;
+    font-size: 11px;
+    color: var(--as-text-tertiary);
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+
+  <article class="specimen">
+    <p class="specimen-eyebrow">Model specimen</p>
+    <h1 class="specimen-title">Banana segmentation · seeds-poc</h1>
+    <p class="specimen-id">v1.0.0-seeds-v2 · created 2026-05-02 by training-sdk · sha256:357e5d6f…</p>
+
+    <div class="specimen-hero">
+      <div class="specimen-hero-metric">
+        <span class="display">87.0<span class="unit">%</span></span>
+        <span class="label">F1-score</span>
+        <span class="sublabel">balanced precision and recall, derived</span>
+      </div>
+      <div class="specimen-state">
+        <span class="state-dot-pill state-production">
+          <span class="dot"></span>
+          Production
+        </span>
+        <div class="specimen-actions">
+          <button class="btn btn-quiet">Archive</button>
+          <button class="btn btn-primary">Deploy to Staging</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="specimen-divider">
+      <span class="ornament">❦</span>
+    </div>
+
+    <div class="clusters">
+      <!-- QUALITY -->
+      <section>
+        <h2 class="cluster-title">Quality</h2>
+        <div class="metric-pair-grid">
+          <div class="metric-pair"><span class="name">mAP50</span><span class="number">88.0%</span></div>
+          <div class="metric-pair"><span class="name">mAP50-95</span><span class="number">84.0%</span></div>
+          <div class="metric-pair"><span class="name">Precision</span><span class="number">86%</span></div>
+          <div class="metric-pair"><span class="name">Recall</span><span class="number">82%</span></div>
+          <div class="metric-pair"><span class="name">Mask mAP50</span><span class="number">82%</span></div>
+          <div class="metric-pair"><span class="name">Mask mAP50-95</span><span class="number">76%</span></div>
+        </div>
+      </section>
+
+      <!-- DEPLOYMENT -->
+      <section>
+        <h2 class="cluster-title">Deployment</h2>
+        <div class="deployment-row">
+          <span class="channel-name">Production</span>
+          <span class="platform-dots">
+            <span class="dot" title="Android"></span>
+            <span class="dot" title="iOS"></span>
+          </span>
+          <span class="deployment-time">2 days ago</span>
+        </div>
+        <div class="deployment-row">
+          <span class="channel-name">Staging</span>
+          <span class="platform-dots">
+            <span class="dot" title="Android"></span>
+            <span class="dot miss" title="iOS missing"></span>
+          </span>
+          <span class="deployment-time">3 days ago</span>
+        </div>
+      </section>
+
+      <!-- ARTIFACTS -->
+      <section>
+        <h2 class="cluster-title">Artifacts</h2>
+        <div class="artifact-line">
+          <span class="glyph" aria-hidden="true">⬢</span>
+          <span class="name">PyTorch · FP32</span>
+          <span class="latency">24.6 ms</span>
+          <span class="size">42.6 MB</span>
+        </div>
+        <div class="artifact-line">
+          <span class="glyph" aria-hidden="true">▲</span>
+          <span class="name">TFLite · INT8</span>
+          <span class="latency">71.2 ms</span>
+          <span class="size">12.4 MB</span>
+        </div>
+        <div class="artifact-line">
+          <span class="glyph" aria-hidden="true">●</span>
+          <span class="name">CoreML · FP16</span>
+          <span class="latency">38.4 ms</span>
+          <span class="size">18.7 MB</span>
+        </div>
+      </section>
+
+      <!-- DATASET -->
+      <section>
+        <h2 class="cluster-title">Dataset</h2>
+        <div class="dataset-display">
+          <span class="total">1,420<span class="unit">images</span></span>
+          <p class="name">banana-v4 · 6 classes</p>
+          <div class="dataset-bar" role="img" aria-label="train, validation, testing distribution">
+            <span class="seg seg-train" style="width: 72%;"></span>
+            <span class="seg seg-val" style="width: 18%;"></span>
+            <span class="seg seg-test" style="width: 10%;"></span>
+          </div>
+          <div class="dataset-legend">
+            <span><span class="legend-dot train"></span>Train 1,020 · 72%</span>
+            <span><span class="legend-dot val"></span>Val 250 · 18%</span>
+            <span><span class="legend-dot test"></span>Test 150 · 10%</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="specimen-footer">
+      <div>
+        <a class="hyperparams-link">View hyperparameters & training run</a>
+      </div>
+      <a class="api-link" href="#">
+        Open Swagger ↗
+      </a>
+    </footer>
+  </article>
+
+  <p class="footnote">Specimen card · uses --as-* design tokens · all detail accessible behind quiet links</p>
+</div>
+</body>
+</html>

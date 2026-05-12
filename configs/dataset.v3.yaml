@@ -1,4 +1,4 @@
-path: ../data/processed/advance-seeds-banana-v3
+path: ../data/processed/advance-seeds-dataset-v3
 train: images/train
 val: images/val
 test: images/test

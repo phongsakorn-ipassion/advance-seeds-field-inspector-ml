@@ -101,7 +101,7 @@ default.
 
 #### Scenario: Banana v3 config targets banana-v3 data
 - **WHEN** `configs/train.banana-v3.yaml` is inspected
-- **THEN** its dataset is `configs/dataset.banana-v3.yaml`
+- **THEN** its dataset is `configs/dataset.v3.yaml`
 - **AND** its project path is `runs/banana-v3`
 
 ### Requirement: Training may report to registry

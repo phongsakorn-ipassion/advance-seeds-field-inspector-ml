@@ -2,7 +2,7 @@
 # Compare accuracy against YOLO26n and validate mobile latency before promotion.
 
 model: yolo26s-seg.pt
-data: configs/dataset.banana-v4.yaml
+data: configs/dataset.v4.yaml
 project: runs/banana-v4
 name: banana-v4-yolo26s-trial
 

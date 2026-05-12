@@ -4,13 +4,13 @@
 # /Users/ppungpong/Downloads/Advance Seeds.v6-banana-v4.yolo26
 #
 # The processed dataset is expected under:
-# data/processed/advance-seeds-banana-v4
+# data/processed/advance-seeds-dataset-v4
 #
 # This is the conservative production-candidate baseline. Trial configs below
 # should beat this profile before their settings are promoted.
 
 model: yolo26n-seg.pt
-data: configs/dataset.banana-v4.yaml
+data: configs/dataset.v4.yaml
 project: runs/banana-v4
 name: banana-v4-baseline
 

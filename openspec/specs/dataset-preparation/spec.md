@@ -97,7 +97,7 @@ processed local dataset root and preserves the canonical six-class object/spot
 contract.
 
 #### Scenario: Banana v3 config preserves canonical classes
-- **WHEN** `configs/dataset.banana-v3.yaml` is inspected
+- **WHEN** `configs/dataset.v3.yaml` is inspected
 - **THEN** class id `0` is `apple`
 - **AND** class id `1` is `apple_spot`
 - **AND** class id `2` is `banana`
