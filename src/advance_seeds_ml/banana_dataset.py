@@ -11,6 +11,11 @@ CANONICAL_CLASS_NAMES = {
     5: "orange_spot",
 }
 
+BANANA_V4_CLASS_NAMES = {
+    0: "banana",
+    1: "banana_spot",
+}
+
 BANANA_V1_CLASS_REMAP = {
     0: 2,
     1: 3,
@@ -84,9 +89,13 @@ def validate_segmentation_row(line: str) -> str | None:
     return None
 
 
-def write_dataset_yaml(path: Path, dataset_root: str = "../data/processed/advance-seeds-banana-v1") -> None:
+def write_dataset_yaml(
+    path: Path,
+    dataset_root: str = "../data/processed/advance-seeds-dataset-v4",
+    class_names: dict[int, str] | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    names = "\n".join(f"  {idx}: {name}" for idx, name in CANONICAL_CLASS_NAMES.items())
+    names = "\n".join(f"  {idx}: {name}" for idx, name in (class_names or BANANA_V4_CLASS_NAMES).items())
     path.write_text(
         "\n".join(
             [

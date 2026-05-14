@@ -69,9 +69,9 @@ function renderSwaggerStandaloneHtml(spec: OpenApiDoc, title: string, apiKey: st
   <title>Swagger · ${safeTitle}</title>
   <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui.css" />
   <style>
-    html, body { margin: 0; background: #fafafa; font-family: system-ui, sans-serif; }
+    html, body { margin: 0; background: whitesmoke; font-family: system-ui, sans-serif; }
     #swagger { max-width: 1280px; margin: 0 auto; }
-    #boot-error { padding: 16px; color: #b91c1c; white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; }
+    #boot-error { padding: 16px; color: firebrick; white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; }
   </style>
 </head>
 <body>

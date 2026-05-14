@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from advance_seeds_ml.banana_dataset import (
+    CANONICAL_CLASS_NAMES,
     count_valid_remapped_rows,
     remap_label_line,
     remap_label_text,
@@ -43,10 +44,18 @@ class BananaDatasetTests(unittest.TestCase):
         text = "0 0.1 0.2 0.3 0.4 0.5 0.6\n1 0.4 0.4 0.1 0.1\n"
         self.assertEqual(count_valid_remapped_rows(text), (1, 1))
 
-    def test_write_dataset_yaml_uses_canonical_classes(self):
+    def test_write_dataset_yaml_defaults_to_banana_v4_classes(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "dataset.yaml"
             write_dataset_yaml(output)
+            content = output.read_text(encoding="utf-8")
+        self.assertIn("0: banana", content)
+        self.assertIn("1: banana_spot", content)
+
+    def test_write_dataset_yaml_can_use_canonical_classes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "dataset.yaml"
+            write_dataset_yaml(output, class_names=CANONICAL_CLASS_NAMES)
             content = output.read_text(encoding="utf-8")
         self.assertIn("2: banana", content)
         self.assertIn("3: banana_spot", content)

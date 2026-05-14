@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="${VENV_DIR:-"$ROOT_DIR/.venv"}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-TRAIN_CONFIG="${TRAIN_CONFIG:-configs/train.banana-v2.yaml}"
-DATASET_CONFIG="${DATASET_CONFIG:-configs/dataset.banana-v2.yaml}"
+TRAIN_CONFIG="${TRAIN_CONFIG:-configs/train.banana-v4.yaml}"
+DATASET_CONFIG="${DATASET_CONFIG:-configs/dataset.v4.yaml}"
 LOG_DIR="$ROOT_DIR/runs/logs"
 LOG_FILE="$LOG_DIR/train-local-banana-$(date +%Y%m%d-%H%M%S).log"
 

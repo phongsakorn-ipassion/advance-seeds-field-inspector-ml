@@ -28,9 +28,9 @@ class TrainingConfigTests(unittest.TestCase):
                 "\n".join(
                     [
                         "model: yolo26n-seg.pt",
-                        "data: configs/dataset.banana-v1.yaml",
-                        "project: runs/banana-v1",
-                        "name: banana-v1-poc",
+                        "data: configs/dataset.v4.yaml",
+                        "project: runs/banana-v4",
+                        "name: banana-v4-baseline",
                         "epochs: 50",
                         "batch: -1",
                         "lr0: 0.001",
@@ -54,14 +54,14 @@ class TrainingConfigTests(unittest.TestCase):
     def test_apply_overrides_replaces_non_none_values(self):
         config = {
             "model": "yolo26n-seg.pt",
-            "data": "configs/dataset.banana-v1.yaml",
-            "project": "runs/banana-v1",
-            "name": "banana-v1-poc",
+            "data": "configs/dataset.v4.yaml",
+            "project": "runs/banana-v4",
+            "name": "banana-v4-baseline",
             "epochs": 50,
         }
         merged = apply_overrides(config, {"epochs": 3, "name": None})
         self.assertEqual(merged["epochs"], 3)
-        self.assertEqual(merged["name"], "banana-v1-poc")
+        self.assertEqual(merged["name"], "banana-v4-baseline")
 
     def test_train_kwargs_excludes_model(self):
         kwargs = train_kwargs({"model": "yolo26n-seg.pt", "data": "data.yaml"})

@@ -51,56 +51,21 @@ instance, to avoid leakage between splits.
 - **WHEN** it is assigned to a split
 - **THEN** all labels for that image remain in the same split
 
-### Requirement: Banana v1 Roboflow ingestion
-The project SHALL provide a script to prepare the Roboflow banana-v1 YOLO26
-export for the canonical six-class dataset contract without modifying the
-downloaded source dataset.
+### Requirement: Banana v4 Roboflow ingestion
+The project SHALL provide a script to prepare the active Roboflow banana-v4
+YOLO26 export without modifying the downloaded source dataset.
 
-#### Scenario: Banana labels are remapped to canonical ids
+#### Scenario: Banana labels keep active ids
 - **GIVEN** a source label row starts with class id `0`
 - **WHEN** the banana ingestion script writes the processed label
-- **THEN** the output row starts with class id `2`
+- **THEN** the output row starts with class id `0`
 
-#### Scenario: Banana spot labels are remapped to canonical ids
+#### Scenario: Banana spot labels keep active ids
 - **GIVEN** a source label row starts with class id `1`
 - **WHEN** the banana ingestion script writes the processed label
-- **THEN** the output row starts with class id `3`
+- **THEN** the output row starts with class id `1`
 
-#### Scenario: Processed dataset validates
+#### Scenario: Banana v4 processed dataset validates
 - **GIVEN** the banana ingestion script has completed
-- **WHEN** `python3 scripts/validate_dataset.py configs/dataset.banana-v1.yaml` runs
-- **THEN** validation passes with banana and banana_spot labels under the canonical six-class config
-
-### Requirement: Banana v2 Roboflow ingestion
-The project SHALL prepare the Roboflow banana-v2 YOLO26 export for the
-canonical six-class dataset contract without modifying the downloaded source
-dataset.
-
-#### Scenario: Banana v2 labels are remapped to canonical ids
-- **GIVEN** a banana-v2 source label row starts with class id `0`
-- **WHEN** the banana ingestion script writes the processed label
-- **THEN** the output row starts with class id `2`
-
-#### Scenario: Banana v2 spot labels are remapped to canonical ids
-- **GIVEN** a banana-v2 source label row starts with class id `1`
-- **WHEN** the banana ingestion script writes the processed label
-- **THEN** the output row starts with class id `3`
-
-#### Scenario: Banana v2 processed dataset validates
-- **GIVEN** the banana-v2 ingestion script has completed
-- **WHEN** `python3 scripts/validate_dataset.py configs/dataset.banana-v2.yaml` runs
-- **THEN** validation passes with banana and banana_spot labels under the canonical six-class config
-
-### Requirement: Banana v3 dataset configuration
-The project SHALL provide a banana-v3 YOLO dataset config that points to the
-processed local dataset root and preserves the canonical six-class object/spot
-contract.
-
-#### Scenario: Banana v3 config preserves canonical classes
-- **WHEN** `configs/dataset.v3.yaml` is inspected
-- **THEN** class id `0` is `apple`
-- **AND** class id `1` is `apple_spot`
-- **AND** class id `2` is `banana`
-- **AND** class id `3` is `banana_spot`
-- **AND** class id `4` is `orange`
-- **AND** class id `5` is `orange_spot`
+- **WHEN** `python3 scripts/validate_dataset.py configs/dataset.v4.yaml` runs
+- **THEN** validation passes with banana and banana_spot labels

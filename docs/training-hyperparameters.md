@@ -1,7 +1,7 @@
 # Banana Training Hyperparameters
 
 This is the default training profile for the banana/banana_spot PoC. New local
-training runs use the banana-v2 dataset by default.
+training runs use the banana-v4 dataset by default.
 
 ## Command
 
@@ -14,25 +14,18 @@ python3 scripts/train_yolo26n_seg.py --dry-run
 Smoke run:
 
 ```bash
-python3 scripts/train_yolo26n_seg.py --epochs 3 --name banana-v1-smoke
+python3 scripts/train_yolo26n_seg.py --epochs 3 --name banana-v4-smoke
 ```
 
-PoC run:
-
-```bash
-python3 scripts/train_yolo26n_seg.py --config configs/train.banana-v2.yaml
-```
-
-Banana v3 run:
-
-```bash
-python3 scripts/train_yolo26n_seg.py --config configs/train.banana-v3.yaml
-```
-
-Banana v4 baseline and controlled trials:
+Baseline run:
 
 ```bash
 python3 scripts/train_yolo26n_seg.py --config configs/train.banana-v4.yaml
+```
+
+Controlled trials:
+
+```bash
 python3 scripts/train_yolo26n_seg.py --config configs/train.banana-v4.copy-paste.yaml
 python3 scripts/train_yolo26n_seg.py --config configs/train.banana-v4.mask-quality.yaml
 python3 scripts/train_yolo26n_seg.py --config configs/train.banana-v4.yolo26s.yaml
@@ -52,7 +45,7 @@ under `runs/logs/`, and starts the full configured PoC training run.
 CLI overrides are forwarded to `scripts/train_yolo26n_seg.py`, for example:
 
 ```bash
-scripts/train_local_banana.sh --epochs 3 --name banana-v2-smoke
+scripts/train_local_banana.sh --epochs 3 --name banana-v4-smoke
 ```
 
 ## Local YAML Defaults
@@ -64,7 +57,7 @@ use the smaller dashboard contract in [Dashboard Run Requirements](#dashboard-ru
 | Parameter | Value | Rationale |
 | --- | --- | --- |
 | `model` | `yolo26n-seg.pt` | Selected YOLO26 nano segmentation model for mobile-oriented PoC. |
-| `data` | `configs/dataset.banana-v2.yaml` | Processed Roboflow banana v2 dataset remapped to canonical ids. |
+| `data` | `configs/dataset.v4.yaml` | Processed Roboflow banana-v4 dataset with banana and banana_spot classes. |
 | `epochs` | `50` | Small-dataset fine-tuning baseline with early stopping. |
 | `patience` | `20` | Stop if validation does not improve. |
 | `imgsz` | `640` | Matches mobile export contract and YOLO26 default resolution. |
@@ -96,7 +89,7 @@ use the smaller dashboard contract in [Dashboard Run Requirements](#dashboard-ru
 
 ## Banana v4 Experiment Profiles
 
-Banana v4 is the next first-class dataset target:
+Banana v4 is the canonical active dataset target:
 
 ```bash
 python3 scripts/validate_dataset.py configs/dataset.v4.yaml
@@ -136,9 +129,9 @@ training source.
 | `yolo26l-seg.pt` | Large-model validation runs before deciding whether mobile cost is acceptable. |
 | `yolo26x-seg.pt` | Maximum-capacity local or Colab experiments, not a default mobile target. |
 
-Banana v2 remains the local launcher default. Banana v3 configs are available
-for explicit runs once the processed dataset exists under
-`data/processed/advance-seeds-dataset-v3`.
+Older banana-v1/v2/v3 config entrypoints have been retired. Historical notes
+remain in archived OpenSpec changes, but active local training should use the
+banana-v4 configs above.
 
 ## Hardware Auto-Tuning
 

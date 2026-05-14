@@ -16,7 +16,7 @@ from advance_seeds_ml.contracts import ModelMetadata, write_metadata
 from advance_seeds_ml.training import materialize_ultralytics_dataset_config
 
 
-CLASS_NAMES = ["apple", "apple_spot", "banana", "banana_spot", "orange", "orange_spot"]
+CLASS_NAMES = ["banana", "banana_spot"]
 
 
 @dataclass(frozen=True)
@@ -167,46 +167,29 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Export mobile model candidates for app testing.")
     parser.add_argument("--output-root", type=Path, default=Path("runs/mobile-exports"))
     parser.add_argument("--imgsz", type=int, default=640)
-    parser.add_argument("--only", nargs="*", choices=["v1", "v1-quantized", "v2", "v2-quantized"])
+    parser.add_argument("--only", nargs="*", choices=["v4", "v4-quantized"])
     args = parser.parse_args()
 
     candidates = [
         ExportCandidate(
-            key="1-v1",
-            display_name="banana-v1 best",
-            weights=Path("/Users/ppungpong/Github/advance-seeds-field-inspector-ml/runs/banana-v1/banana-v1-poc/weights/best.pt"),
-            train_results=Path("/Users/ppungpong/Github/advance-seeds-field-inspector-ml/runs/banana-v1/banana-v1-poc/results.csv"),
-            dataset_config=Path("/Users/ppungpong/Github/advance-seeds-field-inspector-ml/configs/dataset.banana-v1.yaml"),
+            key="banana-v4",
+            display_name="banana-v4 baseline",
+            weights=Path("runs/banana-v4/banana-v4-baseline/weights/best.pt"),
+            train_results=Path("runs/banana-v4/banana-v4-baseline/results.csv"),
+            dataset_config=Path("configs/dataset.v4.yaml"),
         ),
         ExportCandidate(
-            key="2-v1-quantized",
-            display_name="banana-v1 best quantized",
-            weights=Path("/Users/ppungpong/Github/advance-seeds-field-inspector-ml/runs/banana-v1/banana-v1-poc/weights/best.pt"),
-            train_results=Path("/Users/ppungpong/Github/advance-seeds-field-inspector-ml/runs/banana-v1/banana-v1-poc/results.csv"),
-            dataset_config=Path("/Users/ppungpong/Github/advance-seeds-field-inspector-ml/configs/dataset.banana-v1.yaml"),
-            quantized=True,
-        ),
-        ExportCandidate(
-            key="3-v2",
-            display_name="banana-v2 best",
-            weights=Path("runs/banana-v2/banana-v2-poc-full/weights/best.pt"),
-            train_results=Path("runs/banana-v2/banana-v2-poc-full/results.csv"),
-            dataset_config=Path("configs/dataset.banana-v2.yaml"),
-        ),
-        ExportCandidate(
-            key="4-v2-quantized",
-            display_name="banana-v2 best quantized",
-            weights=Path("runs/banana-v2/banana-v2-poc-full/weights/best.pt"),
-            train_results=Path("runs/banana-v2/banana-v2-poc-full/results.csv"),
-            dataset_config=Path("configs/dataset.banana-v2.yaml"),
+            key="banana-v4-quantized",
+            display_name="banana-v4 baseline quantized",
+            weights=Path("runs/banana-v4/banana-v4-baseline/weights/best.pt"),
+            train_results=Path("runs/banana-v4/banana-v4-baseline/results.csv"),
+            dataset_config=Path("configs/dataset.v4.yaml"),
             quantized=True,
         ),
     ]
     selected_keys = {
-        "v1": "1-v1",
-        "v1-quantized": "2-v1-quantized",
-        "v2": "3-v2",
-        "v2-quantized": "4-v2-quantized",
+        "v4": "banana-v4",
+        "v4-quantized": "banana-v4-quantized",
     }
     if args.only:
         wanted = {selected_keys[key] for key in args.only}

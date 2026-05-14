@@ -24,7 +24,7 @@ from advance_seeds_ml.registry import RegistryClient, RegistryConfig
 
 def main(argv: list[str] | None = None, registry_client_factory=None, yolo_class=None) -> int:
     parser = argparse.ArgumentParser(description="Train YOLO26n-seg for the Advance Seeds PoC.")
-    parser.add_argument("--config", default="configs/train.banana-v1.yaml")
+    parser.add_argument("--config", default="configs/train.banana-v4.yaml")
     parser.add_argument("--dry-run", action="store_true", help="Print resolved config and command only.")
     parser.add_argument(
         "--no-auto-hardware",

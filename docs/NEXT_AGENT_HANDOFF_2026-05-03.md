@@ -141,7 +141,7 @@ psql "$PGURL" -c "SELECT relname, relreplident FROM pg_class WHERE relname IN ('
 ## Browser smoke test (manual)
 
 1. Open http://localhost:5173/, sign in as the admin account.
-2. Train tab → upload `configs/dataset.banana-v2.yaml` (or paste path) → Create training run.
+2. Train tab → upload `configs/dataset.v4.yaml` (or paste path) → Create training run.
 3. Form clears, redirects to Live tracking; new row shows status `waiting` (or `running` if metrics already arrived).
 4. Click row → detail panel opens with Manual Colab hand-off steps.
 5. *(Optional, requires Colab)* Click Open in Colab → Run all → watch progress + logs stream.

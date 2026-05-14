@@ -22,10 +22,8 @@ The current candidate set is:
 
 | Candidate | Dataset/run | Android artifact | iOS artifact | Quantization |
 | --- | --- | --- | --- | --- |
-| `1-v1` | banana-v1 best | `1-v1.tflite` | `1-v1.mlpackage` | none |
-| `2-v1-quantized` | banana-v1 best | `2-v1-quantized.tflite` | `2-v1-quantized.mlpackage` | FP16 |
-| `3-v2` | banana-v2 best | `3-v2.tflite` | `3-v2.mlpackage` | none |
-| `4-v2-quantized` | banana-v2 best | `4-v2-quantized.tflite` | `4-v2-quantized.mlpackage` | FP16 |
+| `banana-v4` | banana-v4 baseline | `banana-v4.tflite` | `banana-v4.mlpackage` | none |
+| `banana-v4-quantized` | banana-v4 baseline | `banana-v4-quantized.tflite` | `banana-v4-quantized.mlpackage` | FP16 |
 
 The root index is:
 
@@ -58,7 +56,7 @@ Required metadata checks:
 - `model_name` is `yolo26n-seg`
 - `input_size` is `640`
 - `class_names` exactly match:
-  `apple`, `apple_spot`, `banana`, `banana_spot`, `orange`, `orange_spot`
+  `banana`, `banana_spot`
 - `output_kind` is `segmentation`
 - `output_shape` starts with `[1, 300, 38]` for the detection tensor; mask
   prototype output is handled by the platform decoder

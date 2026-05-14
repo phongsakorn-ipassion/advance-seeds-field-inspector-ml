@@ -6,12 +6,8 @@
   "source_weights": "yolo26n-seg.pt",
   "mobile_tflite_filename": "yolo11n-seeds.tflite",
   "class_names": [
-    "apple",
-    "apple_spot",
     "banana",
-    "banana_spot",
-    "orange",
-    "orange_spot"
+    "banana_spot"
   ],
   "output_kind": "end2end_nms_free",
   "output_shape": [1, 300, 6],

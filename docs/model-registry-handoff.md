@@ -163,7 +163,7 @@ Training script opt-in lifecycle reporting:
 
 ```bash
 python scripts/train_yolo26n_seg.py \
-  --config configs/train.banana-v2.yaml \
+  --config configs/train.banana-v4.yaml \
   --registry-report \
   --registry-model-line-id "<model_lines.id>"
 ```

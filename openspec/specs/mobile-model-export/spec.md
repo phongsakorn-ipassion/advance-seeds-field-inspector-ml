@@ -16,8 +16,8 @@ The exported Android/cross-platform model SHALL be copied to the app as
 
 ### Requirement: App-facing metadata
 Every mobile export SHALL include `model-metadata.json` with model name, version,
-source weights, mobile TFLite filename, task, input size, canonical PoC
-object/spot class names, output kind, output shape, thresholds, calibration
+source weights, mobile TFLite filename, task, input size, active banana-v4
+class names, output kind, output shape, thresholds, calibration
 contract, and acceptance targets.
 
 #### Scenario: Metadata generation includes calibration contract
@@ -29,9 +29,9 @@ contract, and acceptance targets.
 - **THEN** `source_weights` is `yolo26n-seg.pt`
 - **AND** `output_kind` is `end2end_nms_free`
 
-#### Scenario: Metadata exports PoC classes
-- **WHEN** metadata is generated for the PoC model
-- **THEN** `class_names` are `apple`, `apple_spot`, `banana`, `banana_spot`, `orange`, `orange_spot`
+#### Scenario: Metadata exports banana-v4 classes
+- **WHEN** metadata is generated for the active banana-v4 model
+- **THEN** `class_names` are `banana`, `banana_spot`
 
 ### Requirement: Export does not assume calibration is optional
 Model metadata SHALL state that calibration is required for millimeter
@@ -53,12 +53,10 @@ demo app.
 The repository SHALL provide a repeatable script that exports named mobile
 candidate models for app QA.
 
-#### Scenario: Four banana candidates are exported
+#### Scenario: Banana-v4 candidates are exported
 - **WHEN** the mobile candidate export script runs successfully
-- **THEN** `runs/mobile-exports/1-v1/` contains Android, iOS, and PyTorch artifacts
-- **AND** `runs/mobile-exports/2-v1-quantized/` contains Android, iOS, and PyTorch artifacts
-- **AND** `runs/mobile-exports/3-v2/` contains Android, iOS, and PyTorch artifacts
-- **AND** `runs/mobile-exports/4-v2-quantized/` contains Android, iOS, and PyTorch artifacts
+- **THEN** `runs/mobile-exports/banana-v4/` contains Android, iOS, and PyTorch artifacts
+- **AND** `runs/mobile-exports/banana-v4-quantized/` contains Android, iOS, and PyTorch artifacts
 
 ### Requirement: Candidate manifests
 Each exported candidate SHALL include a manifest that records platform artifact
