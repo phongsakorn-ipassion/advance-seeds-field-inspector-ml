@@ -1,0 +1,47 @@
+# Volume + weight estimation config for run_segmentation.py --volume-config
+#
+# Maps detected class names (must match YOLO model names exactly) to a
+# shape model and material density. Requires an active scale source
+# (--scale aruco or --scale manual --mm-per-pixel ...) to convert pixel
+# geometry into real-world mm/mL/g.
+#
+# shape options:
+#   spherical  Area-equivalent sphere from mask silhouette. V = (4/3) pi r^3.
+#              Works for produce or pods that project roughly to a circle.
+#   oblong     PCA-rotates the mask onto its long axis, then sums disk
+#              volumes column-by-column (V = sum(pi r(x)^2 dx)). Works for
+#              tubular/elongated objects with rough axial symmetry.
+#   skip       Detect and segment, but do not compute volume/weight. Useful
+#              for reference markers, calibration objects, or defect classes.
+#
+# density_g_per_ml: material density used to convert volume_ml into weight_g.
+#   1.00 is water. Use food-science / agronomy references for produce
+#   (typical: 0.45 cabbage, 0.75 apple, 0.94 banana, 0.96 onion/cucumber,
+#   1.04 carrot, 1.08 potato).
+#
+# finagling_factor: multiplicative correction on volume_ml. Useful for
+#   spherical produce that's actually oblate (onions) or has hollow cavities.
+#   1.0 = no correction. Determine empirically by weighing real samples.
+#
+# `defaults` applies to any detected class not listed under `classes`.
+# Leave defaults.shape: skip to opt-in per class only.
+
+defaults:
+  shape: skip
+  density_g_per_ml: 1.0
+  finagling_factor: 1.0
+
+classes:
+  # Replace these example entries with class names from your trained model.
+  # Class names must match model.names (i.e. dataset.yaml `names:`) exactly.
+  banana:
+    shape: oblong
+    density_g_per_ml: 0.94
+  # Example of a spherical produce class with a finagling factor:
+  # apple:
+  #   shape: spherical
+  #   density_g_per_ml: 0.75
+  #   finagling_factor: 0.95
+  # Example of explicitly skipping a class even if defaults change later:
+  # defect:
+  #   shape: skip
