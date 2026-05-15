@@ -293,9 +293,8 @@ def format_volume_label(measurement: dict[str, Any]) -> str:
     if "volume_ml" not in measurement:
         return ""
     vol = float(measurement["volume_ml"])
-    weight = float(measurement.get("weight_g", 0.0))
     if "weight_g" in measurement:
-        return f" V={vol:.0f}mL W={weight:.0f}g"
+        return f" V={vol:.0f}mL W={float(measurement['weight_g']):.0f}g"
     return f" V={vol:.0f}mL"
 
 
@@ -577,7 +576,7 @@ def main() -> int:
 
     print(f"weights: {weights}")
     print(f"source: {source}")
-    print(f"device: {args.device or 'auto'} half: {args.half}")
+    print(f"device: {args.device} half: {args.half}")
     print(f"confidence_threshold: {args.conf}")
     print(f"nms_iou_threshold: {args.iou}")
     if args.measure:
@@ -681,7 +680,7 @@ def run_live_overlay(
 
     print(f"weights: {weights}")
     print(f"source: {source}")
-    print(f"device: {args.device or 'auto'} half: {args.half}")
+    print(f"device: {args.device} half: {args.half}")
     print(f"confidence_threshold: {args.conf}")
     print(f"nms_iou_threshold: {args.iou}")
     if args.measure:
