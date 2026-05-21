@@ -110,6 +110,22 @@ def export_kwargs(kind: str, config: dict, env: dict[str, str] | None = None) ->
     raise ValueError(f"unsupported export kind: {kind}")
 
 
+def build_structured_log_entry(
+    *,
+    step: int | None,
+    phase: str | None,
+    status: str,
+    message: str,
+) -> dict:
+    return {
+        "ts": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "step": step,
+        "phase": phase,
+        "status": status,
+        "message": message,
+    }
+
+
 def quantization_metadata(kind: str, kwargs: dict) -> dict:
     if kwargs.get("int8"):
         return {
@@ -505,21 +521,25 @@ def main(argv: list[str] | None = None) -> int:
 
     model = YOLO(config["model"])
 
-    def append_log(line: str) -> None:
-        """Append one line to runs.config_yaml.logs so the dashboard's RUN LOGS
-        panel updates in near-real-time. Read-modify-write on the JSONB column;
-        fine at PoC scale, swap for an append-only run_logs table later."""
+    def append_log_entry(entry: dict | str) -> None:
+        """Append one entry (structured dict or legacy string) to runs.config_yaml.logs."""
         try:
             rows = client._json("GET", f"/rest/v1/runs?id=eq.{args.run_id}&select=config_yaml", None)
             if not rows:
                 return
             cfg = rows[0].get("config_yaml") or {}
             logs = list(cfg.get("logs") or [])
-            logs.append(line)
+            logs.append(entry)
             cfg["logs"] = logs
             client._json("PATCH", f"/rest/v1/runs?id=eq.{args.run_id}", {"config_yaml": cfg})
         except Exception as exc:
-            print(f"[logs] append_log failed: {exc}", file=sys.stderr)
+            print(f"[logs] append_log_entry failed: {exc}", file=sys.stderr)
+
+    def log_step(step: int | None, phase: str | None, status: str, message: str) -> None:
+        append_log_entry(build_structured_log_entry(step=step, phase=phase, status=status, message=message))
+
+    def append_log(line: str) -> None:  # kept so existing free-text calls still work
+        append_log_entry(build_structured_log_entry(step=None, phase=None, status="info", message=line))
 
     def finalize_run(status: str) -> None:
         cleanup_dataset_bundle(client, args.run_id, append_log)

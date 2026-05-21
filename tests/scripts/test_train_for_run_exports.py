@@ -37,3 +37,27 @@ def test_invalid_shape_falls_back_to_defaults():
     cfg = {"exportOptions": "not-a-dict"}
     opts = load_export_options(cfg)
     assert opts["ios"]["enabled"] is True
+
+
+from datetime import datetime
+from train_for_run import build_structured_log_entry
+
+
+def test_build_structured_log_entry_shape():
+    entry = build_structured_log_entry(
+        step=5, phase="export", status="ok", message="TFLite done"
+    )
+    assert entry["step"] == 5
+    assert entry["phase"] == "export"
+    assert entry["status"] == "ok"
+    assert entry["message"] == "TFLite done"
+    # ts must be ISO8601 UTC, ending in Z
+    datetime.fromisoformat(entry["ts"].replace("Z", "+00:00"))
+
+
+def test_build_structured_log_entry_step_none():
+    entry = build_structured_log_entry(
+        step=None, phase=None, status="info", message="free text"
+    )
+    assert entry["step"] is None
+    assert entry["phase"] is None
