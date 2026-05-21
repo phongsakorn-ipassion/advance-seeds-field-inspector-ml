@@ -1538,6 +1538,13 @@ button {
   align-items: center;
   gap: 6px;
 }
+.train-form .checkbox-group-field .label-text {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 500;
+  color: var(--as-text-secondary);
+}
 .train-form input,
 .train-form textarea,
 .train-form select,
@@ -1578,7 +1585,6 @@ button {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 8px 0;
 }
 .train-form .checkbox-row {
   display: flex;

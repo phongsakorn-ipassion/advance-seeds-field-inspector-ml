@@ -1430,8 +1430,11 @@ function TrainWorkflow({
             disabled={!isAdmin}
           />
         </label>
-        <div className="form-field checkbox-group-field">
-          <span className="label-text">Quantization</span>
+        <div className="checkbox-group-field">
+          <span className="label-text">
+            Quantization
+            <Hint text="Both Core ML and TF Lite are always exported. Uncheck a row to skip quantization for that platform — the artifact will be larger but unconverted." />
+          </span>
           <div className="checkbox-group">
             <label className="checkbox-row">
               <input
