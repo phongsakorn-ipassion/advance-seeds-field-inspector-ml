@@ -47,13 +47,13 @@ def _quant_fraction(env: dict[str, str]) -> float:
 
 
 DEFAULT_EXPORT_OPTIONS = {
-    "ios": {"enabled": True, "precision": "fp16"},
-    "android": {"enabled": True, "precision": "int8"},
+    "ios":     {"quantize": True},
+    "android": {"quantize": True},
 }
 
 
 def load_export_options(run_config: dict) -> dict:
-    """Return {ios:{enabled,precision}, android:{enabled,precision}}.
+    """Return {ios:{quantize}, android:{quantize}}.
 
     Falls back to DEFAULT_EXPORT_OPTIONS for legacy runs or malformed input.
     """
@@ -63,50 +63,35 @@ def load_export_options(run_config: dict) -> dict:
     result = {k: dict(v) for k, v in DEFAULT_EXPORT_OPTIONS.items()}
     for platform_key in ("ios", "android"):
         entry = raw.get(platform_key)
-        if isinstance(entry, dict):
-            if isinstance(entry.get("enabled"), bool):
-                result[platform_key]["enabled"] = entry["enabled"]
-            precision = entry.get("precision")
-            if precision in {"int8", "fp16"}:
-                result[platform_key]["precision"] = precision
+        if isinstance(entry, dict) and isinstance(entry.get("quantize"), bool):
+            result[platform_key]["quantize"] = entry["quantize"]
     return result
 
 
-def export_kwargs(kind: str, config: dict, env: dict[str, str] | None = None) -> dict:
+def export_kwargs(kind: str, config: dict, quantize: bool) -> dict:
     """Return Ultralytics export kwargs for mobile artifacts.
 
-    Android uses calibrated INT8 TFLite because TF Lite has mature post-training
-    integer quantization. iOS uses FP16 Core ML by default for broader Core ML /
-    ANE compatibility; Core ML INT8 can be enabled explicitly for device tests.
+    When quantize=True:
+      - TFLite: INT8 with calibration dataset
+      - Core ML: FP16 half-precision weights
+    When quantize=False, both formats export at full FP32 precision.
     """
-    source = os.environ if env is None else env
     imgsz = int(config.get("imgsz", 640))
-    data = str(config.get("data", ""))
-    fraction = _quant_fraction(source)
     if kind == "tflite":
-        return {
-            "format": "tflite",
-            "int8": True,
-            "data": data,
-            "imgsz": imgsz,
-            "batch": 1,
-            "fraction": fraction,
-        }
-    if kind == "coreml" and _env_bool(source, "ADVANCE_SEEDS_COREML_INT8"):
-        return {
-            "format": "coreml",
-            "int8": True,
-            "data": data,
-            "imgsz": imgsz,
-            "batch": 1,
-            "fraction": fraction,
-        }
+        if quantize:
+            return {
+                "format": "tflite",
+                "int8": True,
+                "data": str(config.get("data", "")),
+                "imgsz": imgsz,
+                "batch": 1,
+                "fraction": _quant_fraction(os.environ),
+            }
+        return {"format": "tflite", "imgsz": imgsz}
     if kind == "coreml":
-        return {
-            "format": "coreml",
-            "half": True,
-            "imgsz": imgsz,
-        }
+        if quantize:
+            return {"format": "coreml", "half": True, "imgsz": imgsz}
+        return {"format": "coreml", "imgsz": imgsz}
     raise ValueError(f"unsupported export kind: {kind}")
 
 
@@ -252,19 +237,14 @@ def build_version_metadata(
                 artifact=tflite_artifact,
                 quantization=tflite_quantization,
             ),
-            "coreml": (
-                {**artifact_metadata(
+            "coreml": {
+                **artifact_metadata(
                     kind="coreml",
                     artifact=coreml_artifact,
                     quantization=coreml_quantization,
-                ), "packaging": "mlpackage.zip"}
-                if coreml_artifact is not None
-                else artifact_metadata(
-                    kind="coreml",
-                    artifact=None,
-                    quantization=coreml_quantization,
-                )
-            ),
+                ),
+                "packaging": "mlpackage.zip",
+            },
         },
         "host": host,
     }
@@ -515,10 +495,6 @@ def main(argv: list[str] | None = None) -> int:
     config = build_training_config(run_row, repo_root, client)
     export_options = load_export_options(run_row.get("config_yaml") or {})
 
-    if not export_options["ios"]["enabled"] and not export_options["android"]["enabled"]:
-        print("Both iOS and Android exports disabled — refusing to run.", file=sys.stderr)
-        return 2
-
     print("Resolved training config:")
     print(json.dumps(config, indent=2, default=str))
 
@@ -616,49 +592,45 @@ def main(argv: list[str] | None = None) -> int:
 
     tflite_path: Path | None = None
     tflite_artifact = None
-    tflite_quantization: dict = {"precision": "skipped", "method": "none", "target": "tflite"}
-
-    if export_options["android"]["enabled"]:
-        tflite_export_kwargs = export_kwargs("tflite", config)
-        tflite_quantization = quantization_metadata("tflite", tflite_export_kwargs)
-        log_step(5, "export", "started",
-                 f"TFLite INT8 export starting (fraction={tflite_export_kwargs.get('fraction')})")
-        try:
-            export_path = model.export(**tflite_export_kwargs)
-            export_path = export_path[0] if isinstance(export_path, (list, tuple)) else export_path
-            tflite_path = Path(export_path) if export_path else None
-            if not tflite_path or not tflite_path.exists():
-                raise FileNotFoundError("TFLite export returned no artifact")
-            log_step(5, "export", "ok", f"TFLite export done · {tflite_path.name}")
-        except Exception as exc:
-            tflite_quantization = {"precision": "failed", "method": "none", "target": "tflite"}
-            tflite_path = None
-            log_step(5, "export", "error", f"TFLite export failed: {exc}")
-    else:
-        log_step(5, "export", "info", "TFLite disabled · skipping")
+    android_quantize = export_options["android"]["quantize"]
+    tflite_export_kwargs = export_kwargs("tflite", config, android_quantize)
+    tflite_quantization = quantization_metadata("tflite", tflite_export_kwargs)
+    precision_label = tflite_quantization["precision"].upper()
+    log_step(5, "export", "started",
+             f"TFLite {precision_label} export starting"
+             + (f" (fraction={tflite_export_kwargs.get('fraction')})" if android_quantize else " (no quantization)"))
+    try:
+        export_path = model.export(**tflite_export_kwargs)
+        export_path = export_path[0] if isinstance(export_path, (list, tuple)) else export_path
+        tflite_path = Path(export_path) if export_path else None
+        if not tflite_path or not tflite_path.exists():
+            raise FileNotFoundError("TFLite export returned no artifact")
+        log_step(5, "export", "ok", f"TFLite export done · {tflite_path.name}")
+    except Exception as exc:
+        tflite_quantization = {"precision": "failed", "method": "none", "target": "tflite"}
+        tflite_path = None
+        log_step(5, "export", "error", f"TFLite export failed: {exc}")
 
     coreml_path: Path | None = None
     coreml_artifact = None
-    coreml_quantization: dict = {"precision": "skipped", "method": "none", "target": "coreml"}
-
-    if export_options["ios"]["enabled"]:
-        coreml_export_kwargs = export_kwargs("coreml", config)
-        coreml_quantization = quantization_metadata("coreml", coreml_export_kwargs)
-        log_step(5, "export", "started",
-                 f"Core ML {coreml_quantization.get('precision', 'fp32').upper()} export starting")
-        try:
-            export_path = model.export(**coreml_export_kwargs)
-            export_path = export_path[0] if isinstance(export_path, (list, tuple)) else export_path
-            coreml_path = Path(export_path) if export_path else None
-            if not coreml_path or not coreml_path.exists():
-                raise FileNotFoundError("Core ML export returned no artifact")
-            log_step(5, "export", "ok", f"Core ML export done · {coreml_path.name}")
-        except Exception as exc:
-            coreml_quantization = {"precision": "failed", "method": "none", "target": "coreml"}
-            coreml_path = None
-            log_step(5, "export", "error", f"Core ML export failed: {exc}")
-    else:
-        log_step(5, "export", "info", "Core ML disabled · skipping")
+    ios_quantize = export_options["ios"]["quantize"]
+    coreml_export_kwargs = export_kwargs("coreml", config, ios_quantize)
+    coreml_quantization = quantization_metadata("coreml", coreml_export_kwargs)
+    precision_label = coreml_quantization["precision"].upper()
+    log_step(5, "export", "started",
+             f"Core ML {precision_label} export starting"
+             + ("" if ios_quantize else " (no quantization)"))
+    try:
+        export_path = model.export(**coreml_export_kwargs)
+        export_path = export_path[0] if isinstance(export_path, (list, tuple)) else export_path
+        coreml_path = Path(export_path) if export_path else None
+        if not coreml_path or not coreml_path.exists():
+            raise FileNotFoundError("Core ML export returned no artifact")
+        log_step(5, "export", "ok", f"Core ML export done · {coreml_path.name}")
+    except Exception as exc:
+        coreml_quantization = {"precision": "failed", "method": "none", "target": "coreml"}
+        coreml_path = None
+        log_step(5, "export", "error", f"Core ML export failed: {exc}")
 
     semver = f"1.0.0-{args.run_id[:8]}"
     append_log(f"Preserving original PyTorch weights for local segmentation QA: {best.name}")

@@ -8,35 +8,27 @@ from train_for_run import load_export_options
 
 def test_defaults_when_missing():
     opts = load_export_options({})
-    assert opts == {
-        "ios": {"enabled": True, "precision": "fp16"},
-        "android": {"enabled": True, "precision": "int8"},
-    }
+    assert opts == {"ios": {"quantize": True}, "android": {"quantize": True}}
 
 
 def test_reads_export_options_from_config():
-    cfg = {
-        "exportOptions": {
-            "ios": {"enabled": False, "precision": "fp16"},
-            "android": {"enabled": True, "precision": "int8"},
-        }
-    }
+    cfg = {"exportOptions": {"ios": {"quantize": False}, "android": {"quantize": True}}}
     opts = load_export_options(cfg)
-    assert opts["ios"]["enabled"] is False
-    assert opts["android"]["enabled"] is True
+    assert opts["ios"]["quantize"] is False
+    assert opts["android"]["quantize"] is True
 
 
 def test_legacy_run_uses_defaults():
     cfg = {"hyperparameters": {"epochs": 10}}
     opts = load_export_options(cfg)
-    assert opts["ios"]["enabled"] is True
-    assert opts["android"]["enabled"] is True
+    assert opts["ios"]["quantize"] is True
+    assert opts["android"]["quantize"] is True
 
 
 def test_invalid_shape_falls_back_to_defaults():
     cfg = {"exportOptions": "not-a-dict"}
     opts = load_export_options(cfg)
-    assert opts["ios"]["enabled"] is True
+    assert opts["ios"]["quantize"] is True
 
 
 from datetime import datetime
@@ -70,9 +62,35 @@ def test_artifact_metadata_handles_none_artifact():
     meta = artifact_metadata(
         kind="tflite",
         artifact=None,
-        quantization={"precision": "skipped", "method": "none", "target": "tflite"},
+        quantization={"precision": "fp32", "method": "none", "target": "tflite"},
     )
     assert meta["r2_key"] is None
     assert meta["size_bytes"] is None
     assert meta["content_hash"] is None
-    assert meta["quantization"]["precision"] == "skipped"
+    assert meta["quantization"]["precision"] == "fp32"
+
+
+from train_for_run import export_kwargs
+
+
+def test_export_kwargs_tflite_quantized():
+    kw = export_kwargs("tflite", {"imgsz": 640, "data": "/x.yaml"}, quantize=True)
+    assert kw["int8"] is True
+    assert kw["data"] == "/x.yaml"
+
+
+def test_export_kwargs_tflite_unquantized():
+    kw = export_kwargs("tflite", {"imgsz": 640, "data": "/x.yaml"}, quantize=False)
+    assert "int8" not in kw
+    assert kw == {"format": "tflite", "imgsz": 640}
+
+
+def test_export_kwargs_coreml_quantized():
+    kw = export_kwargs("coreml", {"imgsz": 640}, quantize=True)
+    assert kw["half"] is True
+
+
+def test_export_kwargs_coreml_unquantized():
+    kw = export_kwargs("coreml", {"imgsz": 640}, quantize=False)
+    assert "half" not in kw
+    assert kw == {"format": "coreml", "imgsz": 640}
