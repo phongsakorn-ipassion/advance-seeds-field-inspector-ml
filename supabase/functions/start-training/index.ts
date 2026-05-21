@@ -27,21 +27,6 @@ Deno.serve(async (req) => {
     return json({ error: "model_line_slug and config required" }, 400);
   }
 
-  const exportOptions = (body.config as Record<string, unknown>).exportOptions as
-    | { ios?: { enabled?: boolean }; android?: { enabled?: boolean } }
-    | undefined;
-  if (
-    exportOptions !== undefined &&
-    exportOptions !== null &&
-    exportOptions.ios?.enabled === false &&
-    exportOptions.android?.enabled === false
-  ) {
-    return json(
-      { error: "At least one of iOS or Android exports must be enabled." },
-      400,
-    );
-  }
-
   const providerBaseUrl = Deno.env.get("TRAINING_PROVIDER_BASE_URL");
   const providerApiKey = Deno.env.get("TRAINING_PROVIDER_API_KEY");
   const callbackSecret = Deno.env.get("TRAINING_CALLBACK_SECRET");

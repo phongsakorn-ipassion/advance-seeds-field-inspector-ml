@@ -40,9 +40,9 @@ Deno.serve(async (req) => {
       ? version.metadata?.artifacts?.coreml
       : version.metadata?.artifacts?.tflite;
     const precision: string | null | undefined = artifactMeta?.quantization?.precision;
-    const isSkippedOrFailed = precision === "skipped" || precision === "failed";
+    const isFailed = precision === "failed";
     if (!includeArtifact(key, precision)) {
-      if (!readyOnly && !isSkippedOrFailed) {
+      if (!readyOnly && !isFailed) {
         models.push({
           deployment_id: deployment.id,
           version_id: version.id,
@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
 
 function includeArtifact(r2Key: string | null | undefined, precision: string | null | undefined): boolean {
   if (!r2Key) return false;
-  if (precision === "skipped" || precision === "failed") return false;
+  if (precision === "failed") return false;
   return true;
 }
 
