@@ -226,13 +226,9 @@ function formatCount(value?: number): string {
 }
 
 function formatExportTargets(opts?: ExportOptions): string {
-  if (!opts) return "iOS Core ML FP16 · Android TF Lite INT8 (legacy default)";
-  const ios = opts.ios.enabled
-    ? `iOS Core ML ${opts.ios.precision.toUpperCase()}`
-    : "iOS disabled";
-  const android = opts.android.enabled
-    ? `Android TF Lite ${opts.android.precision.toUpperCase()}`
-    : "Android disabled";
+  if (!opts) return "iOS FP16 · Android INT8 (legacy default)";
+  const ios = opts.ios.quantize ? "iOS FP16" : "iOS FP32 (no quantization)";
+  const android = opts.android.quantize ? "Android INT8" : "Android FP32 (no quantization)";
   return `${ios} · ${android}`;
 }
 
@@ -1193,8 +1189,8 @@ function TrainWorkflow({
   const [startError, setStartError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<TrainingFieldErrors>({});
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
-    ios:     { enabled: true, precision: "fp16" },
-    android: { enabled: true, precision: "int8" },
+    ios:     { quantize: true },
+    android: { quantize: true },
   });
   const [pendingDelete, setPendingDelete] = useState<RegistryRun | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -1309,7 +1305,6 @@ function TrainWorkflow({
         const errors = validateTrainingConfig();
         setFieldErrors(errors);
         if (Object.keys(errors).length > 0) return;
-        if (!exportOptions.ios.enabled && !exportOptions.android.enabled) return;
         try {
           await onStart(exportOptions);
           setTab("live");
@@ -1436,28 +1431,25 @@ function TrainWorkflow({
           <label>
             <input
               type="checkbox"
-              checked={exportOptions.ios.enabled}
+              checked={exportOptions.ios.quantize}
               onChange={(e) => setExportOptions(prev => ({
-                ...prev, ios: { ...prev.ios, enabled: e.target.checked },
+                ...prev, ios: { quantize: e.target.checked },
               }))}
             />
-            iOS (Core ML, FP16)
+            Quantize iOS export (FP16)
           </label>
           <label>
             <input
               type="checkbox"
-              checked={exportOptions.android.enabled}
+              checked={exportOptions.android.quantize}
               onChange={(e) => setExportOptions(prev => ({
-                ...prev, android: { ...prev.android, enabled: e.target.checked },
+                ...prev, android: { quantize: e.target.checked },
               }))}
             />
-            Android (TF Lite, INT8)
+            Quantize Android export (INT8)
           </label>
-          {!exportOptions.ios.enabled && !exportOptions.android.enabled && (
-            <p className="error">At least one platform must be enabled.</p>
-          )}
         </fieldset>
-      <button className="primary-button" type="submit" disabled={!isAdmin || (!exportOptions.ios.enabled && !exportOptions.android.enabled)} title={isAdmin ? "" : "Admin role required"}>
+      <button className="primary-button" type="submit" disabled={!isAdmin} title={isAdmin ? "" : "Admin role required"}>
         <Rocket size={18} /> Create training run
       </button>
       {startError && <p className="form-error">{startError}</p>}
@@ -2307,9 +2299,7 @@ function PlatformReadiness({ version, store }: { version: RegistryVersion; store
           busy={downloading === "android"}
           onDownload={() => void downloadArtifact("android", version.tfliteR2Key)}
           chipState={
-            !isArchived && version.tflitePrecision === "skipped" ? "skipped"
-            : !isArchived && version.tflitePrecision === "failed" ? "failed"
-            : undefined
+            !isArchived && version.tflitePrecision === "failed" ? "failed" : undefined
           }
         />
         <PlatformArtifactCard
@@ -2324,9 +2314,7 @@ function PlatformReadiness({ version, store }: { version: RegistryVersion; store
           busy={downloading === "ios"}
           onDownload={() => void downloadArtifact("ios", version.coremlR2Key)}
           chipState={
-            !isArchived && version.coremlPrecision === "skipped" ? "skipped"
-            : !isArchived && version.coremlPrecision === "failed" ? "failed"
-            : undefined
+            !isArchived && version.coremlPrecision === "failed" ? "failed" : undefined
           }
         />
         <PlatformArtifactCard
@@ -2370,9 +2358,9 @@ function PlatformArtifactCard({
   disabled: boolean;
   busy: boolean;
   onDownload: () => void;
-  chipState?: "skipped" | "failed";
+  chipState?: "failed";
 }) {
-  const cardStateClass = chipState === "skipped" ? "skipped" : chipState === "failed" ? "failed" : ready ? "ready" : "missing";
+  const cardStateClass = chipState === "failed" ? "failed" : ready ? "ready" : "missing";
   return (
     <article className={`platform-card ${tone} ${cardStateClass}`}>
       <div className="platform-card-top">
@@ -2380,9 +2368,7 @@ function PlatformArtifactCard({
         <div className="platform-card-title">
           <strong>{title}</strong>
           <small>
-            {chipState === "skipped" ? (
-              <span className="platform-status-chip skipped">Disabled</span>
-            ) : chipState === "failed" ? (
+            {chipState === "failed" ? (
               <span className="platform-status-chip failed">Failed</span>
             ) : ready ? (
               <span>{status}</span>
@@ -2907,7 +2893,7 @@ function InfoSection({
           <dd className="mono">{sourceWeights || "—"}</dd>
           <dt>Image size</dt>
           <dd>{hyperParameters.imgsz} px</dd>
-          <dt>Export targets</dt>
+          <dt>Quantization</dt>
           <dd>{formatExportTargets(exportOptions)}</dd>
         </dl>
       </div>

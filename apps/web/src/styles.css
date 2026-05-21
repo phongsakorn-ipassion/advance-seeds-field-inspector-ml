@@ -683,9 +683,7 @@ button {
 }
 .platform-status-chip.ready { background: color-mix(in srgb, var(--platform-tone, var(--as-brand)) 14%, var(--as-bg-primary)); color: var(--as-brand-deep); }
 .platform-status-chip.missing { background: var(--as-danger-bg); color: var(--as-danger-text); }
-.platform-status-chip.skipped { background: var(--as-bg-secondary); color: var(--as-text-tertiary); }
 .platform-status-chip.failed { background: var(--as-warning-bg); color: var(--as-warning-text); }
-.platform-card.skipped { --platform-border: var(--as-border-tertiary); background: var(--as-bg-tertiary); opacity: 0.72; }
 .platform-card.failed { --platform-border: color-mix(in srgb, var(--as-warning-text) 24%, var(--as-border-tertiary)); background: linear-gradient(180deg, var(--as-warning-bg) 0%, var(--as-bg-primary) 78%); }
 .platform-card-top,
 .platform-card-title,
@@ -2963,6 +2961,43 @@ a.primary-button { text-decoration: none; }
   border-radius: var(--as-radius-full);
 }
 .run-logs pre::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
+
+.run-stepper {
+  display: flex;
+  gap: 12px;
+  padding: 0;
+  margin: 0 0 12px;
+  list-style: none;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.run-stepper .run-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--as-text-tertiary, #888);
+}
+.run-stepper .run-step-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.run-step-pending { color: var(--as-text-tertiary, #888); }
+.run-step-running { color: var(--as-info-text, #4a90e2); }
+.run-step-ok      { color: var(--as-success-text, #2ec27e); }
+.run-step-error   { color: var(--as-danger-text, #e25c4a); }
+
+.run-log-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.run-log-line { font-family: var(--as-font-mono, ui-monospace, monospace); font-size: 12px; }
+.run-log-line .run-log-prefix { opacity: 0.6; margin-right: 6px; }
+.run-log-line.status-error { color: var(--as-danger-text, #e25c4a); }
+.run-log-line.status-ok    { color: var(--as-success-text, #2ec27e); }
 
 .progress-track {
   height: 6px;
