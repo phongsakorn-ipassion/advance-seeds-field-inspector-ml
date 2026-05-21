@@ -12,6 +12,7 @@ import type {
   RegistrySnapshot,
   RegistryVersion,
   MetricSummary,
+  RunLogEntry,
   StorageObject,
   TrainConfig,
   VersionState,
@@ -215,7 +216,7 @@ function mapRun(run: DbRun, metrics: DbRunMetric[]): RegistryRun {
     metricsHistory,
     config,
     colabNotebook: run.config_yaml?.colab_notebook ?? "",
-    logs: (run.config_yaml?.logs ?? []) as string[],
+    logs: (run.config_yaml?.logs ?? []) as RunLogEntry[],
   };
 }
 
