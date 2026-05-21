@@ -146,6 +146,13 @@ def quantization_metadata(kind: str, kwargs: dict) -> dict:
 
 
 def artifact_metadata(*, kind: str, artifact, quantization: dict) -> dict:
+    if artifact is None:
+        return {
+            "r2_key": None,
+            "size_bytes": None,
+            "content_hash": None,
+            "quantization": quantization,
+        }
     return {
         "r2_key": artifact.r2_key,
         "size_bytes": artifact.size_bytes,
@@ -245,14 +252,19 @@ def build_version_metadata(
                 artifact=tflite_artifact,
                 quantization=tflite_quantization,
             ),
-            "coreml": {
-                **artifact_metadata(
+            "coreml": (
+                {**artifact_metadata(
                     kind="coreml",
                     artifact=coreml_artifact,
                     quantization=coreml_quantization,
-                ),
-                "packaging": "mlpackage.zip",
-            },
+                ), "packaging": "mlpackage.zip"}
+                if coreml_artifact is not None
+                else artifact_metadata(
+                    kind="coreml",
+                    artifact=None,
+                    quantization=coreml_quantization,
+                )
+            ),
         },
         "host": host,
     }

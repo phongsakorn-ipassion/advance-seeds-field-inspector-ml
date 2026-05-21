@@ -61,3 +61,18 @@ def test_build_structured_log_entry_step_none():
     )
     assert entry["step"] is None
     assert entry["phase"] is None
+
+
+from train_for_run import artifact_metadata
+
+
+def test_artifact_metadata_handles_none_artifact():
+    meta = artifact_metadata(
+        kind="tflite",
+        artifact=None,
+        quantization={"precision": "skipped", "method": "none", "target": "tflite"},
+    )
+    assert meta["r2_key"] is None
+    assert meta["size_bytes"] is None
+    assert meta["content_hash"] is None
+    assert meta["quantization"]["precision"] == "skipped"
