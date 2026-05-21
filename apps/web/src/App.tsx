@@ -130,7 +130,7 @@ function RunStepper({ logs }: { logs: RunLogEntry[] }) {
   );
 }
 
-function renderRunLogEntry(entry: RunLogEntry, idx: number): JSX.Element {
+function renderRunLogEntry(entry: RunLogEntry, idx: number): ReactNode {
   if (typeof entry === "string") {
     return <li key={idx} className="run-log-line legacy">{entry}</li>;
   }
