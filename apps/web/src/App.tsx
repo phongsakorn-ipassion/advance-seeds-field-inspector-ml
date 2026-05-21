@@ -154,6 +154,17 @@ function formatCount(value?: number): string {
   return typeof value === "number" ? value.toLocaleString() : "Pending";
 }
 
+function formatExportTargets(opts?: ExportOptions): string {
+  if (!opts) return "iOS Core ML FP16 · Android TF Lite INT8 (legacy default)";
+  const ios = opts.ios.enabled
+    ? `iOS Core ML ${opts.ios.precision.toUpperCase()}`
+    : "iOS disabled";
+  const android = opts.android.enabled
+    ? `Android TF Lite ${opts.android.precision.toUpperCase()}`
+    : "Android disabled";
+  return `${ios} · ${android}`;
+}
+
 // Display-only status that promotes a stuck "running" run (no progress, no
 // metrics yet) into "waiting" — i.e. the dashboard inserted the row but no
 // trainer has started reporting back. Used purely for status pill rendering.
@@ -2426,6 +2437,7 @@ function RunDetail({ run, version }: { run: RegistryRun; version: RegistryVersio
         sourceWeights={run.config.sourceWeights}
         classes={run.config.classes}
         hyperParameters={run.config.hyperParameters}
+        exportOptions={run.config.exportOptions}
       />
     </div>
   );
@@ -2777,12 +2789,14 @@ function InfoSection({
   sourceWeights,
   classes,
   hyperParameters,
+  exportOptions,
 }: {
   dataset: string;
   datasetStats?: DatasetStats;
   sourceWeights: string;
   classes: string[];
   hyperParameters: TrainConfig["hyperParameters"];
+  exportOptions?: ExportOptions;
 }) {
   const hpEntries = Object.entries(hyperParameters);
   const resolvedStats = resolveDatasetStats(dataset, datasetStats);
@@ -2797,6 +2811,8 @@ function InfoSection({
           <dd className="mono">{sourceWeights || "—"}</dd>
           <dt>Image size</dt>
           <dd>{hyperParameters.imgsz} px</dd>
+          <dt>Export targets</dt>
+          <dd>{formatExportTargets(exportOptions)}</dd>
         </dl>
       </div>
       <div className="info-block">
