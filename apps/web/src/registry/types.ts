@@ -25,16 +25,13 @@ export type MetricPoint = {
 
 export type MetricSummary = Partial<Record<MetricKey, number>>;
 
-export type PlatformPrecision = "int8" | "fp16" | "fp32" | "skipped" | "failed";
+export type PlatformPrecision = "int8" | "fp16" | "fp32" | "failed";
 
-export type ExportTarget = {
-  enabled: boolean;
-  precision: "int8" | "fp16"; // user-selectable precisions only
-};
+export type ExportTarget = { quantize: boolean };
 
 export type ExportOptions = {
-  ios: ExportTarget;     // default { enabled: true, precision: "fp16" }
-  android: ExportTarget; // default { enabled: true, precision: "int8" }
+  ios: ExportTarget;     // default { quantize: true }
+  android: ExportTarget; // default { quantize: true }
 };
 
 export type RunLogStep = 1 | 2 | 3 | 4 | 5 | 6;
