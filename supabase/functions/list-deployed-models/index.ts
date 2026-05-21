@@ -36,8 +36,13 @@ Deno.serve(async (req) => {
     const version = Array.isArray(deployment.versions) ? deployment.versions[0] : deployment.versions;
     if (!version) continue;
     const key = platform === "ios" ? version.mlmodel_r2_key : version.tflite_r2_key;
-    if (!key) {
-      if (!readyOnly) {
+    const artifactMeta = platform === "ios"
+      ? version.metadata?.artifacts?.coreml
+      : version.metadata?.artifacts?.tflite;
+    const precision: string | null | undefined = artifactMeta?.quantization?.precision;
+    const isSkippedOrFailed = precision === "skipped" || precision === "failed";
+    if (!includeArtifact(key, precision)) {
+      if (!readyOnly && !isSkippedOrFailed) {
         models.push({
           deployment_id: deployment.id,
           version_id: version.id,
@@ -73,6 +78,12 @@ Deno.serve(async (req) => {
 
   return json({ model_line: modelLine, channel, platform, models });
 });
+
+function includeArtifact(r2Key: string | null | undefined, precision: string | null | undefined): boolean {
+  if (!r2Key) return false;
+  if (precision === "skipped" || precision === "failed") return false;
+  return true;
+}
 
 function json(b: unknown, status = 200): Response {
   return new Response(JSON.stringify(b), {
