@@ -46,6 +46,32 @@ def _quant_fraction(env: dict[str, str]) -> float:
     return min(1.0, max(0.01, fraction))
 
 
+DEFAULT_EXPORT_OPTIONS = {
+    "ios": {"enabled": True, "precision": "fp16"},
+    "android": {"enabled": True, "precision": "int8"},
+}
+
+
+def load_export_options(run_config: dict) -> dict:
+    """Return {ios:{enabled,precision}, android:{enabled,precision}}.
+
+    Falls back to DEFAULT_EXPORT_OPTIONS for legacy runs or malformed input.
+    """
+    raw = run_config.get("exportOptions") if isinstance(run_config, dict) else None
+    if not isinstance(raw, dict):
+        return {k: dict(v) for k, v in DEFAULT_EXPORT_OPTIONS.items()}
+    result = {k: dict(v) for k, v in DEFAULT_EXPORT_OPTIONS.items()}
+    for platform_key in ("ios", "android"):
+        entry = raw.get(platform_key)
+        if isinstance(entry, dict):
+            if isinstance(entry.get("enabled"), bool):
+                result[platform_key]["enabled"] = entry["enabled"]
+            precision = entry.get("precision")
+            if precision in {"int8", "fp16"}:
+                result[platform_key]["precision"] = precision
+    return result
+
+
 def export_kwargs(kind: str, config: dict, env: dict[str, str] | None = None) -> dict:
     """Return Ultralytics export kwargs for mobile artifacts.
 
