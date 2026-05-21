@@ -1569,6 +1569,35 @@ button {
 .train-form input::placeholder,
 .manual-login input::placeholder { color: var(--as-text-tertiary); }
 
+/* Checkbox group field (e.g. Quantization) */
+.train-form .checkbox-group-field {
+  display: grid;
+  gap: 6px;
+}
+.train-form .checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+}
+.train-form .checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--as-text-primary);
+  cursor: pointer;
+  font-weight: 400;
+}
+.train-form .checkbox-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--as-brand, currentColor);
+  flex-shrink: 0;
+  margin: 0;
+}
+
 /* Tag input */
 .tag-input {
   display: flex;

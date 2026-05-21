@@ -1426,29 +1426,33 @@ function TrainWorkflow({
             disabled={!isAdmin}
           />
         </label>
-        <fieldset className="export-targets">
-          <legend>Export targets</legend>
-          <label>
-            <input
-              type="checkbox"
-              checked={exportOptions.ios.quantize}
-              onChange={(e) => setExportOptions(prev => ({
-                ...prev, ios: { quantize: e.target.checked },
-              }))}
-            />
-            Quantize iOS export (FP16)
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={exportOptions.android.quantize}
-              onChange={(e) => setExportOptions(prev => ({
-                ...prev, android: { quantize: e.target.checked },
-              }))}
-            />
-            Quantize Android export (INT8)
-          </label>
-        </fieldset>
+        <div className="form-field checkbox-group-field">
+          <span className="label-text">Quantization</span>
+          <div className="checkbox-group">
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={exportOptions.ios.quantize}
+                onChange={(e) => setExportOptions(prev => ({
+                  ...prev,
+                  ios: { quantize: e.target.checked },
+                }))}
+              />
+              <span>Quantize iOS export (FP16)</span>
+            </label>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={exportOptions.android.quantize}
+                onChange={(e) => setExportOptions(prev => ({
+                  ...prev,
+                  android: { quantize: e.target.checked },
+                }))}
+              />
+              <span>Quantize Android export (INT8)</span>
+            </label>
+          </div>
+        </div>
       <button className="primary-button" type="submit" disabled={!isAdmin} title={isAdmin ? "" : "Admin role required"}>
         <Rocket size={18} /> Create training run
       </button>
