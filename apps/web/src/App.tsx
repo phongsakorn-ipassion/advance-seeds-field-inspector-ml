@@ -29,6 +29,7 @@ import {
 import {
   ChannelName,
   DatasetStats,
+  ExportOptions,
   MetricKey,
   MetricPoint,
   defaultConfig,
@@ -767,8 +768,8 @@ export function App() {
             setTab={changeTrainTab}
             versions={snapshot.versions}
             onOpenModelVersion={openModelVersion}
-            onStart={async () => {
-              await store.startTraining(trainConfig);
+            onStart={async (exportOptions: ExportOptions) => {
+              await store.startTraining({ ...trainConfig, exportOptions });
               setTrainConfig(defaultConfig);
             }}
           />
@@ -1098,7 +1099,7 @@ function TrainWorkflow({
   setTab: (tab: TrainTab) => void;
   versions: RegistryVersion[];
   onOpenModelVersion: (versionId: string) => void;
-  onStart: () => Promise<void>;
+  onStart: (exportOptions: ExportOptions) => Promise<void>;
 }) {
   const runningRuns = runs.filter((r) => r.status === "running");
   const focused = focusedRunId ? runs.find((r) => r.id === focusedRunId) : undefined;
@@ -1109,6 +1110,10 @@ function TrainWorkflow({
   const [howOpen, setHowOpen] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<TrainingFieldErrors>({});
+  const [exportOptions, setExportOptions] = useState<ExportOptions>({
+    ios:     { enabled: true, precision: "fp16" },
+    android: { enabled: true, precision: "int8" },
+  });
   const [pendingDelete, setPendingDelete] = useState<RegistryRun | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -1222,8 +1227,9 @@ function TrainWorkflow({
         const errors = validateTrainingConfig();
         setFieldErrors(errors);
         if (Object.keys(errors).length > 0) return;
+        if (!exportOptions.ios.enabled && !exportOptions.android.enabled) return;
         try {
-          await onStart();
+          await onStart(exportOptions);
           setTab("live");
         } catch (err) {
           setStartError(err instanceof Error ? err.message : String(err));
@@ -1343,7 +1349,33 @@ function TrainWorkflow({
             disabled={!isAdmin}
           />
         </label>
-      <button className="primary-button" type="submit" disabled={!isAdmin} title={isAdmin ? "" : "Admin role required"}>
+        <fieldset className="export-targets">
+          <legend>Export targets</legend>
+          <label>
+            <input
+              type="checkbox"
+              checked={exportOptions.ios.enabled}
+              onChange={(e) => setExportOptions(prev => ({
+                ...prev, ios: { ...prev.ios, enabled: e.target.checked },
+              }))}
+            />
+            iOS (Core ML, FP16)
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={exportOptions.android.enabled}
+              onChange={(e) => setExportOptions(prev => ({
+                ...prev, android: { ...prev.android, enabled: e.target.checked },
+              }))}
+            />
+            Android (TF Lite, INT8)
+          </label>
+          {!exportOptions.ios.enabled && !exportOptions.android.enabled && (
+            <p className="error">At least one platform must be enabled.</p>
+          )}
+        </fieldset>
+      <button className="primary-button" type="submit" disabled={!isAdmin || (!exportOptions.ios.enabled && !exportOptions.android.enabled)} title={isAdmin ? "" : "Admin role required"}>
         <Rocket size={18} /> Create training run
       </button>
       {startError && <p className="form-error">{startError}</p>}
