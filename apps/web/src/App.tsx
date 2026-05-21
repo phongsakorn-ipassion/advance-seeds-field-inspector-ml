@@ -32,6 +32,7 @@ import {
   ExportOptions,
   MetricKey,
   MetricPoint,
+  RunLogEntry,
   defaultConfig,
   RegistryRun,
   RegistryStore,
@@ -75,6 +76,76 @@ const MODEL_REGISTRY_POSTMAN_GUIDE_URL =
   "https://github.com/phongsakorn-ipassion/advance-seeds-field-inspector-ml/blob/main/docs/model-registry-api-postman.md";
 const MODEL_REGISTRY_POSTMAN_COLLECTION_URL =
   "https://github.com/phongsakorn-ipassion/advance-seeds-field-inspector-ml/blob/main/docs/model-registry-postman-collection.json";
+
+function runLogEntryToText(entry: RunLogEntry): string {
+  if (typeof entry === "string") return entry;
+  const prefix = entry.phase
+    ? `[${entry.step}·${entry.phase}]`
+    : entry.step
+    ? `[${entry.step}]`
+    : "";
+  return prefix ? `${prefix} ${entry.message}` : entry.message;
+}
+
+const STEP_LABELS = [
+  "Open notebook",
+  "Run all cells",
+  "Authenticate",
+  "Confirm dataset",
+  "Train + export",
+  "Review artifacts",
+] as const;
+
+type StepState = "pending" | "running" | "ok" | "error";
+
+export function stepStatesFromLogs(logs: RunLogEntry[]): StepState[] {
+  const states: StepState[] = Array(6).fill("pending");
+  states[0] = "ok"; // step 1 = run created, always implicit
+  for (const entry of logs) {
+    if (typeof entry === "string") continue;
+    if (!entry.step) continue;
+    const idx = entry.step - 1;
+    if (entry.status === "error") {
+      states[idx] = "error";
+    } else if (entry.status === "ok" && states[idx] !== "error") {
+      states[idx] = "ok";
+    } else if (states[idx] === "pending") {
+      states[idx] = "running";
+    }
+  }
+  return states;
+}
+
+function RunStepper({ logs }: { logs: RunLogEntry[] }) {
+  const states = stepStatesFromLogs(logs);
+  return (
+    <ol className="run-stepper">
+      {STEP_LABELS.map((label, i) => (
+        <li key={i} className={`run-step run-step-${states[i]}`}>
+          <span className="run-step-dot" />
+          <span className="run-step-label">{label}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function renderRunLogEntry(entry: RunLogEntry, idx: number): JSX.Element {
+  if (typeof entry === "string") {
+    return <li key={idx} className="run-log-line legacy">{entry}</li>;
+  }
+  const prefix = entry.phase
+    ? `[${entry.step}·${entry.phase}]`
+    : entry.step
+    ? `[${entry.step}]`
+    : "";
+  return (
+    <li key={idx} className={`run-log-line status-${entry.status}`}>
+      <span className="run-log-prefix">{prefix}</span>
+      <span className="run-log-message">{entry.message}</span>
+    </li>
+  );
+}
 
 function Hint({ text }: { text: string }) {
   return (
@@ -204,7 +275,7 @@ function expertLogLines(run: RegistryRun): string[] {
     `[training] epochs=${run.config.hyperParameters.epochs} imgsz=${run.config.hyperParameters.imgsz} batch=${run.config.hyperParameters.batch} patience=${run.config.hyperParameters.patience} lr0=${run.config.hyperParameters.lr0}`,
     `[metrics] mAP50=${map50} mAP50-95=${map5095} precision=${precision} recall=${recall} mask_mAP50-95=${maskMap} source_weights=${run.config.sourceWeights || "pending"}`,
     `[timing] started_at="${run.startedAt || "pending"}" finished_at="${run.finishedAt ?? "running"}" notebook="${displayColabNotebook(run) || "pending"}"`,
-    ...run.logs.map((line, index) => `[log ${String(index + 1).padStart(2, "0")}] ${line}`),
+    ...run.logs.map((line, index) => `[log ${String(index + 1).padStart(2, "0")}] ${runLogEntryToText(line)}`),
   ];
 }
 
@@ -222,7 +293,7 @@ function deriveActivityNotifications(snapshot: ReturnType<RegistryStore["getSnap
     items.push({
       id: `run:${run.id}:${status}:${progressBucket}`,
       title: status === "succeeded" ? "Training finished" : status === "failed" ? "Training failed" : status === "waiting" ? "Training waiting" : "Training running",
-      detail: latestLog ? `${run.name} · ${latestLog}` : `${run.name} · ${run.progress}%`,
+      detail: latestLog ? `${run.name} · ${runLogEntryToText(latestLog)}` : `${run.name} · ${run.progress}%`,
       tone: status === "succeeded" ? "success" : status === "failed" ? "danger" : status === "waiting" ? "muted" : "info",
       time: run.finishedAt ?? run.startedAt,
       section: "train",
@@ -2721,6 +2792,8 @@ function RunLogs({ run }: { run: RegistryRun }) {
         <span className="run-logs-title">Run logs</span>
         <span className="run-logs-count">{empty ? "0 lines" : `${lines.length} line${lines.length === 1 ? "" : "s"}`}</span>
       </header>
+      <RunStepper logs={run.logs} />
+      <ul className="run-log-list">{run.logs.map(renderRunLogEntry)}</ul>
       <pre className={empty ? "empty" : undefined}>
         {empty ? "No logs reported yet." : lines.join("\n")}
       </pre>
