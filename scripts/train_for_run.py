@@ -98,6 +98,12 @@ def export_kwargs(kind: str, config: dict, quantize: bool) -> dict:
     raise ValueError(f"unsupported export kind: {kind}")
 
 
+def export_plan_summary(export_options: dict) -> str:
+    android = "INT8 quantized" if export_options["android"]["quantize"] else "FP32 no quantization"
+    ios = "FP16 quantized" if export_options["ios"]["quantize"] else "FP32 no quantization"
+    return f"Android TF Lite: {android}; iOS Core ML: {ios}"
+
+
 def build_structured_log_entry(
     *,
     step: int | None,
@@ -595,6 +601,7 @@ def main(argv: list[str] | None = None) -> int:
 
     gpu = config.get("hardware", {}).get("gpu_name") or "unknown GPU"
     log_step(5, "model-init", "ok", f"Training started on {gpu}, target epochs={total_epochs}")
+    log_step(5, "model-init", "info", f"Export options resolved — {export_plan_summary(export_options)}")
     if git_sha:
         log_step(5, "model-init", "info", f"Training script git={git_sha}")
 

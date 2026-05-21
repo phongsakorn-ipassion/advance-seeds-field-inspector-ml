@@ -92,6 +92,13 @@ def test_platform_export_metadata_exposes_export_choices_and_precision():
 
 
 from train_for_run import export_kwargs
+from train_for_run import export_plan_summary
+
+
+def test_export_plan_summary_states_unquantized_fp32_when_disabled():
+    summary = export_plan_summary({"ios": {"quantize": False}, "android": {"quantize": False}})
+    assert "Android TF Lite: FP32 no quantization" in summary
+    assert "iOS Core ML: FP32 no quantization" in summary
 
 
 def test_export_kwargs_tflite_quantized():
