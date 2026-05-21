@@ -683,6 +683,10 @@ button {
 }
 .platform-status-chip.ready { background: color-mix(in srgb, var(--platform-tone, var(--as-brand)) 14%, var(--as-bg-primary)); color: var(--as-brand-deep); }
 .platform-status-chip.missing { background: var(--as-danger-bg); color: var(--as-danger-text); }
+.platform-status-chip.skipped { background: var(--as-bg-secondary); color: var(--as-text-tertiary); }
+.platform-status-chip.failed { background: var(--as-warning-bg); color: var(--as-warning-text); }
+.platform-card.skipped { --platform-border: var(--as-border-tertiary); background: var(--as-bg-tertiary); opacity: 0.72; }
+.platform-card.failed { --platform-border: color-mix(in srgb, var(--as-warning-text) 24%, var(--as-border-tertiary)); background: linear-gradient(180deg, var(--as-warning-bg) 0%, var(--as-bg-primary) 78%); }
 .platform-card-top,
 .platform-card-title,
 .platform-card-package,

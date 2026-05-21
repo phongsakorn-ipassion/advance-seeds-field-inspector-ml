@@ -2235,6 +2235,11 @@ function PlatformReadiness({ version, store }: { version: RegistryVersion; store
           disabled={isArchived || !version.tfliteR2Key || downloading !== null}
           busy={downloading === "android"}
           onDownload={() => void downloadArtifact("android", version.tfliteR2Key)}
+          chipState={
+            !isArchived && version.tflitePrecision === "skipped" ? "skipped"
+            : !isArchived && version.tflitePrecision === "failed" ? "failed"
+            : undefined
+          }
         />
         <PlatformArtifactCard
           tone="ios"
@@ -2247,6 +2252,11 @@ function PlatformReadiness({ version, store }: { version: RegistryVersion; store
           disabled={isArchived || !version.coremlR2Key || downloading !== null}
           busy={downloading === "ios"}
           onDownload={() => void downloadArtifact("ios", version.coremlR2Key)}
+          chipState={
+            !isArchived && version.coremlPrecision === "skipped" ? "skipped"
+            : !isArchived && version.coremlPrecision === "failed" ? "failed"
+            : undefined
+          }
         />
         <PlatformArtifactCard
           tone="pytorch"
@@ -2277,6 +2287,7 @@ function PlatformArtifactCard({
   disabled,
   busy,
   onDownload,
+  chipState,
 }: {
   tone: "android" | "ios" | "pytorch";
   icon: ReactNode;
@@ -2288,15 +2299,25 @@ function PlatformArtifactCard({
   disabled: boolean;
   busy: boolean;
   onDownload: () => void;
+  chipState?: "skipped" | "failed";
 }) {
+  const cardStateClass = chipState === "skipped" ? "skipped" : chipState === "failed" ? "failed" : ready ? "ready" : "missing";
   return (
-    <article className={`platform-card ${tone} ${ready ? "ready" : "missing"}`}>
+    <article className={`platform-card ${tone} ${cardStateClass}`}>
       <div className="platform-card-top">
         <span className="platform-card-icon" aria-hidden="true">{icon}</span>
         <div className="platform-card-title">
           <strong>{title}</strong>
           <small>
-            {ready ? <span>{status}</span> : <span className="platform-status-chip missing">Missing</span>}
+            {chipState === "skipped" ? (
+              <span className="platform-status-chip skipped">Disabled</span>
+            ) : chipState === "failed" ? (
+              <span className="platform-status-chip failed">Failed</span>
+            ) : ready ? (
+              <span>{status}</span>
+            ) : (
+              <span className="platform-status-chip missing">Missing</span>
+            )}
           </small>
         </div>
       </div>
@@ -2305,16 +2326,18 @@ function PlatformArtifactCard({
           <span>{size}</span>
           <Hint text={detail} />
         </div>
-        <button
-          type="button"
-          className="icon-action-button platform-download"
-          disabled={disabled}
-          onClick={onDownload}
-          aria-label={`Download ${title}`}
-          title={disabled ? `${title} is not available to download` : `Download ${title}`}
-        >
-          <Download size={14} aria-hidden="true" />
-        </button>
+        {chipState == null && (
+          <button
+            type="button"
+            className="icon-action-button platform-download"
+            disabled={disabled}
+            onClick={onDownload}
+            aria-label={`Download ${title}`}
+            title={disabled ? `${title} is not available to download` : `Download ${title}`}
+          >
+            <Download size={14} aria-hidden="true" />
+          </button>
+        )}
       </div>
       {busy && <small className="platform-download-status">Preparing signed download...</small>}
     </article>
