@@ -87,15 +87,6 @@ function runLogEntryToText(entry: RunLogEntry): string {
   return prefix ? `${prefix} ${entry.message}` : entry.message;
 }
 
-const STEP_LABELS = [
-  "Open notebook",
-  "Run all cells",
-  "Authenticate",
-  "Confirm dataset",
-  "Train + export",
-  "Review artifacts",
-] as const;
-
 type StepState = "pending" | "running" | "ok" | "error";
 
 export function stepStatesFromLogs(logs: RunLogEntry[]): StepState[] {
@@ -114,41 +105,6 @@ export function stepStatesFromLogs(logs: RunLogEntry[]): StepState[] {
     }
   }
   return states;
-}
-
-function RunStepper({ logs }: { logs: RunLogEntry[] }) {
-  const states = stepStatesFromLogs(logs);
-  return (
-    <ol className="run-stepper">
-      {STEP_LABELS.map((label, i) => (
-        <li
-          key={i}
-          className={`run-step run-step-${states[i]}`}
-          aria-current={states[i] === "running" ? "step" : undefined}
-        >
-          <span className="run-step-dot" />
-          <span className="run-step-label">{label}</span>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-function renderRunLogEntry(entry: RunLogEntry, idx: number): ReactNode {
-  if (typeof entry === "string") {
-    return <li key={idx} className="run-log-line legacy">{entry}</li>;
-  }
-  const prefix = entry.phase
-    ? `[${entry.step}·${entry.phase}]`
-    : entry.step
-    ? `[${entry.step}]`
-    : "";
-  return (
-    <li key={idx} className={`run-log-line status-${entry.status}`}>
-      <span className="run-log-prefix">{prefix}</span>
-      <span className="run-log-message">{entry.message}</span>
-    </li>
-  );
 }
 
 function Hint({ text }: { text: string }) {
@@ -250,7 +206,7 @@ function displayRunStatus(run: RegistryRun): DisplayStatus {
 function displayColabNotebook(run: RegistryRun): string {
   const notebook = run.colabNotebook.trim();
   if (!notebook) return "";
-  return run.status === "running" ? notebook : notebook.replace(/\s+\(pending\)$/i, "");
+  return run.status === "running" ? notebook.replace(/\s+\(pending\)$/i, "") : notebook;
 }
 
 function compareVersions(a: RegistryVersion, b: RegistryVersion, sort: VersionSort): number {
@@ -1188,7 +1144,8 @@ function TrainWorkflow({
   const recent = runs.filter((r) => r.status !== "running").slice(0, 6);
   const versionByRunId = useMemo(() => new Map(versions.map((version) => [version.runId, version])), [versions]);
   const isFocusedRunning = focused?.status === "running";
-  const showColabHandoff = focused ? focused.status !== "succeeded" && focused.status !== "failed" : false;
+  const focusedDisplayStatus = focused ? displayRunStatus(focused) : undefined;
+  const showColabHandoff = focusedDisplayStatus === "waiting" || focusedDisplayStatus === "queued";
   const [howOpen, setHowOpen] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<TrainingFieldErrors>({});
@@ -1445,7 +1402,10 @@ function TrainWorkflow({
                   ios: { quantize: e.target.checked },
                 }))}
               />
-              <span>Quantize iOS export (FP16)</span>
+              <span className="quantization-option-label">
+                <span className="quantization-option-title">iOS export</span>
+                <span className="quantization-option-meta">Core ML · FP16</span>
+              </span>
             </label>
             <label className="checkbox-row">
               <input
@@ -1456,7 +1416,10 @@ function TrainWorkflow({
                   android: { quantize: e.target.checked },
                 }))}
               />
-              <span>Quantize Android export (INT8)</span>
+              <span className="quantization-option-label">
+                <span className="quantization-option-title">Android export</span>
+                <span className="quantization-option-meta">TF Lite · INT8</span>
+              </span>
             </label>
           </div>
         </div>
@@ -1677,30 +1640,16 @@ function DatasetSplitScroller({ dataset, stats }: { dataset: string; stats?: Dat
   return (
     <section className={`dataset-dna ${hasAnyCount ? "has-counts" : "pending-scan"}`} aria-label="Dataset split summary">
       <header className="dataset-dna-head">
-        <div className="dataset-dna-title">
-          <span className="dataset-dna-eyebrow">
-            Dataset images
-            <Hint text="Paths come from the YOLO YAML's train, val, and test fields. Image counts only appear once the trainer scans the dataset on disk." />
-          </span>
-        </div>
+        <span className="dataset-dna-title">
+          Dataset images
+          <Hint text="Paths come from the YOLO YAML's train, val, and test fields. Image counts only appear once the trainer scans the dataset on disk." />
+        </span>
         <div className="dataset-dna-total">
           <strong>{totalDisplay}</strong>
           {hasAnyCount && <span>images</span>}
         </div>
       </header>
       <div className="dataset-dna-body">
-        <div className="dataset-dna-progress" role={knownTotal ? "img" : undefined} aria-label={knownTotal ? "Train / validation / testing distribution" : undefined}>
-          {splits.map((split) => {
-            const pct = pctFor(split.count);
-            return (
-              <span
-                key={split.key}
-                className={`dataset-dna-node seg-${split.key}`}
-                style={knownTotal && pct > 0 ? { flexGrow: pct } : undefined}
-              />
-            );
-          })}
-        </div>
         <div className="dataset-dna-splits">
           {splits.map((split) => {
             const pct = pctFor(split.count);
@@ -1711,7 +1660,7 @@ function DatasetSplitScroller({ dataset, stats }: { dataset: string; stats?: Dat
                 <span className="dataset-dna-card-label">{split.label}</span>
                 <div className="dataset-dna-card-metric">
                   <strong>{countText}</strong>
-                  <small>{percentText}</small>
+                  <small>{split.role} · {percentText}</small>
                 </div>
               </article>
             );
@@ -2519,7 +2468,7 @@ function RunDetail({ run, version }: { run: RegistryRun; version: RegistryVersio
   return (
     <div className="run-detail">
       <RunNote note={run.config.note} />
-      <RunMetricsPanel run={run} version={version} />
+      <RunMetricsPanel run={run} />
       <RunProgress run={run} />
       <RunLogs run={run} />
       <InfoSection
@@ -2548,7 +2497,7 @@ function RunProgress({ run }: { run: RegistryRun }) {
   );
 }
 
-function RunMetricsPanel({ run, version }: { run: RegistryRun; version: RegistryVersion | null }) {
+function RunMetricsPanel({ run }: { run: RegistryRun }) {
   const f1Series = useMemo(() => deriveF1Series(run.metricsHistory), [run.metricsHistory]);
   const metricsHistory = useMemo(() => [...run.metricsHistory, ...f1Series], [run.metricsHistory, f1Series]);
   const summaryF1 = f1FromPrecisionRecall(run.metricsSummary.precision, run.metricsSummary.recall);
@@ -2573,7 +2522,7 @@ function RunMetricsPanel({ run, version }: { run: RegistryRun; version: Registry
   }
   return (
     <section className="run-metrics-panel" aria-label="Training metrics">
-      <SectionMiniHeading title="Training metrics" hint="Latest values and per-epoch trend from run_metrics. F1-score is derived from precision and recall. Inference time is sourced from the run's exported artifacts." />
+      <SectionMiniHeading title="Training metrics" hint="Latest values and per-epoch trend from run_metrics. F1-score is derived from precision and recall." />
       {visibleKeys.length > 0 ? (
         <>
           <div className="metrics-row compact-metrics-row">
@@ -2596,27 +2545,7 @@ function RunMetricsPanel({ run, version }: { run: RegistryRun; version: Registry
       ) : (
         <MetricEmptyState />
       )}
-      <RunInferenceTimeRow version={version} />
     </section>
-  );
-}
-
-function RunInferenceTimeRow({ version }: { version: RegistryVersion | null }) {
-  const cards = [
-    { label: "PyTorch latency", value: version?.pytorchInferenceMs, hint: "Inference time" },
-    { label: "TFLite latency", value: version?.tfliteInferenceMs, hint: "Inference time" },
-    { label: "CoreML latency", value: version?.coremlInferenceMs, hint: "Inference time" },
-  ];
-  return (
-    <div className="metrics-row run-inference-row" aria-label="Inference time">
-      {cards.map((card) => (
-        <article className="metric-card" key={card.label}>
-          <span>{card.label}</span>
-          <strong>{msMetric(card.value)}</strong>
-          <small>{typeof card.value === "number" ? card.hint : "pending export"}</small>
-        </article>
-      ))}
-    </div>
   );
 }
 
@@ -2653,7 +2582,7 @@ function MetricEmptyState() {
 function MetricTrendChart({ points, keys, onToggleMetric }: { points: MetricPoint[]; keys: MetricKey[]; onToggleMetric: (key: MetricKey) => void }) {
   const [hovered, setHovered] = useState<MetricPoint | null>(null);
   const [zoom, setZoom] = useState(1);
-  const [showPoints, setShowPoints] = useState(true);
+  const [showPoints, setShowPoints] = useState(false);
   const selected = points
     .filter((point) => keys.includes(point.key))
     .sort((a, b) => (a.epoch ?? a.step) - (b.epoch ?? b.step));
@@ -2755,7 +2684,7 @@ function MetricTrendChart({ points, keys, onToggleMetric }: { points: MetricPoin
             <small>{hovered.epoch ? `Epoch ${hovered.epoch}` : `Step ${hovered.step}`}</small>
           </>
         ) : (
-          <span>Hover or focus a point to inspect a metric value.</span>
+          <span>{showPoints ? "Hover or focus a point to inspect a metric value." : "Points hidden. Use Show points to inspect exact epoch values."}</span>
         )}
       </div>
       <div className="metric-chart-legend">
@@ -2787,10 +2716,7 @@ function RunLogs({ run }: { run: RegistryRun }) {
     <section className="run-logs" aria-label="Run logs">
       <header>
         <span className="run-logs-title">Run logs</span>
-        <span className="run-logs-count">{empty ? "0 lines" : `${lines.length} line${lines.length === 1 ? "" : "s"}`}</span>
       </header>
-      <RunStepper logs={run.logs} />
-      <ul className="run-log-list">{run.logs.map(renderRunLogEntry)}</ul>
       <pre className={empty ? "empty" : undefined}>
         {empty ? "No logs reported yet." : lines.join("\n")}
       </pre>
@@ -3136,10 +3062,6 @@ function pct(value: number) {
 
 function pctMetric(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) ? pct(value) : "—";
-}
-
-function msMetric(value?: number | null): string {
-  return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(1)} ms` : "—";
 }
 
 const COLAB_NOTEBOOK_URL =
