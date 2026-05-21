@@ -186,10 +186,15 @@ function formatCount(value?: number): string {
 }
 
 function formatExportTargets(opts?: ExportOptions): string {
-  if (!opts) return "iOS FP16 · Android INT8 (legacy default)";
+  if (!opts) return "Not recorded · legacy default is iOS FP16 · Android INT8";
   const ios = opts.ios.quantize ? "iOS FP16" : "iOS FP32 (no quantization)";
   const android = opts.android.quantize ? "Android INT8" : "Android FP32 (no quantization)";
   return `${ios} · ${android}`;
+}
+
+function quantizationMeta(platform: "ios" | "android", quantize: boolean): string {
+  if (platform === "ios") return quantize ? "Core ML · FP16" : "Core ML · FP32, no quantization";
+  return quantize ? "TF Lite · INT8" : "TF Lite · FP32, no quantization";
 }
 
 // Display-only status that promotes a stuck "running" run (no progress, no
@@ -1390,7 +1395,7 @@ function TrainWorkflow({
         <div className="checkbox-group-field">
           <span className="label-text">
             Quantization
-            <Hint text="Both Core ML and TF Lite are always exported. Uncheck a row to skip quantization for that platform — the artifact will be larger but unconverted." />
+            <Hint text="Both Core ML and TF Lite are always exported. Checked means quantized mobile export; unchecked means full FP32 export for that platform." />
           </span>
           <div className="checkbox-group">
             <label className="checkbox-row">
@@ -1404,7 +1409,7 @@ function TrainWorkflow({
               />
               <span className="quantization-option-label">
                 <span className="quantization-option-title">iOS export</span>
-                <span className="quantization-option-meta">Core ML · FP16</span>
+                <span className="quantization-option-meta">{quantizationMeta("ios", exportOptions.ios.quantize)}</span>
               </span>
             </label>
             <label className="checkbox-row">
@@ -1418,7 +1423,7 @@ function TrainWorkflow({
               />
               <span className="quantization-option-label">
                 <span className="quantization-option-title">Android export</span>
-                <span className="quantization-option-meta">TF Lite · INT8</span>
+                <span className="quantization-option-meta">{quantizationMeta("android", exportOptions.android.quantize)}</span>
               </span>
             </label>
           </div>

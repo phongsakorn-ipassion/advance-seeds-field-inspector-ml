@@ -1,4 +1,5 @@
 import { corsHeaders } from "../_shared/cors.ts";
+import { artifactDetailForPlatform } from "../_shared/model-metadata.ts";
 import { presignGet } from "../_shared/r2.ts";
 import { serviceClient } from "../_shared/supabase.ts";
 
@@ -39,7 +40,14 @@ Deno.serve(async (req) => {
     const artifactMeta = platform === "ios"
       ? version.metadata?.artifacts?.coreml
       : version.metadata?.artifacts?.tflite;
-    const precision: string | null | undefined = artifactMeta?.quantization?.precision;
+    const artifact = artifactDetailForPlatform(
+      version.metadata,
+      platform,
+      key,
+      platform === "ios" ? artifactMeta?.size_bytes ?? null : version.size_bytes,
+      platform === "ios" ? artifactMeta?.content_hash ?? null : version.content_hash,
+    );
+    const precision = artifact.precision;
     const isFailed = precision === "failed";
     if (!includeArtifact(key, precision)) {
       if (!readyOnly && !isFailed) {
@@ -50,6 +58,7 @@ Deno.serve(async (req) => {
           platform,
           is_default: deployment.is_default,
           status: "artifact_missing",
+          artifact,
           metadata: version.metadata,
         });
       }
@@ -65,12 +74,11 @@ Deno.serve(async (req) => {
       artifact_kind: platform === "ios" ? "coreml" : "tflite",
       artifact_url: await presignGet(key, 3600),
       r2_key: key,
-      content_hash: platform === "ios"
-        ? version.metadata?.artifacts?.coreml?.content_hash ?? null
-        : version.content_hash,
-      size_bytes: platform === "ios"
-        ? version.metadata?.artifacts?.coreml?.size_bytes ?? null
-        : version.size_bytes,
+      precision: artifact.precision,
+      quantization: artifact.quantization,
+      artifact,
+      content_hash: artifact.content_hash,
+      size_bytes: artifact.size_bytes,
       compat_signature: version.compat_signature,
       metadata: version.metadata,
     });

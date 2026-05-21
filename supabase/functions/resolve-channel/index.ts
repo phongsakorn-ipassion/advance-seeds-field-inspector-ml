@@ -1,6 +1,7 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { serviceClient } from "../_shared/supabase.ts";
 import { presignGet } from "../_shared/r2.ts";
+import { artifactDetailForPlatform, type Platform } from "../_shared/model-metadata.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -11,7 +12,7 @@ Deno.serve(async (req) => {
   const lineSlug = url.searchParams.get("model_line") ?? "";
   const currentCompat = url.searchParams.get("current_compat") ?? "";
   const currentVersion = url.searchParams.get("current_version") ?? "";
-  const platform = url.searchParams.get("platform") ?? "android";
+  const platform = (url.searchParams.get("platform") ?? "android") as Platform;
 
   if (!channel || !lineSlug) {
     return json({ error: "channel and model_line required" }, 400);
@@ -47,12 +48,20 @@ Deno.serve(async (req) => {
   if (currentVersion === v.id) return json({ action: "noop" });
 
   const r2Key = platform === "ios" ? v.mlmodel_r2_key : v.tflite_r2_key;
+  const artifact = artifactDetailForPlatform(
+    v.metadata,
+    platform,
+    r2Key,
+    platform === "ios" ? v.metadata?.artifacts?.coreml?.size_bytes ?? null : v.size_bytes,
+    platform === "ios" ? v.metadata?.artifacts?.coreml?.content_hash ?? null : v.content_hash,
+  );
   if (!r2Key) {
     return json({
       action: "artifact_missing",
       platform,
       version_id: v.id,
       semver: v.semver,
+      artifact,
       metadata: v.metadata,
     });
   }
@@ -70,9 +79,12 @@ Deno.serve(async (req) => {
     platform,
     artifact_kind: platform === "ios" ? "coreml" : "tflite",
     model_url: modelUrl,
+    artifact,
+    precision: artifact.precision,
+    quantization: artifact.quantization,
     metadata: v.metadata,
-    content_hash: platform === "ios" ? v.metadata?.artifacts?.coreml?.content_hash ?? null : v.content_hash,
-    size_bytes: platform === "ios" ? v.metadata?.artifacts?.coreml?.size_bytes ?? null : v.size_bytes,
+    content_hash: artifact.content_hash,
+    size_bytes: artifact.size_bytes,
   });
 });
 

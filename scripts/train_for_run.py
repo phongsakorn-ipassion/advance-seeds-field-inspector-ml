@@ -57,7 +57,10 @@ def load_export_options(run_config: dict) -> dict:
 
     Falls back to DEFAULT_EXPORT_OPTIONS for legacy runs or malformed input.
     """
-    raw = run_config.get("exportOptions") if isinstance(run_config, dict) else None
+    raw = (
+        run_config.get("exportOptions")
+        or run_config.get("export_options")
+    ) if isinstance(run_config, dict) else None
     if not isinstance(raw, dict):
         return {k: dict(v) for k, v in DEFAULT_EXPORT_OPTIONS.items()}
     result = {k: dict(v) for k, v in DEFAULT_EXPORT_OPTIONS.items()}
@@ -146,6 +149,25 @@ def artifact_metadata(*, kind: str, artifact, quantization: dict) -> dict:
     }
 
 
+def platform_export_metadata(export_options: dict, tflite_quantization: dict, coreml_quantization: dict) -> dict:
+    return {
+        "android": {
+            "artifact_kind": "tflite",
+            "format": "tf_lite",
+            "quantize": bool(export_options.get("android", {}).get("quantize", True)),
+            "precision": tflite_quantization.get("precision"),
+            "quantization": tflite_quantization,
+        },
+        "ios": {
+            "artifact_kind": "coreml",
+            "format": "core_ml",
+            "quantize": bool(export_options.get("ios", {}).get("quantize", True)),
+            "precision": coreml_quantization.get("precision"),
+            "quantization": coreml_quantization,
+        },
+    }
+
+
 METRIC_ALIASES = {
     "map50": ("map50", "box.map50", "bbox.map50", "metrics/map50(b)"),
     "map5095": ("map5095", "map50-95", "map50_95", "box.map50-95", "bbox.map50-95", "metrics/map50-95(b)"),
@@ -217,14 +239,18 @@ def build_version_metadata(
     git_sha: str | None,
 ) -> dict:
     metrics_dict = getattr(results, "results_dict", {}) or {}
+    run_config = run_row.get("config_yaml", {}) if isinstance(run_row, dict) else {}
+    export_options = load_export_options(run_config)
     metadata = {
-        "dataset": run_row.get("config_yaml", {}).get("dataset"),
-        "source_weights": run_row.get("config_yaml", {}).get("source_weights"),
-        "class_names": run_row.get("config_yaml", {}).get("classes", []),
+        "dataset": run_config.get("dataset"),
+        "source_weights": run_config.get("source_weights"),
+        "class_names": run_config.get("classes", []),
         "input_size": int(config.get("imgsz", 640)),
         "output_kind": "segmentation-mask",
         "task": "segmentation",
-        "hyperparameters": run_row.get("config_yaml", {}).get("hyperparameters", {}),
+        "hyperparameters": run_config.get("hyperparameters", {}),
+        "export_options": export_options,
+        "mobile_exports": platform_export_metadata(export_options, tflite_quantization, coreml_quantization),
         "metrics": normalize_metric_summary(metrics_dict),
         "artifacts": {
             "pytorch": artifact_metadata(

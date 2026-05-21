@@ -18,6 +18,13 @@ def test_reads_export_options_from_config():
     assert opts["android"]["quantize"] is True
 
 
+def test_reads_snake_case_export_options_from_config():
+    cfg = {"export_options": {"ios": {"quantize": False}, "android": {"quantize": False}}}
+    opts = load_export_options(cfg)
+    assert opts["ios"]["quantize"] is False
+    assert opts["android"]["quantize"] is False
+
+
 def test_legacy_run_uses_defaults():
     cfg = {"hyperparameters": {"epochs": 10}}
     opts = load_export_options(cfg)
@@ -56,6 +63,7 @@ def test_build_structured_log_entry_step_none():
 
 
 from train_for_run import artifact_metadata
+from train_for_run import platform_export_metadata
 
 
 def test_artifact_metadata_handles_none_artifact():
@@ -68,6 +76,19 @@ def test_artifact_metadata_handles_none_artifact():
     assert meta["size_bytes"] is None
     assert meta["content_hash"] is None
     assert meta["quantization"]["precision"] == "fp32"
+
+
+def test_platform_export_metadata_exposes_export_choices_and_precision():
+    meta = platform_export_metadata(
+        {"ios": {"quantize": False}, "android": {"quantize": False}},
+        {"precision": "fp32", "method": "none", "target": "tflite"},
+        {"precision": "fp32", "method": "none", "target": "coreml"},
+    )
+    assert meta["android"]["artifact_kind"] == "tflite"
+    assert meta["android"]["quantize"] is False
+    assert meta["android"]["precision"] == "fp32"
+    assert meta["ios"]["artifact_kind"] == "coreml"
+    assert meta["ios"]["quantize"] is False
 
 
 from train_for_run import export_kwargs

@@ -5,6 +5,7 @@ import type {
   AuthSession,
   ChannelName,
   DatasetStats,
+  ExportOptions,
   HyperParameters,
   RegistryChannel,
   RegistryDeployment,
@@ -45,6 +46,27 @@ function numberOrUndefined(value: unknown): number | undefined {
 
 function stringOrUndefined(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+export function exportOptionsFrom(value: unknown): ExportOptions | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const source = value as Record<string, unknown>;
+  const result: ExportOptions = {
+    ios: { quantize: true },
+    android: { quantize: true },
+  };
+  let hasRecordedChoice = false;
+  for (const platform of ["ios", "android"] as const) {
+    const entry = source[platform];
+    if (entry && typeof entry === "object") {
+      const quantize = (entry as Record<string, unknown>).quantize;
+      if (typeof quantize === "boolean") {
+        result[platform].quantize = quantize;
+        hasRecordedChoice = true;
+      }
+    }
+  }
+  return hasRecordedChoice ? result : undefined;
 }
 
 type DbModelLine = { id: string; slug: string; display_name: string };
@@ -132,6 +154,7 @@ function configFromRun(run: DbRun): TrainConfig {
     classes: cfg.classes ?? cfg.class_names ?? [],
     hyperParameters: hp,
     note: typeof cfg.note === "string" ? cfg.note : "",
+    exportOptions: exportOptionsFrom(cfg.exportOptions ?? cfg.export_options),
   };
 }
 
