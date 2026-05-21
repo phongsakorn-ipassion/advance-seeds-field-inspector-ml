@@ -121,7 +121,11 @@ function RunStepper({ logs }: { logs: RunLogEntry[] }) {
   return (
     <ol className="run-stepper">
       {STEP_LABELS.map((label, i) => (
-        <li key={i} className={`run-step run-step-${states[i]}`}>
+        <li
+          key={i}
+          className={`run-step run-step-${states[i]}`}
+          aria-current={states[i] === "running" ? "step" : undefined}
+        >
           <span className="run-step-dot" />
           <span className="run-step-label">{label}</span>
         </li>
