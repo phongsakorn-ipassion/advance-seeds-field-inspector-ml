@@ -1956,6 +1956,7 @@ function ModelDetail({
   const isArchived = version.state === "archived";
   const inProduction = channelNames.includes("production");
   const inStaging = channelNames.includes("staging");
+  const nonDefaultDeployments = deployedRows.filter((deployment) => !deployment.isDefault);
   const [pending, setPending] = useState<null | {
     title: string;
     message: string;
@@ -1996,9 +1997,19 @@ function ModelDetail({
     setActionError(null);
     setPending({
       title: `Deploy to ${channel}`,
-      message: `Deploy ${version.semver} to ${channel} and make it the default model for that channel. Other deployed models on ${channel} remain available for mobile selection.`,
+      message: `Deploy ${version.semver} to ${channel} as a selectable model. The current default for ${channel} will not change until you choose Set default.`,
       confirmLabel: `Deploy to ${channel}`,
-      run: () => store.deployVersion(version.id, channel, { setDefault: true }),
+      run: () => store.deployVersion(version.id, channel, { setDefault: false }),
+    });
+  }
+  function askSetDefault(channel: ChannelName) {
+    if (!isAdmin || isArchived) return;
+    setActionError(null);
+    setPending({
+      title: `Set ${channel} default`,
+      message: `Make ${version.semver} the default model for ${channel}. Other deployed models on ${channel} remain selectable, but mobile resolve-channel will return this model.`,
+      confirmLabel: "Set default",
+      run: () => store.setChannelDefault(channel, version.id),
     });
   }
   function askUndeploy(channel: ChannelName) {
@@ -2163,6 +2174,7 @@ function ModelDetail({
         sourceWeights={version.sourceWeights}
         classes={version.classes}
         hyperParameters={version.hyperParameters}
+        exportOptions={version.exportOptions ?? run?.config.exportOptions}
       />
       <div>
         <SectionMiniHeading title="Run" hint="Source training run and notebook reference used to produce this model version." />
@@ -2202,6 +2214,18 @@ function ModelDetail({
             onClick={() => askUndeploy(name)}
           >
             <LogOut size={14} aria-hidden="true" /> Undeploy {name}
+          </button>
+        ))}
+        {nonDefaultDeployments.map((deployment) => (
+          <button
+            className="ghost-button compact"
+            key={`default-${deployment.channel}`}
+            type="button"
+            disabled={!isAdmin}
+            title={isAdmin ? `Make default for ${deployment.channel}` : writeTitle}
+            onClick={() => askSetDefault(deployment.channel)}
+          >
+            <ShieldCheck size={14} aria-hidden="true" /> Set {deployment.channel} default
           </button>
         ))}
         {!isArchived && (

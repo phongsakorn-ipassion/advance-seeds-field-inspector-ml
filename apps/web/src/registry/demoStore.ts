@@ -504,7 +504,7 @@ export function createDemoStore(): RegistryStore {
     async deployVersion(versionId, channel, options) {
       const target = snapshot.versions.find((v) => v.id === versionId);
       if (target?.state === "archived") throw new Error("Archived models cannot be deployed.");
-      const setDefault = options?.setDefault ?? true;
+      const setDefault = options?.setDefault ?? false;
       const deploymentId = `deployment-${channel}-${versionId}`;
       setSnapshot({
         ...snapshot,
@@ -516,12 +516,34 @@ export function createDemoStore(): RegistryStore {
         deployments: [
           ...snapshot.deployments.filter((d) => !(d.channel === channel && d.versionId === versionId)),
           { id: deploymentId, channel, versionId, isDefault: setDefault, deployedAt: nowStamp() },
-        ].map((d) => d.channel === channel ? { ...d, isDefault: d.versionId === versionId ? setDefault : false } : d),
+        ].map((d) => d.channel === channel && setDefault ? { ...d, isDefault: d.versionId === versionId } : d),
         versions: snapshot.versions.map((v) => ({
           ...v,
           state: v.id === versionId ? channel : v.state === channel ? "candidate" : v.state,
         })),
         storage: snapshot.storage.map((it) => (it.versionId === versionId ? { ...it, active: true } : it)),
+      });
+    },
+    async setChannelDefault(channel, versionId) {
+      if (!snapshot.deployments.some((deployment) => deployment.channel === channel && deployment.versionId === versionId)) {
+        throw new Error("Deploy this model to the channel before making it the default.");
+      }
+      setSnapshot({
+        ...snapshot,
+        channels: snapshot.channels.map((c) =>
+          c.name === channel
+            ? { ...c, versionId, updatedAt: nowStamp(), updatedBy: session?.email ?? "demo-admin" }
+            : c,
+        ),
+        deployments: snapshot.deployments.map((deployment) =>
+          deployment.channel === channel
+            ? { ...deployment, isDefault: deployment.versionId === versionId }
+            : deployment,
+        ),
+        versions: snapshot.versions.map((v) => ({
+          ...v,
+          state: v.id === versionId ? channel : v.state === channel ? "candidate" : v.state,
+        })),
       });
     },
     async undeployChannel(channel, versionId) {
