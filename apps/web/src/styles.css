@@ -1949,6 +1949,7 @@ button {
 }
 .status-pill.production { background: var(--as-success-bg); color: var(--as-success-text); }
 .status-pill.staging    { background: var(--as-info-bg); color: var(--as-info-text); }
+.status-pill.default    { background: var(--as-warning-bg); color: var(--as-warning-text); }
 .status-pill.candidate  { background: var(--as-brand-soft); color: var(--as-brand-deep); }
 .status-pill.inactive   { background: var(--as-bg-secondary); color: var(--as-text-secondary); }
 .status-pill.archived   { background: var(--as-bg-secondary); color: var(--as-text-secondary); border: 1px dashed var(--as-border-secondary); }
@@ -1970,6 +1971,20 @@ button {
 .status-dot.failed    { background: var(--as-danger-text); }
 .status-dot.queued, .status-dot.cancelled { background: var(--as-text-tertiary); }
 .status-dot.waiting { background: var(--as-text-tertiary); outline: 1px dashed var(--as-text-tertiary); outline-offset: 1px; }
+
+.deployment-label-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--as-space-xs);
+}
+
+.deployment-label-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .run-row-wrapper { position: relative; }
 .run-row-wrapper.has-actions .run-row { padding-right: 58px; }
 .run-row-actions {
@@ -3047,7 +3062,7 @@ a.primary-button { text-decoration: none; }
   font-weight: 500;
   color: var(--as-text-primary);
 }
-.version-card > span:not(.status-pill) {
+.version-card > span:not(.status-pill):not(.deployment-label-group) {
   font-size: 12px;
   color: var(--as-text-secondary);
   font-family: var(--as-font-mono);
@@ -3057,7 +3072,12 @@ a.primary-button { text-decoration: none; }
   color: var(--as-text-tertiary);
   grid-column: 1;
 }
-.version-card .status-pill { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+.version-card > .deployment-label-group,
+.version-card > .status-pill {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
 
 .detail-panel { gap: var(--as-space-xl); }
 

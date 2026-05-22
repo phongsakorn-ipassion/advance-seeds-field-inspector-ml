@@ -40,6 +40,7 @@ import {
   TrainConfig,
   createRegistryStore,
 } from "./registry";
+import { deploymentLabelsForVersion } from "./registry/deploymentLabels";
 import { deriveF1Series, f1FromPrecisionRecall } from "./registry/metrics";
 import { DeploymentSwaggerPanel } from "./registry/DeploymentSwaggerPanel";
 
@@ -1791,20 +1792,23 @@ function ModelsWorkflow({
               text="Adjust channel or performance filters to see more model versions."
             />
           )}
-          {visibleVersions.map((version) => (
-            <button
-              className={version.id === selectedVersionId ? "version-card selected" : "version-card"}
-              key={version.id}
-              type="button"
-              onClick={() => setSelectedVersionId(version.id)}
-            >
-              <strong>{version.semver}</strong>
-              <small>
-                {pct(version.map50)} mAP50 / {pct(version.maskMap)} mask
-              </small>
-              <span className={`status-pill ${version.state}`}>{version.state}</span>
-            </button>
-          ))}
+          {visibleVersions.map((version) => {
+            const labels = deploymentLabelsForVersion(version.id, deployments);
+            return (
+              <button
+                className={version.id === selectedVersionId ? "version-card selected" : "version-card"}
+                key={version.id}
+                type="button"
+                onClick={() => setSelectedVersionId(version.id)}
+              >
+                <strong>{version.semver}</strong>
+                <small>
+                  {pct(version.map50)} mAP50 / {pct(version.maskMap)} mask
+                </small>
+                <DeploymentLabelGroup fallbackState={version.state} labels={labels} />
+              </button>
+            );
+          })}
         </div>
       </section>
       <section className="panel detail-panel">
@@ -2125,7 +2129,7 @@ function ModelDetail({
           )}
         </div>
         <div className="detail-hero-actions" aria-label="Lifecycle status">
-          <span className={`status-pill ${version.state}`}>{version.state}</span>
+          <DeploymentLabelGroup fallbackState={version.state} labels={deploymentLabelsForVersion(version.id, deployedRows)} />
         </div>
       </div>
       {pending && (
@@ -2241,6 +2245,28 @@ function ModelDetail({
         )}
       </div>
     </div>
+  );
+}
+
+function DeploymentLabelGroup({
+  fallbackState,
+  labels,
+}: {
+  fallbackState: RegistryVersion["state"];
+  labels: ReturnType<typeof deploymentLabelsForVersion>;
+}) {
+  if (labels.length === 0) {
+    return <span className={`status-pill ${fallbackState}`}>{fallbackState}</span>;
+  }
+  return (
+    <span className="deployment-label-group">
+      {labels.map((label) => (
+        <span className="deployment-label-pair" key={label.channel}>
+          <span className={`status-pill ${label.channel}`}>{label.channel}</span>
+          {label.isDefault && <span className="status-pill default">default</span>}
+        </span>
+      ))}
+    </span>
   );
 }
 
