@@ -29,8 +29,10 @@ import {
 import {
   ChannelName,
   DatasetStats,
+  ExportOptions,
   MetricKey,
   MetricPoint,
+  RunLogEntry,
   defaultConfig,
   RegistryRun,
   RegistryStore,
@@ -74,6 +76,36 @@ const MODEL_REGISTRY_POSTMAN_GUIDE_URL =
   "https://github.com/phongsakorn-ipassion/advance-seeds-field-inspector-ml/blob/main/docs/model-registry-api-postman.md";
 const MODEL_REGISTRY_POSTMAN_COLLECTION_URL =
   "https://github.com/phongsakorn-ipassion/advance-seeds-field-inspector-ml/blob/main/docs/model-registry-postman-collection.json";
+
+function runLogEntryToText(entry: RunLogEntry): string {
+  if (typeof entry === "string") return entry;
+  const prefix = entry.phase
+    ? `[${entry.step}·${entry.phase}]`
+    : entry.step
+    ? `[${entry.step}]`
+    : "";
+  return prefix ? `${prefix} ${entry.message}` : entry.message;
+}
+
+type StepState = "pending" | "running" | "ok" | "error";
+
+export function stepStatesFromLogs(logs: RunLogEntry[]): StepState[] {
+  const states: StepState[] = Array(6).fill("pending");
+  states[0] = "ok"; // step 1 = run created, always implicit
+  for (const entry of logs) {
+    if (typeof entry === "string") continue;
+    if (!entry.step) continue;
+    const idx = entry.step - 1;
+    if (entry.status === "error") {
+      states[idx] = "error";
+    } else if (entry.status === "ok" && states[idx] !== "error") {
+      states[idx] = "ok";
+    } else if (states[idx] === "pending") {
+      states[idx] = "running";
+    }
+  }
+  return states;
+}
 
 function Hint({ text }: { text: string }) {
   return (
@@ -153,6 +185,18 @@ function formatCount(value?: number): string {
   return typeof value === "number" ? value.toLocaleString() : "Pending";
 }
 
+function formatExportTargets(opts?: ExportOptions): string {
+  if (!opts) return "Not recorded · legacy default is iOS FP16 · Android INT8";
+  const ios = opts.ios.quantize ? "iOS FP16" : "iOS FP32 (no quantization)";
+  const android = opts.android.quantize ? "Android INT8" : "Android FP32 (no quantization)";
+  return `${ios} · ${android}`;
+}
+
+function quantizationMeta(platform: "ios" | "android", quantize: boolean): string {
+  if (platform === "ios") return quantize ? "Core ML · FP16" : "Core ML · FP32, no quantization";
+  return quantize ? "TF Lite · INT8" : "TF Lite · FP32, no quantization";
+}
+
 // Display-only status that promotes a stuck "running" run (no progress, no
 // metrics yet) into "waiting" — i.e. the dashboard inserted the row but no
 // trainer has started reporting back. Used purely for status pill rendering.
@@ -167,7 +211,7 @@ function displayRunStatus(run: RegistryRun): DisplayStatus {
 function displayColabNotebook(run: RegistryRun): string {
   const notebook = run.colabNotebook.trim();
   if (!notebook) return "";
-  return run.status === "running" ? notebook : notebook.replace(/\s+\(pending\)$/i, "");
+  return run.status === "running" ? notebook.replace(/\s+\(pending\)$/i, "") : notebook;
 }
 
 function compareVersions(a: RegistryVersion, b: RegistryVersion, sort: VersionSort): number {
@@ -192,7 +236,7 @@ function expertLogLines(run: RegistryRun): string[] {
     `[training] epochs=${run.config.hyperParameters.epochs} imgsz=${run.config.hyperParameters.imgsz} batch=${run.config.hyperParameters.batch} patience=${run.config.hyperParameters.patience} lr0=${run.config.hyperParameters.lr0}`,
     `[metrics] mAP50=${map50} mAP50-95=${map5095} precision=${precision} recall=${recall} mask_mAP50-95=${maskMap} source_weights=${run.config.sourceWeights || "pending"}`,
     `[timing] started_at="${run.startedAt || "pending"}" finished_at="${run.finishedAt ?? "running"}" notebook="${displayColabNotebook(run) || "pending"}"`,
-    ...run.logs.map((line, index) => `[log ${String(index + 1).padStart(2, "0")}] ${line}`),
+    ...run.logs.map((line, index) => `[log ${String(index + 1).padStart(2, "0")}] ${runLogEntryToText(line)}`),
   ];
 }
 
@@ -210,7 +254,7 @@ function deriveActivityNotifications(snapshot: ReturnType<RegistryStore["getSnap
     items.push({
       id: `run:${run.id}:${status}:${progressBucket}`,
       title: status === "succeeded" ? "Training finished" : status === "failed" ? "Training failed" : status === "waiting" ? "Training waiting" : "Training running",
-      detail: latestLog ? `${run.name} · ${latestLog}` : `${run.name} · ${run.progress}%`,
+      detail: latestLog ? `${run.name} · ${runLogEntryToText(latestLog)}` : `${run.name} · ${run.progress}%`,
       tone: status === "succeeded" ? "success" : status === "failed" ? "danger" : status === "waiting" ? "muted" : "info",
       time: run.finishedAt ?? run.startedAt,
       section: "train",
@@ -767,8 +811,8 @@ export function App() {
             setTab={changeTrainTab}
             versions={snapshot.versions}
             onOpenModelVersion={openModelVersion}
-            onStart={async () => {
-              await store.startTraining(trainConfig);
+            onStart={async (exportOptions: ExportOptions) => {
+              await store.startTraining({ ...trainConfig, exportOptions });
               setTrainConfig(defaultConfig);
             }}
           />
@@ -1098,17 +1142,22 @@ function TrainWorkflow({
   setTab: (tab: TrainTab) => void;
   versions: RegistryVersion[];
   onOpenModelVersion: (versionId: string) => void;
-  onStart: () => Promise<void>;
+  onStart: (exportOptions: ExportOptions) => Promise<void>;
 }) {
   const runningRuns = runs.filter((r) => r.status === "running");
   const focused = focusedRunId ? runs.find((r) => r.id === focusedRunId) : undefined;
   const recent = runs.filter((r) => r.status !== "running").slice(0, 6);
   const versionByRunId = useMemo(() => new Map(versions.map((version) => [version.runId, version])), [versions]);
   const isFocusedRunning = focused?.status === "running";
-  const showColabHandoff = focused ? focused.status !== "succeeded" && focused.status !== "failed" : false;
+  const focusedDisplayStatus = focused ? displayRunStatus(focused) : undefined;
+  const showColabHandoff = focusedDisplayStatus === "waiting" || focusedDisplayStatus === "queued";
   const [howOpen, setHowOpen] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<TrainingFieldErrors>({});
+  const [exportOptions, setExportOptions] = useState<ExportOptions>({
+    ios:     { quantize: true },
+    android: { quantize: true },
+  });
   const [pendingDelete, setPendingDelete] = useState<RegistryRun | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -1223,7 +1272,7 @@ function TrainWorkflow({
         setFieldErrors(errors);
         if (Object.keys(errors).length > 0) return;
         try {
-          await onStart();
+          await onStart(exportOptions);
           setTab("live");
         } catch (err) {
           setStartError(err instanceof Error ? err.message : String(err));
@@ -1343,6 +1392,42 @@ function TrainWorkflow({
             disabled={!isAdmin}
           />
         </label>
+        <div className="checkbox-group-field">
+          <span className="label-text">
+            Quantization
+            <Hint text="Both Core ML and TF Lite are always exported. Checked means quantized mobile export; unchecked means full FP32 export for that platform." />
+          </span>
+          <div className="checkbox-group">
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={exportOptions.ios.quantize}
+                onChange={(e) => setExportOptions(prev => ({
+                  ...prev,
+                  ios: { quantize: e.target.checked },
+                }))}
+              />
+              <span className="quantization-option-label">
+                <span className="quantization-option-title">iOS export</span>
+                <span className="quantization-option-meta">{quantizationMeta("ios", exportOptions.ios.quantize)}</span>
+              </span>
+            </label>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={exportOptions.android.quantize}
+                onChange={(e) => setExportOptions(prev => ({
+                  ...prev,
+                  android: { quantize: e.target.checked },
+                }))}
+              />
+              <span className="quantization-option-label">
+                <span className="quantization-option-title">Android export</span>
+                <span className="quantization-option-meta">{quantizationMeta("android", exportOptions.android.quantize)}</span>
+              </span>
+            </label>
+          </div>
+        </div>
       <button className="primary-button" type="submit" disabled={!isAdmin} title={isAdmin ? "" : "Admin role required"}>
         <Rocket size={18} /> Create training run
       </button>
@@ -1560,30 +1645,16 @@ function DatasetSplitScroller({ dataset, stats }: { dataset: string; stats?: Dat
   return (
     <section className={`dataset-dna ${hasAnyCount ? "has-counts" : "pending-scan"}`} aria-label="Dataset split summary">
       <header className="dataset-dna-head">
-        <div className="dataset-dna-title">
-          <span className="dataset-dna-eyebrow">
-            Dataset images
-            <Hint text="Paths come from the YOLO YAML's train, val, and test fields. Image counts only appear once the trainer scans the dataset on disk." />
-          </span>
-        </div>
+        <span className="dataset-dna-title">
+          Dataset images
+          <Hint text="Paths come from the YOLO YAML's train, val, and test fields. Image counts only appear once the trainer scans the dataset on disk." />
+        </span>
         <div className="dataset-dna-total">
           <strong>{totalDisplay}</strong>
           {hasAnyCount && <span>images</span>}
         </div>
       </header>
       <div className="dataset-dna-body">
-        <div className="dataset-dna-progress" role={knownTotal ? "img" : undefined} aria-label={knownTotal ? "Train / validation / testing distribution" : undefined}>
-          {splits.map((split) => {
-            const pct = pctFor(split.count);
-            return (
-              <span
-                key={split.key}
-                className={`dataset-dna-node seg-${split.key}`}
-                style={knownTotal && pct > 0 ? { flexGrow: pct } : undefined}
-              />
-            );
-          })}
-        </div>
         <div className="dataset-dna-splits">
           {splits.map((split) => {
             const pct = pctFor(split.count);
@@ -1594,7 +1665,7 @@ function DatasetSplitScroller({ dataset, stats }: { dataset: string; stats?: Dat
                 <span className="dataset-dna-card-label">{split.label}</span>
                 <div className="dataset-dna-card-metric">
                   <strong>{countText}</strong>
-                  <small>{percentText}</small>
+                  <small>{split.role} · {percentText}</small>
                 </div>
               </article>
             );
@@ -2192,6 +2263,9 @@ function PlatformReadiness({ version, store }: { version: RegistryVersion; store
           disabled={isArchived || !version.tfliteR2Key || downloading !== null}
           busy={downloading === "android"}
           onDownload={() => void downloadArtifact("android", version.tfliteR2Key)}
+          chipState={
+            !isArchived && version.tflitePrecision === "failed" ? "failed" : undefined
+          }
         />
         <PlatformArtifactCard
           tone="ios"
@@ -2204,6 +2278,9 @@ function PlatformReadiness({ version, store }: { version: RegistryVersion; store
           disabled={isArchived || !version.coremlR2Key || downloading !== null}
           busy={downloading === "ios"}
           onDownload={() => void downloadArtifact("ios", version.coremlR2Key)}
+          chipState={
+            !isArchived && version.coremlPrecision === "failed" ? "failed" : undefined
+          }
         />
         <PlatformArtifactCard
           tone="pytorch"
@@ -2234,6 +2311,7 @@ function PlatformArtifactCard({
   disabled,
   busy,
   onDownload,
+  chipState,
 }: {
   tone: "android" | "ios" | "pytorch";
   icon: ReactNode;
@@ -2245,15 +2323,23 @@ function PlatformArtifactCard({
   disabled: boolean;
   busy: boolean;
   onDownload: () => void;
+  chipState?: "failed";
 }) {
+  const cardStateClass = chipState === "failed" ? "failed" : ready ? "ready" : "missing";
   return (
-    <article className={`platform-card ${tone} ${ready ? "ready" : "missing"}`}>
+    <article className={`platform-card ${tone} ${cardStateClass}`}>
       <div className="platform-card-top">
         <span className="platform-card-icon" aria-hidden="true">{icon}</span>
         <div className="platform-card-title">
           <strong>{title}</strong>
           <small>
-            {ready ? <span>{status}</span> : <span className="platform-status-chip missing">Missing</span>}
+            {chipState === "failed" ? (
+              <span className="platform-status-chip failed">Failed</span>
+            ) : ready ? (
+              <span>{status}</span>
+            ) : (
+              <span className="platform-status-chip missing">Missing</span>
+            )}
           </small>
         </div>
       </div>
@@ -2262,16 +2348,18 @@ function PlatformArtifactCard({
           <span>{size}</span>
           <Hint text={detail} />
         </div>
-        <button
-          type="button"
-          className="icon-action-button platform-download"
-          disabled={disabled}
-          onClick={onDownload}
-          aria-label={`Download ${title}`}
-          title={disabled ? `${title} is not available to download` : `Download ${title}`}
-        >
-          <Download size={14} aria-hidden="true" />
-        </button>
+        {chipState == null && (
+          <button
+            type="button"
+            className="icon-action-button platform-download"
+            disabled={disabled}
+            onClick={onDownload}
+            aria-label={`Download ${title}`}
+            title={disabled ? `${title} is not available to download` : `Download ${title}`}
+          >
+            <Download size={14} aria-hidden="true" />
+          </button>
+        )}
       </div>
       {busy && <small className="platform-download-status">Preparing signed download...</small>}
     </article>
@@ -2385,7 +2473,7 @@ function RunDetail({ run, version }: { run: RegistryRun; version: RegistryVersio
   return (
     <div className="run-detail">
       <RunNote note={run.config.note} />
-      <RunMetricsPanel run={run} version={version} />
+      <RunMetricsPanel run={run} />
       <RunProgress run={run} />
       <RunLogs run={run} />
       <InfoSection
@@ -2394,6 +2482,7 @@ function RunDetail({ run, version }: { run: RegistryRun; version: RegistryVersio
         sourceWeights={run.config.sourceWeights}
         classes={run.config.classes}
         hyperParameters={run.config.hyperParameters}
+        exportOptions={run.config.exportOptions}
       />
     </div>
   );
@@ -2413,7 +2502,7 @@ function RunProgress({ run }: { run: RegistryRun }) {
   );
 }
 
-function RunMetricsPanel({ run, version }: { run: RegistryRun; version: RegistryVersion | null }) {
+function RunMetricsPanel({ run }: { run: RegistryRun }) {
   const f1Series = useMemo(() => deriveF1Series(run.metricsHistory), [run.metricsHistory]);
   const metricsHistory = useMemo(() => [...run.metricsHistory, ...f1Series], [run.metricsHistory, f1Series]);
   const summaryF1 = f1FromPrecisionRecall(run.metricsSummary.precision, run.metricsSummary.recall);
@@ -2438,7 +2527,7 @@ function RunMetricsPanel({ run, version }: { run: RegistryRun; version: Registry
   }
   return (
     <section className="run-metrics-panel" aria-label="Training metrics">
-      <SectionMiniHeading title="Training metrics" hint="Latest values and per-epoch trend from run_metrics. F1-score is derived from precision and recall. Inference time is sourced from the run's exported artifacts." />
+      <SectionMiniHeading title="Training metrics" hint="Latest values and per-epoch trend from run_metrics. F1-score is derived from precision and recall." />
       {visibleKeys.length > 0 ? (
         <>
           <div className="metrics-row compact-metrics-row">
@@ -2461,27 +2550,7 @@ function RunMetricsPanel({ run, version }: { run: RegistryRun; version: Registry
       ) : (
         <MetricEmptyState />
       )}
-      <RunInferenceTimeRow version={version} />
     </section>
-  );
-}
-
-function RunInferenceTimeRow({ version }: { version: RegistryVersion | null }) {
-  const cards = [
-    { label: "PyTorch latency", value: version?.pytorchInferenceMs, hint: "Inference time" },
-    { label: "TFLite latency", value: version?.tfliteInferenceMs, hint: "Inference time" },
-    { label: "CoreML latency", value: version?.coremlInferenceMs, hint: "Inference time" },
-  ];
-  return (
-    <div className="metrics-row run-inference-row" aria-label="Inference time">
-      {cards.map((card) => (
-        <article className="metric-card" key={card.label}>
-          <span>{card.label}</span>
-          <strong>{msMetric(card.value)}</strong>
-          <small>{typeof card.value === "number" ? card.hint : "pending export"}</small>
-        </article>
-      ))}
-    </div>
   );
 }
 
@@ -2518,7 +2587,7 @@ function MetricEmptyState() {
 function MetricTrendChart({ points, keys, onToggleMetric }: { points: MetricPoint[]; keys: MetricKey[]; onToggleMetric: (key: MetricKey) => void }) {
   const [hovered, setHovered] = useState<MetricPoint | null>(null);
   const [zoom, setZoom] = useState(1);
-  const [showPoints, setShowPoints] = useState(true);
+  const [showPoints, setShowPoints] = useState(false);
   const selected = points
     .filter((point) => keys.includes(point.key))
     .sort((a, b) => (a.epoch ?? a.step) - (b.epoch ?? b.step));
@@ -2620,7 +2689,7 @@ function MetricTrendChart({ points, keys, onToggleMetric }: { points: MetricPoin
             <small>{hovered.epoch ? `Epoch ${hovered.epoch}` : `Step ${hovered.step}`}</small>
           </>
         ) : (
-          <span>Hover or focus a point to inspect a metric value.</span>
+          <span>{showPoints ? "Hover or focus a point to inspect a metric value." : "Points hidden. Use Show points to inspect exact epoch values."}</span>
         )}
       </div>
       <div className="metric-chart-legend">
@@ -2652,7 +2721,6 @@ function RunLogs({ run }: { run: RegistryRun }) {
     <section className="run-logs" aria-label="Run logs">
       <header>
         <span className="run-logs-title">Run logs</span>
-        <span className="run-logs-count">{empty ? "0 lines" : `${lines.length} line${lines.length === 1 ? "" : "s"}`}</span>
       </header>
       <pre className={empty ? "empty" : undefined}>
         {empty ? "No logs reported yet." : lines.join("\n")}
@@ -2745,12 +2813,14 @@ function InfoSection({
   sourceWeights,
   classes,
   hyperParameters,
+  exportOptions,
 }: {
   dataset: string;
   datasetStats?: DatasetStats;
   sourceWeights: string;
   classes: string[];
   hyperParameters: TrainConfig["hyperParameters"];
+  exportOptions?: ExportOptions;
 }) {
   const hpEntries = Object.entries(hyperParameters);
   const resolvedStats = resolveDatasetStats(dataset, datasetStats);
@@ -2765,6 +2835,8 @@ function InfoSection({
           <dd className="mono">{sourceWeights || "—"}</dd>
           <dt>Image size</dt>
           <dd>{hyperParameters.imgsz} px</dd>
+          <dt>Quantization</dt>
+          <dd>{formatExportTargets(exportOptions)}</dd>
         </dl>
       </div>
       <div className="info-block">
@@ -2995,10 +3067,6 @@ function pct(value: number) {
 
 function pctMetric(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) ? pct(value) : "—";
-}
-
-function msMetric(value?: number | null): string {
-  return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(1)} ms` : "—";
 }
 
 const COLAB_NOTEBOOK_URL =

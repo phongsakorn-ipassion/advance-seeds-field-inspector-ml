@@ -74,6 +74,9 @@ async function applyEvent(event: CallbackEvent): Promise<void> {
   const metrics = normalizeMetricSummary(event.metrics);
   const semver = event.semver ?? inferSemver();
   const contentHash = event.content_hash ?? await sha256Hex(event.tflite_r2_key);
+  const exportOptions = readExportOptions(cfg.exportOptions ?? cfg.export_options);
+  const tfliteQuantization = quantizationMetadata("tflite", exportOptions.android.quantize);
+  const coremlQuantization = quantizationMetadata("coreml", exportOptions.ios.quantize);
   const metadata = {
     dataset: cfg.dataset ?? "",
     source_weights: cfg.source_weights ?? "",
@@ -83,11 +86,29 @@ async function applyEvent(event: CallbackEvent): Promise<void> {
     output_kind: "segmentation-mask",
     task: "segmentation",
     metrics,
+    export_options: exportOptions,
+    mobile_exports: {
+      android: {
+        artifact_kind: "tflite",
+        format: "tf_lite",
+        quantize: exportOptions.android.quantize,
+        precision: tfliteQuantization.precision,
+        quantization: tfliteQuantization,
+      },
+      ios: {
+        artifact_kind: "coreml",
+        format: "core_ml",
+        quantize: exportOptions.ios.quantize,
+        precision: coremlQuantization.precision,
+        quantization: coremlQuantization,
+      },
+    },
     artifacts: {
       tflite: {
         r2_key: event.tflite_r2_key,
         size_bytes: event.size_bytes,
         content_hash: contentHash,
+        quantization: tfliteQuantization,
       },
       ...(event.pytorch_r2_key
         ? {
@@ -105,6 +126,7 @@ async function applyEvent(event: CallbackEvent): Promise<void> {
             r2_key: event.mlmodel_r2_key,
             size_bytes: event.mlmodel_size_bytes,
             content_hash: event.mlmodel_content_hash,
+            quantization: coremlQuantization,
             packaging: "mlpackage.zip",
           },
         }
@@ -144,6 +166,33 @@ async function appendLogs(runId: string, lines: string[]): Promise<void> {
   const nextConfig = appendTrimmedLogs(run.config_yaml, lines);
   const { error } = await sb.from("runs").update({ config_yaml: nextConfig }).eq("id", runId);
   if (error) throw error;
+}
+
+function readExportOptions(value: unknown): { ios: { quantize: boolean }; android: { quantize: boolean } } {
+  const defaults = { ios: { quantize: true }, android: { quantize: true } };
+  if (!value || typeof value !== "object") return defaults;
+  const raw = value as Record<string, unknown>;
+  return {
+    ios: { quantize: readQuantize(raw.ios, true) },
+    android: { quantize: readQuantize(raw.android, true) },
+  };
+}
+
+function readQuantize(value: unknown, fallback: boolean): boolean {
+  if (!value || typeof value !== "object") return fallback;
+  const quantize = (value as Record<string, unknown>).quantize;
+  return typeof quantize === "boolean" ? quantize : fallback;
+}
+
+function quantizationMetadata(kind: "tflite" | "coreml", quantize: boolean): Record<string, unknown> {
+  if (kind === "tflite") {
+    return quantize
+      ? { precision: "int8", method: "post_training_static", calibration: "representative_dataset" }
+      : { precision: "fp32", method: "none", target: "tflite" };
+  }
+  return quantize
+    ? { precision: "fp16", method: "post_training_weight_quantization", target: "coreml" }
+    : { precision: "fp32", method: "none", target: "coreml" };
 }
 
 function inferSemver(): string {

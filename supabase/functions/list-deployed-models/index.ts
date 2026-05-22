@@ -1,4 +1,5 @@
 import { corsHeaders } from "../_shared/cors.ts";
+import { artifactDetailForPlatform } from "../_shared/model-metadata.ts";
 import { presignGet } from "../_shared/r2.ts";
 import { serviceClient } from "../_shared/supabase.ts";
 
@@ -36,8 +37,20 @@ Deno.serve(async (req) => {
     const version = Array.isArray(deployment.versions) ? deployment.versions[0] : deployment.versions;
     if (!version) continue;
     const key = platform === "ios" ? version.mlmodel_r2_key : version.tflite_r2_key;
-    if (!key) {
-      if (!readyOnly) {
+    const artifactMeta = platform === "ios"
+      ? version.metadata?.artifacts?.coreml
+      : version.metadata?.artifacts?.tflite;
+    const artifact = artifactDetailForPlatform(
+      version.metadata,
+      platform,
+      key,
+      platform === "ios" ? artifactMeta?.size_bytes ?? null : version.size_bytes,
+      platform === "ios" ? artifactMeta?.content_hash ?? null : version.content_hash,
+    );
+    const precision = artifact.precision;
+    const isFailed = precision === "failed";
+    if (!includeArtifact(key, precision)) {
+      if (!readyOnly && !isFailed) {
         models.push({
           deployment_id: deployment.id,
           version_id: version.id,
@@ -45,6 +58,7 @@ Deno.serve(async (req) => {
           platform,
           is_default: deployment.is_default,
           status: "artifact_missing",
+          artifact,
           metadata: version.metadata,
         });
       }
@@ -60,12 +74,11 @@ Deno.serve(async (req) => {
       artifact_kind: platform === "ios" ? "coreml" : "tflite",
       artifact_url: await presignGet(key, 3600),
       r2_key: key,
-      content_hash: platform === "ios"
-        ? version.metadata?.artifacts?.coreml?.content_hash ?? null
-        : version.content_hash,
-      size_bytes: platform === "ios"
-        ? version.metadata?.artifacts?.coreml?.size_bytes ?? null
-        : version.size_bytes,
+      precision: artifact.precision,
+      quantization: artifact.quantization,
+      artifact,
+      content_hash: artifact.content_hash,
+      size_bytes: artifact.size_bytes,
       compat_signature: version.compat_signature,
       metadata: version.metadata,
     });
@@ -73,6 +86,12 @@ Deno.serve(async (req) => {
 
   return json({ model_line: modelLine, channel, platform, models });
 });
+
+function includeArtifact(r2Key: string | null | undefined, precision: string | null | undefined): boolean {
+  if (!r2Key) return false;
+  if (precision === "failed") return false;
+  return true;
+}
 
 function json(b: unknown, status = 200): Response {
   return new Response(JSON.stringify(b), {

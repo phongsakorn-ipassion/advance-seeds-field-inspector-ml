@@ -46,42 +46,78 @@ def _quant_fraction(env: dict[str, str]) -> float:
     return min(1.0, max(0.01, fraction))
 
 
-def export_kwargs(kind: str, config: dict, env: dict[str, str] | None = None) -> dict:
+DEFAULT_EXPORT_OPTIONS = {
+    "ios":     {"quantize": True},
+    "android": {"quantize": True},
+}
+
+
+def load_export_options(run_config: dict) -> dict:
+    """Return {ios:{quantize}, android:{quantize}}.
+
+    Falls back to DEFAULT_EXPORT_OPTIONS for legacy runs or malformed input.
+    """
+    raw = (
+        run_config.get("exportOptions")
+        or run_config.get("export_options")
+    ) if isinstance(run_config, dict) else None
+    if not isinstance(raw, dict):
+        return {k: dict(v) for k, v in DEFAULT_EXPORT_OPTIONS.items()}
+    result = {k: dict(v) for k, v in DEFAULT_EXPORT_OPTIONS.items()}
+    for platform_key in ("ios", "android"):
+        entry = raw.get(platform_key)
+        if isinstance(entry, dict) and isinstance(entry.get("quantize"), bool):
+            result[platform_key]["quantize"] = entry["quantize"]
+    return result
+
+
+def export_kwargs(kind: str, config: dict, quantize: bool) -> dict:
     """Return Ultralytics export kwargs for mobile artifacts.
 
-    Android uses calibrated INT8 TFLite because TF Lite has mature post-training
-    integer quantization. iOS uses FP16 Core ML by default for broader Core ML /
-    ANE compatibility; Core ML INT8 can be enabled explicitly for device tests.
+    When quantize=True:
+      - TFLite: INT8 with calibration dataset
+      - Core ML: FP16 half-precision weights
+    When quantize=False, both formats export at full FP32 precision.
     """
-    source = os.environ if env is None else env
     imgsz = int(config.get("imgsz", 640))
-    data = str(config.get("data", ""))
-    fraction = _quant_fraction(source)
     if kind == "tflite":
-        return {
-            "format": "tflite",
-            "int8": True,
-            "data": data,
-            "imgsz": imgsz,
-            "batch": 1,
-            "fraction": fraction,
-        }
-    if kind == "coreml" and _env_bool(source, "ADVANCE_SEEDS_COREML_INT8"):
-        return {
-            "format": "coreml",
-            "int8": True,
-            "data": data,
-            "imgsz": imgsz,
-            "batch": 1,
-            "fraction": fraction,
-        }
+        if quantize:
+            return {
+                "format": "tflite",
+                "int8": True,
+                "data": str(config.get("data", "")),
+                "imgsz": imgsz,
+                "batch": 1,
+                "fraction": _quant_fraction(os.environ),
+            }
+        return {"format": "tflite", "imgsz": imgsz}
     if kind == "coreml":
-        return {
-            "format": "coreml",
-            "half": True,
-            "imgsz": imgsz,
-        }
+        if quantize:
+            return {"format": "coreml", "half": True, "imgsz": imgsz}
+        return {"format": "coreml", "imgsz": imgsz}
     raise ValueError(f"unsupported export kind: {kind}")
+
+
+def export_plan_summary(export_options: dict) -> str:
+    android = "INT8 quantized" if export_options["android"]["quantize"] else "FP32 no quantization"
+    ios = "FP16 quantized" if export_options["ios"]["quantize"] else "FP32 no quantization"
+    return f"Android TF Lite: {android}; iOS Core ML: {ios}"
+
+
+def build_structured_log_entry(
+    *,
+    step: int | None,
+    phase: str | None,
+    status: str,
+    message: str,
+) -> dict:
+    return {
+        "ts": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "step": step,
+        "phase": phase,
+        "status": status,
+        "message": message,
+    }
 
 
 def quantization_metadata(kind: str, kwargs: dict) -> dict:
@@ -104,11 +140,37 @@ def quantization_metadata(kind: str, kwargs: dict) -> dict:
 
 
 def artifact_metadata(*, kind: str, artifact, quantization: dict) -> dict:
+    if artifact is None:
+        return {
+            "r2_key": None,
+            "size_bytes": None,
+            "content_hash": None,
+            "quantization": quantization,
+        }
     return {
         "r2_key": artifact.r2_key,
         "size_bytes": artifact.size_bytes,
         "content_hash": artifact.content_hash,
         "quantization": quantization,
+    }
+
+
+def platform_export_metadata(export_options: dict, tflite_quantization: dict, coreml_quantization: dict) -> dict:
+    return {
+        "android": {
+            "artifact_kind": "tflite",
+            "format": "tf_lite",
+            "quantize": bool(export_options.get("android", {}).get("quantize", True)),
+            "precision": tflite_quantization.get("precision"),
+            "quantization": tflite_quantization,
+        },
+        "ios": {
+            "artifact_kind": "coreml",
+            "format": "core_ml",
+            "quantize": bool(export_options.get("ios", {}).get("quantize", True)),
+            "precision": coreml_quantization.get("precision"),
+            "quantization": coreml_quantization,
+        },
     }
 
 
@@ -183,14 +245,18 @@ def build_version_metadata(
     git_sha: str | None,
 ) -> dict:
     metrics_dict = getattr(results, "results_dict", {}) or {}
+    run_config = run_row.get("config_yaml", {}) if isinstance(run_row, dict) else {}
+    export_options = load_export_options(run_config)
     metadata = {
-        "dataset": run_row.get("config_yaml", {}).get("dataset"),
-        "source_weights": run_row.get("config_yaml", {}).get("source_weights"),
-        "class_names": run_row.get("config_yaml", {}).get("classes", []),
+        "dataset": run_config.get("dataset"),
+        "source_weights": run_config.get("source_weights"),
+        "class_names": run_config.get("classes", []),
         "input_size": int(config.get("imgsz", 640)),
         "output_kind": "segmentation-mask",
         "task": "segmentation",
-        "hyperparameters": run_row.get("config_yaml", {}).get("hyperparameters", {}),
+        "hyperparameters": run_config.get("hyperparameters", {}),
+        "export_options": export_options,
+        "mobile_exports": platform_export_metadata(export_options, tflite_quantization, coreml_quantization),
         "metrics": normalize_metric_summary(metrics_dict),
         "artifacts": {
             "pytorch": artifact_metadata(
@@ -459,6 +525,7 @@ def main(argv: list[str] | None = None) -> int:
 
     run_row = fetch_run(client, args.run_id)
     config = build_training_config(run_row, repo_root, client)
+    export_options = load_export_options(run_row.get("config_yaml") or {})
 
     print("Resolved training config:")
     print(json.dumps(config, indent=2, default=str))
@@ -477,27 +544,34 @@ def main(argv: list[str] | None = None) -> int:
 
     total_epochs = max(1, int(config.get("epochs", 1)))
 
-    model = YOLO(config["model"])
-
-    def append_log(line: str) -> None:
-        """Append one line to runs.config_yaml.logs so the dashboard's RUN LOGS
-        panel updates in near-real-time. Read-modify-write on the JSONB column;
-        fine at PoC scale, swap for an append-only run_logs table later."""
+    def append_log_entry(entry: dict | str) -> None:
+        """Append one entry (structured dict or legacy string) to runs.config_yaml.logs."""
         try:
             rows = client._json("GET", f"/rest/v1/runs?id=eq.{args.run_id}&select=config_yaml", None)
             if not rows:
                 return
             cfg = rows[0].get("config_yaml") or {}
             logs = list(cfg.get("logs") or [])
-            logs.append(line)
+            logs.append(entry)
             cfg["logs"] = logs
             client._json("PATCH", f"/rest/v1/runs?id=eq.{args.run_id}", {"config_yaml": cfg})
         except Exception as exc:
-            print(f"[logs] append_log failed: {exc}", file=sys.stderr)
+            print(f"[logs] append_log_entry failed: {exc}", file=sys.stderr)
+
+    def log_step(step: int | None, phase: str | None, status: str, message: str) -> None:
+        append_log_entry(build_structured_log_entry(step=step, phase=phase, status=status, message=message))
+
+    def append_log(line: str) -> None:  # kept so existing free-text calls still work
+        append_log_entry(build_structured_log_entry(step=None, phase=None, status="info", message=line))
 
     def finalize_run(status: str) -> None:
         cleanup_dataset_bundle(client, args.run_id, append_log)
         client.finalize_run(args.run_id, status)
+
+    log_step(5, "dataset-ready", "ok",
+             f"Dataset ready · data={config.get('data')} epochs={total_epochs}")
+
+    model = YOLO(config["model"])
 
     def on_fit_epoch_end(trainer):  # type: ignore[no-untyped-def]
         epoch = int(getattr(trainer, "epoch", 0)) + 1
@@ -521,14 +595,15 @@ def main(argv: list[str] | None = None) -> int:
         bits = [f"Epoch {epoch}/{total_epochs}", f"progress={progress}%"]
         if map50 is not None: bits.append(f"mAP50={map50:.3f}")
         if mask is not None: bits.append(f"mask_mAP={mask:.3f}")
-        append_log(" | ".join(bits))
+        log_step(5, "training", "info", " | ".join(bits))
 
     model.add_callback("on_fit_epoch_end", on_fit_epoch_end)
 
     gpu = config.get("hardware", {}).get("gpu_name") or "unknown GPU"
-    append_log(f"Training started on {gpu}, target epochs={total_epochs}")
+    log_step(5, "model-init", "ok", f"Training started on {gpu}, target epochs={total_epochs}")
+    log_step(5, "model-init", "info", f"Export options resolved — {export_plan_summary(export_options)}")
     if git_sha:
-        append_log(f"Training script git={git_sha}")
+        log_step(5, "model-init", "info", f"Training script git={git_sha}")
 
     try:
         results = model.train(**train_kwargs(config))
@@ -537,7 +612,7 @@ def main(argv: list[str] | None = None) -> int:
         finalize_run("failed")
         raise
 
-    append_log("Training finished — exporting quantized mobile artifacts")
+    log_step(5, "training", "ok", "Training finished — beginning exports")
 
     save_dir = Path(getattr(results, "save_dir", config.get("project", "runs")))
     try:
@@ -548,39 +623,47 @@ def main(argv: list[str] | None = None) -> int:
         raise
     print("Local QA PyTorch weights:", best)
 
-    tflite_path: Path
-    tflite_export_kwargs = export_kwargs("tflite", config)
+    tflite_path: Path | None = None
+    tflite_artifact = None
+    android_quantize = export_options["android"]["quantize"]
+    tflite_export_kwargs = export_kwargs("tflite", config, android_quantize)
     tflite_quantization = quantization_metadata("tflite", tflite_export_kwargs)
+    precision_label = tflite_quantization["precision"].upper()
+    log_step(5, "export", "started",
+             f"TFLite {precision_label} export starting"
+             + (f" (fraction={tflite_export_kwargs.get('fraction')})" if android_quantize else " (no quantization)"))
     try:
-        append_log(
-            "Exporting Android TF Lite with INT8 calibration "
-            f"(fraction={tflite_export_kwargs.get('fraction')}, data={tflite_export_kwargs.get('data')})"
-        )
         export_path = model.export(**tflite_export_kwargs)
         export_path = export_path[0] if isinstance(export_path, (list, tuple)) else export_path
-        tflite_path = Path(export_path) if export_path else best
+        tflite_path = Path(export_path) if export_path else None
+        if not tflite_path or not tflite_path.exists():
+            raise FileNotFoundError("TFLite export returned no artifact")
+        log_step(5, "export", "ok", f"TFLite export done · {tflite_path.name}")
     except Exception as exc:
-        append_log(f"TF Lite export failed: {exc}")
-        finalize_run("failed")
-        raise
+        tflite_quantization = {"precision": "failed", "method": "none", "target": "tflite"}
+        tflite_path = None
+        log_step(5, "export", "error", f"TFLite export failed: {exc}")
 
     coreml_path: Path | None = None
-    coreml_export_kwargs = export_kwargs("coreml", config)
+    coreml_artifact = None
+    ios_quantize = export_options["ios"]["quantize"]
+    coreml_export_kwargs = export_kwargs("coreml", config, ios_quantize)
     coreml_quantization = quantization_metadata("coreml", coreml_export_kwargs)
+    precision_label = coreml_quantization["precision"].upper()
+    log_step(5, "export", "started",
+             f"Core ML {precision_label} export starting"
+             + ("" if ios_quantize else " (no quantization)"))
     try:
-        append_log(
-            "Exporting iOS Core ML with "
-            f"{coreml_quantization.get('precision', 'fp32').upper()} optimization"
-        )
         export_path = model.export(**coreml_export_kwargs)
         export_path = export_path[0] if isinstance(export_path, (list, tuple)) else export_path
         coreml_path = Path(export_path) if export_path else None
         if not coreml_path or not coreml_path.exists():
             raise FileNotFoundError("Core ML export returned no artifact")
+        log_step(5, "export", "ok", f"Core ML export done · {coreml_path.name}")
     except Exception as exc:
-        append_log(f"Core ML export failed: {exc}")
-        finalize_run("failed")
-        raise
+        coreml_quantization = {"precision": "failed", "method": "none", "target": "coreml"}
+        coreml_path = None
+        log_step(5, "export", "error", f"Core ML export failed: {exc}")
 
     semver = f"1.0.0-{args.run_id[:8]}"
     append_log(f"Preserving original PyTorch weights for local segmentation QA: {best.name}")
@@ -596,20 +679,24 @@ def main(argv: list[str] | None = None) -> int:
         finalize_run("failed")
         raise ValueError(f"Local QA PyTorch upload returned an invalid key: {pytorch_artifact.r2_key}")
     append_log(f"Uploaded Local QA PyTorch artifact: {pytorch_artifact.r2_key}")
-    tflite_artifact = client.upload_artifact(
-        tflite_path,
-        kind="tflite",
-        run_id=args.run_id,
-        semver=semver,
-    )
-    coreml_artifact = client.upload_artifact(
-        coreml_path,
-        kind="coreml",
-        run_id=args.run_id,
-        semver=semver,
-        content_type="application/zip" if coreml_path.is_dir() else None,
-    )
 
+    log_step(5, "upload", "started", "Uploading produced artifacts to R2")
+
+    if tflite_path is not None:
+        tflite_artifact = client.upload_artifact(
+            tflite_path, kind="tflite", run_id=args.run_id, semver=semver,
+        )
+
+    if coreml_path is not None:
+        coreml_artifact = client.upload_artifact(
+            coreml_path, kind="coreml", run_id=args.run_id, semver=semver,
+            content_type="application/zip" if coreml_path.is_dir() else None,
+        )
+
+    uploaded_count = sum(1 for a in [pytorch_artifact, tflite_artifact, coreml_artifact] if a is not None)
+    log_step(5, "upload", "ok", f"Uploaded {uploaded_count} artifacts")
+
+    # build_version_metadata must accept None artifacts — handled in Task 5.
     metadata = build_version_metadata(
         run_row=run_row,
         config=config,
@@ -634,15 +721,21 @@ def main(argv: list[str] | None = None) -> int:
         model_line_id=run_row["model_line_id"],
         semver=semver,
         metadata=metadata,
-        tflite_r2_key=tflite_artifact.r2_key,
-        mlmodel_r2_key=coreml_artifact.r2_key,
+        tflite_r2_key=tflite_artifact.r2_key if tflite_artifact else None,
+        mlmodel_r2_key=coreml_artifact.r2_key if coreml_artifact else None,
         pytorch_r2_key=pytorch_artifact.r2_key,
-        size_bytes=tflite_artifact.size_bytes,
-        content_hash=tflite_artifact.content_hash,
+        size_bytes=(tflite_artifact.size_bytes if tflite_artifact
+                    else coreml_artifact.size_bytes if coreml_artifact
+                    else pytorch_artifact.size_bytes),
+        content_hash=(tflite_artifact.content_hash if tflite_artifact
+                      else coreml_artifact.content_hash if coreml_artifact
+                      else pytorch_artifact.content_hash),
     )
 
+    log_step(6, None, "ok",
+             f"Version {semver} created · "
+             f"tflite={tflite_quantization['precision']} coreml={coreml_quantization['precision']}")
     finalize_run("succeeded")
-    append_log("Run finalized with Android TF Lite, iOS Core ML, and Local QA PyTorch artifacts")
     print("Run finalized — switch back to the dashboard.")
     return 0
 

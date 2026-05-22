@@ -683,6 +683,8 @@ button {
 }
 .platform-status-chip.ready { background: color-mix(in srgb, var(--platform-tone, var(--as-brand)) 14%, var(--as-bg-primary)); color: var(--as-brand-deep); }
 .platform-status-chip.missing { background: var(--as-danger-bg); color: var(--as-danger-text); }
+.platform-status-chip.failed { background: var(--as-warning-bg); color: var(--as-warning-text); }
+.platform-card.failed { --platform-border: color-mix(in srgb, var(--as-warning-text) 24%, var(--as-border-tertiary)); background: linear-gradient(180deg, var(--as-warning-bg) 0%, var(--as-bg-primary) 78%); }
 .platform-card-top,
 .platform-card-title,
 .platform-card-package,
@@ -833,7 +835,6 @@ button {
 .deployment-swagger-heading strong { font-size: 13px; }
 .deployment-swagger-heading span { font-size: 12px; opacity: 0.75; }
 .deployment-swagger-open { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.run-inference-row { margin-top: 12px; }
 
 .deployment-list-compact {
   list-style: none;
@@ -1536,6 +1537,13 @@ button {
   align-items: center;
   gap: 6px;
 }
+.train-form .checkbox-group-field .label-text {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 500;
+  color: var(--as-text-secondary);
+}
 .train-form input,
 .train-form textarea,
 .train-form select,
@@ -1566,6 +1574,58 @@ button {
 }
 .train-form input::placeholder,
 .manual-login input::placeholder { color: var(--as-text-tertiary); }
+
+/* Checkbox group field (e.g. Quantization) */
+.train-form .checkbox-group-field {
+  display: grid;
+  gap: 6px;
+}
+.train-form .checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.train-form .checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: var(--as-space-sm);
+  font-size: 14px;
+  color: var(--as-text-primary);
+  cursor: pointer;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.train-form .checkbox-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--as-brand, currentColor);
+  flex-shrink: 0;
+  margin: 0;
+}
+.train-form .checkbox-row input[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--as-brand-soft);
+}
+.quantization-option-label {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.quantization-option-title {
+  color: var(--as-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+.quantization-option-meta {
+  color: var(--as-text-secondary);
+  font-family: var(--as-font-mono);
+  font-size: 12px;
+  font-weight: 500;
+}
 
 /* Tag input */
 .tag-input {
@@ -1670,111 +1730,69 @@ button {
 }
 .dataset-dna {
   display: grid;
-  gap: 9px;
-  margin-top: 8px;
-  padding: 10px;
-  border: 1px solid color-mix(in srgb, var(--as-brand) 22%, var(--as-border-tertiary));
-  border-radius: var(--as-radius-lg);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--as-brand-soft) 34%, var(--as-bg-primary)) 0%, var(--as-bg-primary) 68%);
-  overflow: visible;
+  gap: var(--as-space-sm);
+  margin-top: var(--as-space-md);
 }
 .dataset-dna-head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: var(--as-space-sm);
   padding: 0;
-}
-.dataset-dna-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   min-width: 0;
 }
-.dataset-dna-eyebrow {
+.dataset-dna-title {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--as-brand-deep);
-  font-weight: 700;
+  color: var(--as-text-secondary);
+  font-weight: 500;
 }
 .dataset-dna-total {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   min-width: 0;
-  min-height: 26px;
-  padding: 2px 8px;
-  border: 1px solid color-mix(in srgb, var(--as-brand) 22%, var(--as-border-tertiary));
-  border-radius: var(--as-radius-full);
-  background: var(--as-bg-primary);
+  color: var(--as-text-tertiary);
 }
 .dataset-dna-total strong {
-  color: var(--as-brand-deep);
-  font-size: 14px;
+  color: var(--as-text-primary);
+  font-family: var(--as-font-mono);
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.1;
 }
 .dataset-dna.pending-scan .dataset-dna-total strong {
   font-size: 12px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
 }
 .dataset-dna-total span {
-  color: var(--as-text-secondary);
-  font-size: 11px;
-  font-weight: 600;
+  color: var(--as-text-tertiary);
+  font-size: 12px;
+  font-weight: 400;
 }
 .dataset-dna-body {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 8px;
+  gap: var(--as-space-sm);
 }
-.dataset-dna-progress {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  height: 6px;
-  overflow: hidden;
-  border-radius: var(--as-radius-full);
-  background: color-mix(in srgb, var(--as-brand-soft) 42%, var(--as-bg-secondary));
-}
-.dataset-dna-node {
-  display: block;
-  flex: 1 1 0;
-  min-width: 8px;
-  height: 100%;
-  border-radius: 0;
-  opacity: 0.9;
-}
-.dataset-dna.pending-scan .dataset-dna-node {
-  opacity: 0.45;
-}
-.dataset-dna-node.seg-training { background: var(--as-brand); }
-.dataset-dna-node.seg-validation { background: #6BB89A; }
-.dataset-dna-node.seg-testing { background: color-mix(in srgb, var(--as-brand) 68%, #B27619); }
 .dataset-dna-splits,
 .dataset-images-legend {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  gap: var(--as-space-sm);
   border: 0;
 }
 .dataset-dna-card,
 .dataset-images-legend-card {
   display: grid;
-  align-content: center;
-  gap: 5px;
+  gap: var(--as-space-xs);
   min-width: 0;
-  min-height: 74px;
-  padding: 9px 10px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid color-mix(in srgb, var(--as-brand) 14%, var(--as-border-tertiary));
+  min-height: 86px;
+  padding: var(--as-space-md);
+  background: var(--as-bg-primary);
+  border: 1px solid var(--as-border-tertiary);
   border-radius: var(--as-radius-md);
 }
 .dataset-images-legend-name {
@@ -1787,28 +1805,29 @@ button {
 .dataset-dna-card-label {
   color: var(--as-text-secondary);
   font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 .dataset-dna-card-metric {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--as-space-sm);
+  display: grid;
+  gap: 2px;
   min-width: 0;
 }
 .dataset-dna-card strong,
 .dataset-images-legend-card strong {
   color: var(--as-text-primary);
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 600;
   white-space: nowrap;
 }
 .dataset-dna-card small,
 .dataset-images-legend-card small {
-  font-size: 10px;
-  color: var(--as-brand-deep);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: 12px;
+  color: var(--as-text-tertiary);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 /* Info hint */
@@ -2926,11 +2945,6 @@ a.primary-button { text-decoration: none; }
   color: var(--as-text-secondary);
   font-weight: 500;
 }
-.run-logs-count {
-  font-size: 11px;
-  color: var(--as-text-tertiary);
-  font-family: var(--as-font-mono);
-}
 .run-logs pre {
   margin: 0;
   padding: var(--as-space-md);
@@ -3393,7 +3407,6 @@ a.primary-button { text-decoration: none; }
   .deployment-consume-strip { grid-template-columns: 1fr; }
   .dataset-dna { grid-template-columns: 1fr; }
   .dataset-dna-body { grid-template-columns: 1fr; }
-  .dataset-dna-progress { height: 6px; }
   .dataset-dna-splits,
   .dataset-images-legend { grid-template-columns: 1fr; }
   .dataset-dna-head { align-items: flex-start; flex-direction: column; }

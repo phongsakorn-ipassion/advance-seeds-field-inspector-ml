@@ -25,6 +25,29 @@ export type MetricPoint = {
 
 export type MetricSummary = Partial<Record<MetricKey, number>>;
 
+export type PlatformPrecision = "int8" | "fp16" | "fp32" | "failed";
+
+export type ExportTarget = { quantize: boolean };
+
+export type ExportOptions = {
+  ios: ExportTarget;     // default { quantize: true }
+  android: ExportTarget; // default { quantize: true }
+};
+
+export type RunLogStep = 1 | 2 | 3 | 4 | 5 | 6;
+export type RunLogPhase = "dataset-ready" | "model-init" | "training" | "export" | "upload" | null;
+export type RunLogStatus = "started" | "ok" | "error" | "info";
+
+export type StructuredRunLogEntry = {
+  ts: string;
+  step: RunLogStep | null;
+  phase: RunLogPhase;
+  status: RunLogStatus;
+  message: string;
+};
+
+export type RunLogEntry = string | StructuredRunLogEntry;
+
 export type HyperParameters = {
   epochs: number;
   imgsz: number;
@@ -46,6 +69,7 @@ export type TrainConfig = {
   classes: string[];
   hyperParameters: HyperParameters;
   note?: string;
+  exportOptions?: ExportOptions;
 };
 
 export type DatasetStats = {
@@ -90,7 +114,7 @@ export type RegistryRun = {
   metricsHistory: MetricPoint[];
   config: TrainConfig;
   colabNotebook: string;
-  logs: string[];
+  logs: RunLogEntry[];
 };
 
 export type RegistryVersion = {
@@ -109,15 +133,15 @@ export type RegistryVersion = {
   sizeMb: number;
   contentHash: string;
   tfliteR2Key: string;
-  tflitePrecision?: string | null;
+  tflitePrecision?: PlatformPrecision | null;
   coremlR2Key?: string | null;
   coremlSizeMb?: number | null;
   coremlContentHash?: string | null;
-  coremlPrecision?: string | null;
+  coremlPrecision?: PlatformPrecision | null;
   pytorchR2Key?: string | null;
   pytorchSizeMb?: number | null;
   pytorchContentHash?: string | null;
-  pytorchPrecision?: string | null;
+  pytorchPrecision?: PlatformPrecision | null;
   pytorchInferenceMs?: number | null;
   tfliteInferenceMs?: number | null;
   coremlInferenceMs?: number | null;

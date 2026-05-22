@@ -94,4 +94,16 @@ describe("buildOpenApiSpec", () => {
     expect(spec.components.securitySchemes.bearer.scheme).toBe("bearer");
     expect(spec.security).toEqual([{ apikey: [], bearer: [] }]);
   });
+
+  it("documents exposed model metadata and artifact precision details", () => {
+    const spec = buildOpenApiSpec(makeVersion({ tflitePrecision: "fp32", coremlPrecision: "fp32" }), [deployment("staging")], {
+      serverUrl: "x",
+      modelLineSlug: "seeds-poc",
+    }) as any;
+    const example = spec.paths["/resolve-channel"].get.responses["200"].content["application/json"].example;
+    expect(example.artifact.precision).toBe("fp32");
+    expect(example.artifact.quantized).toBe(false);
+    expect(example.metadata.export_options.android.quantize).toBe(false);
+    expect(example.metadata.mobile_exports.android.precision).toBe("fp32");
+  });
 });
