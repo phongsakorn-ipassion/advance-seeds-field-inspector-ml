@@ -71,7 +71,14 @@ def copy_artifact(source: Path, destination: Path) -> Path:
     return destination
 
 
-def export_model(candidate: ExportCandidate, output_root: Path, imgsz: int) -> dict[str, Any]:
+def export_model(
+    candidate: ExportCandidate,
+    output_root: Path,
+    imgsz: int,
+    max_det: int = 300,
+    iou: float = 0.7,
+    conf: float = 0.25,
+) -> dict[str, Any]:
     from ultralytics import YOLO
 
     model = YOLO(str(candidate.weights))
@@ -102,9 +109,11 @@ def export_model(candidate: ExportCandidate, output_root: Path, imgsz: int) -> d
                 "size_bytes": file_size(destination),
             }
             continue
+        common_nms: dict[str, Any] = {"nms": True, "max_det": max_det, "iou": iou, "conf": conf}
         export_args: dict[str, Any] = {
             "imgsz": imgsz,
             "optimize": False,
+            **common_nms,
         }
         if fmt == "tflite" and candidate.quantized:
             export_args["half"] = True
@@ -168,7 +177,17 @@ def main() -> int:
     parser.add_argument("--output-root", type=Path, default=Path("runs/mobile-exports"))
     parser.add_argument("--imgsz", type=int, default=640)
     parser.add_argument("--only", nargs="*", choices=["v4", "v4-quantized"])
+    parser.add_argument("--max-det", type=int, default=300, help="Ultralytics NMS max_det (1-300)")
+    parser.add_argument("--iou", type=float, default=0.7, help="Ultralytics NMS IoU threshold (0-1)")
+    parser.add_argument("--conf", type=float, default=0.25, help="Ultralytics NMS conf threshold (0-1)")
     args = parser.parse_args()
+
+    if not (1 <= args.max_det <= 300):
+        parser.error("--max-det must be in [1, 300]")
+    if not (0.0 <= args.iou <= 1.0):
+        parser.error("--iou must be in [0, 1]")
+    if not (0.0 <= args.conf <= 1.0):
+        parser.error("--conf must be in [0, 1]")
 
     candidates = [
         ExportCandidate(
@@ -197,7 +216,7 @@ def main() -> int:
     manifests = []
     for candidate in candidates:
         print(f"Exporting {candidate.key}...")
-        manifests.append(export_model(candidate, args.output_root, args.imgsz))
+        manifests.append(export_model(candidate, args.output_root, args.imgsz, max_det=args.max_det, iou=args.iou, conf=args.conf))
     print(write_index(args.output_root, manifests))
     return 0
 
