@@ -46,14 +46,44 @@ def _quant_fraction(env: dict[str, str]) -> float:
     return min(1.0, max(0.01, fraction))
 
 
+DEFAULT_EXPORT_NMS = {"maxDet": 300, "iouThreshold": 0.7, "confThreshold": 0.25}
 DEFAULT_EXPORT_OPTIONS = {
-    "ios":     {"quantize": True},
-    "android": {"quantize": True},
+    "ios":     {"quantize": True, "nms": dict(DEFAULT_EXPORT_NMS)},
+    "android": {"quantize": True, "nms": dict(DEFAULT_EXPORT_NMS)},
 }
 
 
+def _clamp(value, lo, hi):
+    return max(lo, min(hi, value))
+
+
+def _resolve_nms(raw):
+    if not isinstance(raw, dict):
+        return dict(DEFAULT_EXPORT_NMS)
+    max_det = raw.get("maxDet", DEFAULT_EXPORT_NMS["maxDet"])
+    iou = raw.get("iouThreshold", DEFAULT_EXPORT_NMS["iouThreshold"])
+    conf = raw.get("confThreshold", DEFAULT_EXPORT_NMS["confThreshold"])
+    try:
+        max_det = int(round(float(max_det)))
+    except (TypeError, ValueError):
+        max_det = DEFAULT_EXPORT_NMS["maxDet"]
+    try:
+        iou = float(iou)
+    except (TypeError, ValueError):
+        iou = DEFAULT_EXPORT_NMS["iouThreshold"]
+    try:
+        conf = float(conf)
+    except (TypeError, ValueError):
+        conf = DEFAULT_EXPORT_NMS["confThreshold"]
+    return {
+        "maxDet": int(_clamp(max_det, 1, 300)),
+        "iouThreshold": float(_clamp(iou, 0.0, 1.0)),
+        "confThreshold": float(_clamp(conf, 0.0, 1.0)),
+    }
+
+
 def load_export_options(run_config: dict) -> dict:
-    """Return {ios:{quantize}, android:{quantize}}.
+    """Return {ios:{quantize, nms}, android:{quantize, nms}}.
 
     Falls back to DEFAULT_EXPORT_OPTIONS for legacy runs or malformed input.
     """
@@ -61,25 +91,30 @@ def load_export_options(run_config: dict) -> dict:
         run_config.get("exportOptions")
         or run_config.get("export_options")
     ) if isinstance(run_config, dict) else None
+    result = {k: {"quantize": v["quantize"], "nms": dict(v["nms"])} for k, v in DEFAULT_EXPORT_OPTIONS.items()}
     if not isinstance(raw, dict):
-        return {k: dict(v) for k, v in DEFAULT_EXPORT_OPTIONS.items()}
-    result = {k: dict(v) for k, v in DEFAULT_EXPORT_OPTIONS.items()}
+        return result
     for platform_key in ("ios", "android"):
         entry = raw.get(platform_key)
-        if isinstance(entry, dict) and isinstance(entry.get("quantize"), bool):
+        if not isinstance(entry, dict):
+            continue
+        if isinstance(entry.get("quantize"), bool):
             result[platform_key]["quantize"] = entry["quantize"]
+        if "nms" in entry:
+            result[platform_key]["nms"] = _resolve_nms(entry.get("nms"))
     return result
 
 
-def export_kwargs(kind: str, config: dict, quantize: bool) -> dict:
-    """Return Ultralytics export kwargs for mobile artifacts.
-
-    When quantize=True:
-      - TFLite: INT8 with calibration dataset
-      - Core ML: FP16 half-precision weights
-    When quantize=False, both formats export at full FP32 precision.
-    """
+def export_kwargs(kind: str, config: dict, quantize: bool, nms: dict | None = None) -> dict:
+    """Return Ultralytics export kwargs for mobile artifacts."""
     imgsz = int(config.get("imgsz", 640))
+    nms_block = nms if nms is not None else dict(DEFAULT_EXPORT_NMS)
+    common_nms = {
+        "nms": True,
+        "max_det": int(nms_block["maxDet"]),
+        "iou": float(nms_block["iouThreshold"]),
+        "conf": float(nms_block["confThreshold"]),
+    }
     if kind == "tflite":
         if quantize:
             return {
@@ -89,12 +124,13 @@ def export_kwargs(kind: str, config: dict, quantize: bool) -> dict:
                 "imgsz": imgsz,
                 "batch": 1,
                 "fraction": _quant_fraction(os.environ),
+                **common_nms,
             }
-        return {"format": "tflite", "imgsz": imgsz}
+        return {"format": "tflite", "imgsz": imgsz, **common_nms}
     if kind == "coreml":
         if quantize:
-            return {"format": "coreml", "half": True, "imgsz": imgsz}
-        return {"format": "coreml", "imgsz": imgsz}
+            return {"format": "coreml", "half": True, "imgsz": imgsz, **common_nms}
+        return {"format": "coreml", "imgsz": imgsz, **common_nms}
     raise ValueError(f"unsupported export kind: {kind}")
 
 
@@ -626,7 +662,7 @@ def main(argv: list[str] | None = None) -> int:
     tflite_path: Path | None = None
     tflite_artifact = None
     android_quantize = export_options["android"]["quantize"]
-    tflite_export_kwargs = export_kwargs("tflite", config, android_quantize)
+    tflite_export_kwargs = export_kwargs("tflite", config, android_quantize, export_options["android"]["nms"])
     tflite_quantization = quantization_metadata("tflite", tflite_export_kwargs)
     precision_label = tflite_quantization["precision"].upper()
     log_step(5, "export", "started",
@@ -647,7 +683,7 @@ def main(argv: list[str] | None = None) -> int:
     coreml_path: Path | None = None
     coreml_artifact = None
     ios_quantize = export_options["ios"]["quantize"]
-    coreml_export_kwargs = export_kwargs("coreml", config, ios_quantize)
+    coreml_export_kwargs = export_kwargs("coreml", config, ios_quantize, export_options["ios"]["nms"])
     coreml_quantization = quantization_metadata("coreml", coreml_export_kwargs)
     precision_label = coreml_quantization["precision"].upper()
     log_step(5, "export", "started",
