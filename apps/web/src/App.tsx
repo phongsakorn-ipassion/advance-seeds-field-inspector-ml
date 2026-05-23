@@ -40,6 +40,7 @@ import {
   TrainConfig,
   createRegistryStore,
 } from "./registry";
+import { deploymentLabelsForVersion } from "./registry/deploymentLabels";
 import { deriveF1Series, f1FromPrecisionRecall } from "./registry/metrics";
 import { DeploymentSwaggerPanel } from "./registry/DeploymentSwaggerPanel";
 
@@ -1791,20 +1792,23 @@ function ModelsWorkflow({
               text="Adjust channel or performance filters to see more model versions."
             />
           )}
-          {visibleVersions.map((version) => (
-            <button
-              className={version.id === selectedVersionId ? "version-card selected" : "version-card"}
-              key={version.id}
-              type="button"
-              onClick={() => setSelectedVersionId(version.id)}
-            >
-              <strong>{version.semver}</strong>
-              <small>
-                {pct(version.map50)} mAP50 / {pct(version.maskMap)} mask
-              </small>
-              <span className={`status-pill ${version.state}`}>{version.state}</span>
-            </button>
-          ))}
+          {visibleVersions.map((version) => {
+            const labels = deploymentLabelsForVersion(version.id, deployments);
+            return (
+              <button
+                className={version.id === selectedVersionId ? "version-card selected" : "version-card"}
+                key={version.id}
+                type="button"
+                onClick={() => setSelectedVersionId(version.id)}
+              >
+                <strong>{version.semver}</strong>
+                <small>
+                  {pct(version.map50)} mAP50 / {pct(version.maskMap)} mask
+                </small>
+                <DeploymentLabelGroup fallbackState={version.state} labels={labels} />
+              </button>
+            );
+          })}
         </div>
       </section>
       <section className="panel detail-panel">
@@ -1956,6 +1960,7 @@ function ModelDetail({
   const isArchived = version.state === "archived";
   const inProduction = channelNames.includes("production");
   const inStaging = channelNames.includes("staging");
+  const nonDefaultDeployments = deployedRows.filter((deployment) => !deployment.isDefault);
   const [pending, setPending] = useState<null | {
     title: string;
     message: string;
@@ -1996,9 +2001,19 @@ function ModelDetail({
     setActionError(null);
     setPending({
       title: `Deploy to ${channel}`,
-      message: `Deploy ${version.semver} to ${channel} and make it the default model for that channel. Other deployed models on ${channel} remain available for mobile selection.`,
+      message: `Deploy ${version.semver} to ${channel} as a selectable model. The current default for ${channel} will not change until you choose Set default.`,
       confirmLabel: `Deploy to ${channel}`,
-      run: () => store.deployVersion(version.id, channel, { setDefault: true }),
+      run: () => store.deployVersion(version.id, channel, { setDefault: false }),
+    });
+  }
+  function askSetDefault(channel: ChannelName) {
+    if (!isAdmin || isArchived) return;
+    setActionError(null);
+    setPending({
+      title: `Set ${channel} default`,
+      message: `Make ${version.semver} the default model for ${channel}. Other deployed models on ${channel} remain selectable, but mobile resolve-channel will return this model.`,
+      confirmLabel: "Set default",
+      run: () => store.setChannelDefault(channel, version.id),
     });
   }
   function askUndeploy(channel: ChannelName) {
@@ -2114,7 +2129,7 @@ function ModelDetail({
           )}
         </div>
         <div className="detail-hero-actions" aria-label="Lifecycle status">
-          <span className={`status-pill ${version.state}`}>{version.state}</span>
+          <DeploymentLabelGroup fallbackState={version.state} labels={deploymentLabelsForVersion(version.id, deployedRows)} />
         </div>
       </div>
       {pending && (
@@ -2163,6 +2178,7 @@ function ModelDetail({
         sourceWeights={version.sourceWeights}
         classes={version.classes}
         hyperParameters={version.hyperParameters}
+        exportOptions={version.exportOptions ?? run?.config.exportOptions}
       />
       <div>
         <SectionMiniHeading title="Run" hint="Source training run and notebook reference used to produce this model version." />
@@ -2204,6 +2220,18 @@ function ModelDetail({
             <LogOut size={14} aria-hidden="true" /> Undeploy {name}
           </button>
         ))}
+        {nonDefaultDeployments.map((deployment) => (
+          <button
+            className="ghost-button compact"
+            key={`default-${deployment.channel}`}
+            type="button"
+            disabled={!isAdmin}
+            title={isAdmin ? `Make default for ${deployment.channel}` : writeTitle}
+            onClick={() => askSetDefault(deployment.channel)}
+          >
+            <ShieldCheck size={14} aria-hidden="true" /> Set {deployment.channel} default
+          </button>
+        ))}
         {!isArchived && (
           <button
             className="danger-button compact"
@@ -2217,6 +2245,28 @@ function ModelDetail({
         )}
       </div>
     </div>
+  );
+}
+
+function DeploymentLabelGroup({
+  fallbackState,
+  labels,
+}: {
+  fallbackState: RegistryVersion["state"];
+  labels: ReturnType<typeof deploymentLabelsForVersion>;
+}) {
+  if (labels.length === 0) {
+    return <span className={`status-pill ${fallbackState}`}>{fallbackState}</span>;
+  }
+  return (
+    <span className="deployment-label-group">
+      {labels.map((label) => (
+        <span className="deployment-label-pair" key={label.channel}>
+          <span className={`status-pill ${label.channel}`}>{label.channel}</span>
+          {label.isDefault && <span className="status-pill default">default</span>}
+        </span>
+      ))}
+    </span>
   );
 }
 

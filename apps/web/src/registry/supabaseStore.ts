@@ -263,6 +263,7 @@ function mapVersion(v: DbVersion, channelByVersion: Map<string, ChannelName>): R
     datasetStats: datasetStatsFrom(md),
     classes: md.class_names ?? [],
     hyperParameters: hyperParametersFrom(hp, md.input_size),
+    exportOptions: exportOptionsFrom(md.export_options ?? md.exportOptions),
     map50: metricsSummary.map50 ?? 0,
     maskMap: metricsSummary.maskMap5095 ?? md.metrics?.mask_map ?? 0,
     metricsSummary,
@@ -621,6 +622,7 @@ export function createSupabaseStore(env: Env): RegistryStore {
           throw new Error("Archived models cannot be deployed.");
         }
         const lineId = await resolveModelLine();
+        const existingDeployment = snapshot.deployments.find((dep) => dep.channel === channel && dep.versionId === versionId);
         const { error: upsertErr } = await client
           .from("channel_deployments")
           .upsert({
@@ -628,15 +630,26 @@ export function createSupabaseStore(env: Env): RegistryStore {
             channel_name: channel,
             version_id: versionId,
             status: "active",
-            is_default: false,
+            is_default: options?.setDefault === true ? true : existingDeployment?.isDefault ?? false,
             deployed_by: session?.userId ?? null,
             archived_at: null,
             archived_by: null,
           }, { onConflict: "model_line_id,channel_name,version_id" });
         if (upsertErr) throw storeError(`Failed to add deployment to ${channel}`, upsertErr);
-        if (options?.setDefault ?? true) {
+        if (options?.setDefault ?? false) {
           await setChannelDefault(lineId, channel, versionId);
         }
+        await refresh();
+      });
+    },
+    async setChannelDefault(channel, versionId) {
+      await adminWrite(async () => {
+        const lineId = await resolveModelLine();
+        const deployment = snapshot.deployments.find((dep) => dep.channel === channel && dep.versionId === versionId);
+        if (!deployment) {
+          throw new Error("Deploy this model to the channel before making it the default.");
+        }
+        await setChannelDefault(lineId, channel, versionId);
         await refresh();
       });
     },

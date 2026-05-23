@@ -127,6 +127,7 @@ export type RegistryVersion = {
   datasetStats?: DatasetStats;
   classes: string[];
   hyperParameters: HyperParameters;
+  exportOptions?: ExportOptions;
   map50: number;
   maskMap: number;
   metricsSummary: MetricSummary;
