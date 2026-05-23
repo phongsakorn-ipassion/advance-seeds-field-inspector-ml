@@ -1,5 +1,6 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { serviceClient } from "../_shared/supabase.ts";
+import { validateExportOptions } from "../_shared/exportOptions.ts";
 import {
   appendTrimmedLogs,
   normalizeMetricSummary,
@@ -74,7 +75,8 @@ async function applyEvent(event: CallbackEvent): Promise<void> {
   const metrics = normalizeMetricSummary(event.metrics);
   const semver = event.semver ?? inferSemver();
   const contentHash = event.content_hash ?? await sha256Hex(event.tflite_r2_key);
-  const exportOptions = readExportOptions(cfg.exportOptions ?? cfg.export_options);
+  const exportOptionsCheck = validateExportOptions(cfg.exportOptions ?? cfg.export_options);
+  const exportOptions = exportOptionsCheck.ok ? exportOptionsCheck.value : { ios: { quantize: true }, android: { quantize: true } };
   const tfliteQuantization = quantizationMetadata("tflite", exportOptions.android.quantize);
   const coremlQuantization = quantizationMetadata("coreml", exportOptions.ios.quantize);
   const metadata = {
@@ -166,22 +168,6 @@ async function appendLogs(runId: string, lines: string[]): Promise<void> {
   const nextConfig = appendTrimmedLogs(run.config_yaml, lines);
   const { error } = await sb.from("runs").update({ config_yaml: nextConfig }).eq("id", runId);
   if (error) throw error;
-}
-
-function readExportOptions(value: unknown): { ios: { quantize: boolean }; android: { quantize: boolean } } {
-  const defaults = { ios: { quantize: true }, android: { quantize: true } };
-  if (!value || typeof value !== "object") return defaults;
-  const raw = value as Record<string, unknown>;
-  return {
-    ios: { quantize: readQuantize(raw.ios, true) },
-    android: { quantize: readQuantize(raw.android, true) },
-  };
-}
-
-function readQuantize(value: unknown, fallback: boolean): boolean {
-  if (!value || typeof value !== "object") return fallback;
-  const quantize = (value as Record<string, unknown>).quantize;
-  return typeof quantize === "boolean" ? quantize : fallback;
 }
 
 function quantizationMetadata(kind: "tflite" | "coreml", quantize: boolean): Record<string, unknown> {

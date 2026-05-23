@@ -1,5 +1,6 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { serviceClient } from "../_shared/supabase.ts";
+import { validateExportOptions } from "../_shared/exportOptions.ts";
 
 type Body = {
   model_line_slug: string;
@@ -25,6 +26,11 @@ Deno.serve(async (req) => {
   }
   if (!body.model_line_slug || !SAFE_SLUG.test(body.model_line_slug) || !body.config || typeof body.config !== "object") {
     return json({ error: "model_line_slug and config required" }, 400);
+  }
+
+  const exportOptionsCheck = validateExportOptions((body.config as Record<string, unknown>).exportOptions);
+  if (!exportOptionsCheck.ok) {
+    return json({ error: "invalid_export_options", details: exportOptionsCheck.errors }, 400);
   }
 
   const providerBaseUrl = Deno.env.get("TRAINING_PROVIDER_BASE_URL");

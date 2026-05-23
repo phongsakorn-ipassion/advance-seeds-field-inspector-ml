@@ -38,4 +38,15 @@ describe("exportOptionsFrom", () => {
       android: { quantize: false },
     });
   });
+
+  it("preserves nms block on round trip", () => {
+    const input = {
+      ios: { quantize: false, nms: { maxDet: 150, iouThreshold: 0.6, confThreshold: 0.3 } },
+      android: { quantize: true },
+    };
+    const out = exportOptionsFrom(input);
+    expect(out?.ios.quantize).toBe(false);
+    expect(out?.ios.nms).toEqual({ maxDet: 150, iouThreshold: 0.6, confThreshold: 0.3 });
+    expect(out?.android.nms).toBeUndefined();
+  });
 });

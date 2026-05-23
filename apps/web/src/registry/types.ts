@@ -27,11 +27,20 @@ export type MetricSummary = Partial<Record<MetricKey, number>>;
 
 export type PlatformPrecision = "int8" | "fp16" | "fp32" | "failed";
 
-export type ExportTarget = { quantize: boolean };
+export type ExportNms = {
+  maxDet: number;
+  iouThreshold: number;
+  confThreshold: number;
+};
+
+export type ExportTarget = {
+  quantize: boolean;
+  nms?: ExportNms;
+};
 
 export type ExportOptions = {
-  ios: ExportTarget;     // default { quantize: true }
-  android: ExportTarget; // default { quantize: true }
+  ios: ExportTarget;
+  android: ExportTarget;
 };
 
 export type RunLogStep = 1 | 2 | 3 | 4 | 5 | 6;

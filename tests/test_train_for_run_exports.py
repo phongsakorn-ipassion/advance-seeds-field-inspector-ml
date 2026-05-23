@@ -163,6 +163,43 @@ class TrainForRunExportTests(unittest.TestCase):
 
         self.assertEqual(target, repo)
 
+    def test_coreml_export_includes_default_nms(self):
+        config = {"data": "/tmp/dataset.yaml", "imgsz": 640}
+        kwargs = self.module.export_kwargs("coreml", config, True)
+        self.assertTrue(kwargs["nms"])
+        self.assertEqual(kwargs["max_det"], 300)
+        self.assertAlmostEqual(kwargs["iou"], 0.7)
+        self.assertAlmostEqual(kwargs["conf"], 0.25)
+
+    def test_coreml_export_honours_run_overrides(self):
+        config = {
+            "data": "/tmp/dataset.yaml",
+            "imgsz": 640,
+            "exportOptions": {
+                "ios": {"quantize": False, "nms": {"maxDet": 150, "iouThreshold": 0.55, "confThreshold": 0.3}},
+                "android": {"quantize": True},
+            },
+        }
+        resolved = self.module.load_export_options(config)
+        kwargs = self.module.export_kwargs("coreml", config, resolved["ios"]["quantize"], resolved["ios"]["nms"])
+        self.assertEqual(kwargs["max_det"], 150)
+        self.assertAlmostEqual(kwargs["iou"], 0.55)
+        self.assertAlmostEqual(kwargs["conf"], 0.3)
+        self.assertNotIn("half", kwargs)
+
+    def test_tflite_export_includes_nms(self):
+        config = {"data": "/tmp/dataset.yaml", "imgsz": 640}
+        kwargs = self.module.export_kwargs("tflite", config, False)
+        self.assertTrue(kwargs["nms"])
+        self.assertEqual(kwargs["max_det"], 300)
+
+    def test_load_export_options_clamps_out_of_range(self):
+        config = {"exportOptions": {"ios": {"quantize": True, "nms": {"maxDet": 9999, "iouThreshold": 2, "confThreshold": -1}}, "android": {"quantize": True}}}
+        resolved = self.module.load_export_options(config)
+        self.assertEqual(resolved["ios"]["nms"]["maxDet"], 300)
+        self.assertEqual(resolved["ios"]["nms"]["iouThreshold"], 1.0)
+        self.assertEqual(resolved["ios"]["nms"]["confThreshold"], 0.0)
+
     def test_build_training_config_uses_dashboard_hyperparameter_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
