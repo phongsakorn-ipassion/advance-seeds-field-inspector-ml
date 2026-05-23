@@ -59,10 +59,22 @@ export function exportOptionsFrom(value: unknown): ExportOptions | undefined {
   for (const platform of ["ios", "android"] as const) {
     const entry = source[platform];
     if (entry && typeof entry === "object") {
-      const quantize = (entry as Record<string, unknown>).quantize;
+      const target = entry as Record<string, unknown>;
+      const quantize = target.quantize;
       if (typeof quantize === "boolean") {
         result[platform].quantize = quantize;
         hasRecordedChoice = true;
+      }
+      const nms = target.nms;
+      if (nms && typeof nms === "object") {
+        const n = nms as Record<string, unknown>;
+        const maxDet = typeof n.maxDet === "number" && Number.isFinite(n.maxDet) ? n.maxDet : undefined;
+        const iouThreshold = typeof n.iouThreshold === "number" && Number.isFinite(n.iouThreshold) ? n.iouThreshold : undefined;
+        const confThreshold = typeof n.confThreshold === "number" && Number.isFinite(n.confThreshold) ? n.confThreshold : undefined;
+        if (maxDet !== undefined && iouThreshold !== undefined && confThreshold !== undefined) {
+          result[platform].nms = { maxDet, iouThreshold, confThreshold };
+          hasRecordedChoice = true;
+        }
       }
     }
   }
