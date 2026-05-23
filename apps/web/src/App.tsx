@@ -43,6 +43,7 @@ import {
 import { deploymentLabelsForVersion } from "./registry/deploymentLabels";
 import { deriveF1Series, f1FromPrecisionRecall } from "./registry/metrics";
 import { DeploymentSwaggerPanel } from "./registry/DeploymentSwaggerPanel";
+import { DEFAULT_EXPORT_NMS, DEFAULT_EXPORT_OPTIONS } from "./registry/exportOptions";
 
 type Section = "overview" | "train" | "models" | "storage";
 type TrainTab = "form" | "live" | "recent";
@@ -1155,10 +1156,7 @@ function TrainWorkflow({
   const [howOpen, setHowOpen] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<TrainingFieldErrors>({});
-  const [exportOptions, setExportOptions] = useState<ExportOptions>({
-    ios:     { quantize: true },
-    android: { quantize: true },
-  });
+  const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
   const [pendingDelete, setPendingDelete] = useState<RegistryRun | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -1195,6 +1193,24 @@ function TrainWorkflow({
     if (!config.dataset.trim()) errors.dataset = "Dataset config is required.";
     if (!config.datasetBundle?.trim()) errors.datasetBundle = "Dataset image bundle is required.";
     if (!config.sourceWeights.trim()) errors.sourceWeights = "Source weights are required.";
+    return errors;
+  }
+
+  function validateExportOptions(): string[] {
+    const errors: string[] = [];
+    for (const platform of ["ios", "android"] as const) {
+      const nms = exportOptions[platform].nms;
+      if (!nms) continue;
+      if (!Number.isInteger(nms.maxDet) || nms.maxDet < 1 || nms.maxDet > 300) {
+        errors.push(`${platform.toUpperCase()} maxDet must be an integer between 1 and 300.`);
+      }
+      if (!(nms.iouThreshold >= 0 && nms.iouThreshold <= 1)) {
+        errors.push(`${platform.toUpperCase()} IoU must be between 0.0 and 1.0.`);
+      }
+      if (!(nms.confThreshold >= 0 && nms.confThreshold <= 1)) {
+        errors.push(`${platform.toUpperCase()} confidence must be between 0.0 and 1.0.`);
+      }
+    }
     return errors;
   }
 
@@ -1272,6 +1288,11 @@ function TrainWorkflow({
         const errors = validateTrainingConfig();
         setFieldErrors(errors);
         if (Object.keys(errors).length > 0) return;
+        const optionErrors = validateExportOptions();
+        if (optionErrors.length > 0) {
+          setStartError(optionErrors.join(" "));
+          return;
+        }
         try {
           await onStart(exportOptions);
           setTab("live");
@@ -1428,6 +1449,72 @@ function TrainWorkflow({
               </span>
             </label>
           </div>
+        </div>
+        <div className="export-nms-field">
+          <span className="label-text">
+            Detection limits
+            <Hint text="NMS parameters passed to Ultralytics during mobile export. maxDet caps detections per frame; iou is the NMS overlap threshold; conf is the minimum confidence." />
+          </span>
+          {(["ios", "android"] as const).map((platform) => {
+            const nms = exportOptions[platform].nms ?? DEFAULT_EXPORT_NMS;
+            const update = (next: Partial<typeof nms>) =>
+              setExportOptions(prev => ({
+                ...prev,
+                [platform]: { ...prev[platform], nms: { ...nms, ...next } },
+              }));
+            return (
+              <div key={platform} className="export-nms-row">
+                <span className="export-nms-platform">{platform.toUpperCase()}</span>
+                <label>
+                  <span className="export-nms-label">maxDet</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={300}
+                    step={1}
+                    value={nms.maxDet}
+                    onChange={(e) => update({ maxDet: Math.round(Number(e.target.value)) })}
+                    disabled={!isAdmin}
+                  />
+                </label>
+                <label>
+                  <span className="export-nms-label">IoU</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={nms.iouThreshold}
+                    onChange={(e) => update({ iouThreshold: Number(e.target.value) })}
+                    disabled={!isAdmin}
+                  />
+                </label>
+                <label>
+                  <span className="export-nms-label">Conf</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={nms.confThreshold}
+                    onChange={(e) => update({ confThreshold: Number(e.target.value) })}
+                    disabled={!isAdmin}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="ghost-button compact"
+                  onClick={() => update(DEFAULT_EXPORT_NMS)}
+                  disabled={!isAdmin}
+                >
+                  Reset
+                </button>
+                <span className="export-nms-summary">
+                  maxDet={nms.maxDet} · iou={nms.iouThreshold.toFixed(2)} · conf={nms.confThreshold.toFixed(2)}
+                </span>
+              </div>
+            );
+          })}
         </div>
       <button className="primary-button" type="submit" disabled={!isAdmin} title={isAdmin ? "" : "Admin role required"}>
         <Rocket size={18} /> Create training run
