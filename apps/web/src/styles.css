@@ -3437,38 +3437,3 @@ a.primary-button { text-decoration: none; }
   .endpoint-copy { justify-self: start; }
   .topbar-nav { display: none; }
 }
-
-/* ==== Detection limits (NMS) block ==== */
-.export-nms-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--as-space-sm);
-}
-.export-nms-row {
-  display: grid;
-  grid-template-columns: 56px repeat(3, minmax(80px, 1fr)) auto;
-  align-items: end;
-  gap: var(--as-space-sm);
-  padding: var(--as-space-sm);
-  border-radius: var(--as-radius-md);
-  background: var(--as-bg-secondary);
-}
-.export-nms-row > label {
-  display: flex;
-  flex-direction: column;
-  gap: var(--as-space-xs);
-}
-.export-nms-platform {
-  font-weight: 600;
-  font-size: 12px;
-  color: var(--as-text-secondary);
-}
-.export-nms-label {
-  font-size: 12px;
-  color: var(--as-text-secondary);
-}
-.export-nms-summary {
-  grid-column: 1 / -1;
-  font-size: 12px;
-  color: var(--as-text-tertiary);
-}

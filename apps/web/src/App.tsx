@@ -44,7 +44,7 @@ import { deploymentLabelsForVersion } from "./registry/deploymentLabels";
 import { deriveF1Series, f1FromPrecisionRecall } from "./registry/metrics";
 import { displayRunStatus, isDeletableRunStatus, parseRegistryTimestamp, type DisplayStatus } from "./registry/runStatus";
 import { DeploymentSwaggerPanel } from "./registry/DeploymentSwaggerPanel";
-import { DEFAULT_EXPORT_NMS, DEFAULT_EXPORT_OPTIONS } from "./registry/exportOptions";
+import { DEFAULT_EXPORT_OPTIONS } from "./registry/exportOptions";
 
 // Ticking clock for time-dependent UI (e.g. promoting a silent "running" run to
 // "stalled"). A stalled run emits no realtime updates, so we re-render on a timer
@@ -1202,24 +1202,6 @@ function TrainWorkflow({
     return errors;
   }
 
-  function validateExportOptions(): string[] {
-    const errors: string[] = [];
-    for (const platform of ["ios", "android"] as const) {
-      const nms = exportOptions[platform].nms;
-      if (!nms) continue;
-      if (!Number.isInteger(nms.maxDet) || nms.maxDet < 1 || nms.maxDet > 300) {
-        errors.push(`${platform.toUpperCase()} maxDet must be an integer between 1 and 300.`);
-      }
-      if (!(nms.iouThreshold >= 0 && nms.iouThreshold <= 1)) {
-        errors.push(`${platform.toUpperCase()} IoU must be between 0.0 and 1.0.`);
-      }
-      if (!(nms.confThreshold >= 0 && nms.confThreshold <= 1)) {
-        errors.push(`${platform.toUpperCase()} confidence must be between 0.0 and 1.0.`);
-      }
-    }
-    return errors;
-  }
-
   const detailPanel = (
     <section className={`panel run-detail-panel ${focused ? "open" : "closed"}`} aria-live="polite">
       {focused && (
@@ -1294,11 +1276,6 @@ function TrainWorkflow({
         const errors = validateTrainingConfig();
         setFieldErrors(errors);
         if (Object.keys(errors).length > 0) return;
-        const optionErrors = validateExportOptions();
-        if (optionErrors.length > 0) {
-          setStartError(optionErrors.join(" "));
-          return;
-        }
         try {
           await onStart(exportOptions);
           setTab("live");
@@ -1391,7 +1368,6 @@ function TrainWorkflow({
           <summary>Advanced hyperparameters</summary>
           <div className="form-grid">
             <NumberField label="Patience" value={config.hyperParameters.patience} onChange={(value) => updateHp(config, setConfig, "patience", value)} hint="Early-stopping patience: number of epochs with no improvement before the run stops. Set lower to fail fast on bad runs." />
-            <NumberField label="LR0" value={config.hyperParameters.lr0} step="0.0001" onChange={(value) => updateHp(config, setConfig, "lr0", value)} hint="Initial learning rate. Lower = more stable but slower; higher = faster but may diverge. Start at 0.001 for fine-tuning, raise only if loss plateaus." />
             <label>
               <span className="label-text">
                 Batch
@@ -1432,7 +1408,7 @@ function TrainWorkflow({
                 checked={exportOptions.ios.quantize}
                 onChange={(e) => setExportOptions(prev => ({
                   ...prev,
-                  ios: { quantize: e.target.checked },
+                  ios: { ...prev.ios, quantize: e.target.checked },
                 }))}
               />
               <span className="quantization-option-label">
@@ -1446,7 +1422,7 @@ function TrainWorkflow({
                 checked={exportOptions.android.quantize}
                 onChange={(e) => setExportOptions(prev => ({
                   ...prev,
-                  android: { quantize: e.target.checked },
+                  android: { ...prev.android, quantize: e.target.checked },
                 }))}
               />
               <span className="quantization-option-label">
@@ -1455,72 +1431,6 @@ function TrainWorkflow({
               </span>
             </label>
           </div>
-        </div>
-        <div className="export-nms-field">
-          <span className="label-text">
-            Detection limits
-            <Hint text="NMS parameters passed to Ultralytics during mobile export. maxDet caps detections per frame; iou is the NMS overlap threshold; conf is the minimum confidence." />
-          </span>
-          {(["ios", "android"] as const).map((platform) => {
-            const nms = exportOptions[platform].nms ?? DEFAULT_EXPORT_NMS;
-            const update = (next: Partial<typeof nms>) =>
-              setExportOptions(prev => ({
-                ...prev,
-                [platform]: { ...prev[platform], nms: { ...nms, ...next } },
-              }));
-            return (
-              <div key={platform} className="export-nms-row">
-                <span className="export-nms-platform">{platform.toUpperCase()}</span>
-                <label>
-                  <span className="export-nms-label">maxDet</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={300}
-                    step={1}
-                    value={nms.maxDet}
-                    onChange={(e) => update({ maxDet: Math.round(Number(e.target.value)) })}
-                    disabled={!isAdmin}
-                  />
-                </label>
-                <label>
-                  <span className="export-nms-label">IoU</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={nms.iouThreshold}
-                    onChange={(e) => update({ iouThreshold: Number(e.target.value) })}
-                    disabled={!isAdmin}
-                  />
-                </label>
-                <label>
-                  <span className="export-nms-label">Conf</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={nms.confThreshold}
-                    onChange={(e) => update({ confThreshold: Number(e.target.value) })}
-                    disabled={!isAdmin}
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="ghost-button compact"
-                  onClick={() => update(DEFAULT_EXPORT_NMS)}
-                  disabled={!isAdmin}
-                >
-                  Reset
-                </button>
-                <span className="export-nms-summary">
-                  maxDet={nms.maxDet} · iou={nms.iouThreshold.toFixed(2)} · conf={nms.confThreshold.toFixed(2)}
-                </span>
-              </div>
-            );
-          })}
         </div>
       <button className="primary-button" type="submit" disabled={!isAdmin} title={isAdmin ? "" : "Admin role required"}>
         <Rocket size={18} /> Create training run
