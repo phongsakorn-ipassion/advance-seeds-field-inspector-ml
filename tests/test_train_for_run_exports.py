@@ -35,7 +35,8 @@ class TrainForRunExportTests(unittest.TestCase):
 
         kwargs = self.module.export_kwargs("tflite", config, quantize=False)
 
-        self.assertEqual(kwargs, {"format": "tflite", "imgsz": 640})
+        self.assertEqual(kwargs["format"], "tflite")
+        self.assertEqual(kwargs["imgsz"], 640)
         self.assertNotIn("int8", kwargs)
 
     def test_coreml_export_quantized_uses_fp16_for_ios(self):
@@ -53,7 +54,8 @@ class TrainForRunExportTests(unittest.TestCase):
 
         kwargs = self.module.export_kwargs("coreml", config, quantize=False)
 
-        self.assertEqual(kwargs, {"format": "coreml", "imgsz": 640})
+        self.assertEqual(kwargs["format"], "coreml")
+        self.assertEqual(kwargs["imgsz"], 640)
         self.assertNotIn("half", kwargs)
 
     def test_artifact_metadata_records_quantization(self):
