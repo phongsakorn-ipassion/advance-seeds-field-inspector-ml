@@ -18,40 +18,43 @@ class TrainForRunExportTests(unittest.TestCase):
     def setUp(self):
         self.module = load_train_for_run()
 
-    def test_tflite_export_uses_calibrated_int8_for_android(self):
+    def test_tflite_export_quantized_uses_calibrated_int8_for_android(self):
         config = {"data": "/tmp/dataset.yaml", "imgsz": 640}
 
-        kwargs = self.module.export_kwargs("tflite", config, {"ADVANCE_SEEDS_QUANT_FRACTION": "0.5"})
+        kwargs = self.module.export_kwargs("tflite", config, quantize=True)
 
         self.assertEqual(kwargs["format"], "tflite")
         self.assertTrue(kwargs["int8"])
         self.assertEqual(kwargs["data"], "/tmp/dataset.yaml")
         self.assertEqual(kwargs["imgsz"], 640)
         self.assertEqual(kwargs["batch"], 1)
-        self.assertEqual(kwargs["fraction"], 0.5)
+        self.assertIsInstance(kwargs["fraction"], float)
 
-    def test_coreml_export_defaults_to_fp16_for_ios(self):
+    def test_tflite_export_unquantized_is_fp32_for_android(self):
         config = {"data": "/tmp/dataset.yaml", "imgsz": 640}
 
-        kwargs = self.module.export_kwargs("coreml", config, {})
+        kwargs = self.module.export_kwargs("tflite", config, quantize=False)
+
+        self.assertEqual(kwargs, {"format": "tflite", "imgsz": 640})
+        self.assertNotIn("int8", kwargs)
+
+    def test_coreml_export_quantized_uses_fp16_for_ios(self):
+        config = {"data": "/tmp/dataset.yaml", "imgsz": 640}
+
+        kwargs = self.module.export_kwargs("coreml", config, quantize=True)
 
         self.assertEqual(kwargs["format"], "coreml")
         self.assertTrue(kwargs["half"])
         self.assertNotIn("int8", kwargs)
         self.assertNotIn("data", kwargs)
 
-    def test_coreml_int8_can_be_enabled_explicitly(self):
+    def test_coreml_export_unquantized_is_fp32_for_ios(self):
         config = {"data": "/tmp/dataset.yaml", "imgsz": 640}
 
-        kwargs = self.module.export_kwargs(
-            "coreml",
-            config,
-            {"ADVANCE_SEEDS_COREML_INT8": "true", "ADVANCE_SEEDS_QUANT_FRACTION": "0.25"},
-        )
+        kwargs = self.module.export_kwargs("coreml", config, quantize=False)
 
-        self.assertTrue(kwargs["int8"])
-        self.assertEqual(kwargs["data"], "/tmp/dataset.yaml")
-        self.assertEqual(kwargs["fraction"], 0.25)
+        self.assertEqual(kwargs, {"format": "coreml", "imgsz": 640})
+        self.assertNotIn("half", kwargs)
 
     def test_artifact_metadata_records_quantization(self):
         metadata = self.module.artifact_metadata(

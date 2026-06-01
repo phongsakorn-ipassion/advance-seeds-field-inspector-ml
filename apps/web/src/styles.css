@@ -1959,6 +1959,7 @@ button {
 .status-pill.queued,
 .status-pill.cancelled { background: var(--as-bg-secondary); color: var(--as-text-secondary); }
 .status-pill.waiting { background: var(--as-bg-secondary); color: var(--as-text-secondary); border: 1px dashed var(--as-border-secondary); }
+.status-pill.stalled { background: var(--as-warning-bg); color: var(--as-warning-text); }
 
 .status-dot {
   width: 8px;
@@ -1971,6 +1972,7 @@ button {
 .status-dot.failed    { background: var(--as-danger-text); }
 .status-dot.queued, .status-dot.cancelled { background: var(--as-text-tertiary); }
 .status-dot.waiting { background: var(--as-text-tertiary); outline: 1px dashed var(--as-text-tertiary); outline-offset: 1px; }
+.status-dot.stalled { background: var(--as-warning-text); }
 
 .deployment-label-group {
   display: inline-flex;

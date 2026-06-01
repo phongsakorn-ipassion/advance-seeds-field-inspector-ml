@@ -42,8 +42,23 @@ import {
 } from "./registry";
 import { deploymentLabelsForVersion } from "./registry/deploymentLabels";
 import { deriveF1Series, f1FromPrecisionRecall } from "./registry/metrics";
+import { displayRunStatus, isDeletableRunStatus, parseRegistryTimestamp, type DisplayStatus } from "./registry/runStatus";
 import { DeploymentSwaggerPanel } from "./registry/DeploymentSwaggerPanel";
 import { DEFAULT_EXPORT_NMS, DEFAULT_EXPORT_OPTIONS } from "./registry/exportOptions";
+
+// Ticking clock for time-dependent UI (e.g. promoting a silent "running" run to
+// "stalled"). A stalled run emits no realtime updates, so we re-render on a timer
+// rather than waiting for new data. Pass null to stop ticking when nothing can
+// change (no runs in flight).
+function useNow(intervalMs: number | null): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (intervalMs == null) return;
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
 
 type Section = "overview" | "train" | "models" | "storage";
 type TrainTab = "form" | "live" | "recent";
@@ -199,17 +214,6 @@ function quantizationMeta(platform: "ios" | "android", quantize: boolean): strin
   return quantize ? "TF Lite · INT8" : "TF Lite · FP32, no quantization";
 }
 
-// Display-only status that promotes a stuck "running" run (no progress, no
-// metrics yet) into "waiting" — i.e. the dashboard inserted the row but no
-// trainer has started reporting back. Used purely for status pill rendering.
-type DisplayStatus = "queued" | "waiting" | "running" | "succeeded" | "failed" | "cancelled";
-function displayRunStatus(run: RegistryRun): DisplayStatus {
-  if (run.status === "running" && run.progress === 0 && run.map50 === null && run.maskMap === null) {
-    return "waiting";
-  }
-  return run.status;
-}
-
 function displayColabNotebook(run: RegistryRun): string {
   const notebook = run.colabNotebook.trim();
   if (!notebook) return "";
@@ -222,7 +226,7 @@ function compareVersions(a: RegistryVersion, b: RegistryVersion, sort: VersionSo
   }
   if (sort === "map50") return b.map50 - a.map50;
   if (sort === "maskMap") return b.maskMap - a.maskMap;
-  return Date.parse(b.createdAt.replace(" ", "T")) - Date.parse(a.createdAt.replace(" ", "T"));
+  return parseRegistryTimestamp(b.createdAt) - parseRegistryTimestamp(a.createdAt);
 }
 
 function expertLogLines(run: RegistryRun): string[] {
@@ -315,7 +319,7 @@ function deriveActivityNotifications(snapshot: ReturnType<RegistryStore["getSnap
   }
   return items
     .filter((item) => item.time !== "")
-    .sort((a, b) => Date.parse(b.time.replace(" ", "T")) - Date.parse(a.time.replace(" ", "T")))
+    .sort((a, b) => parseRegistryTimestamp(b.time) - parseRegistryTimestamp(a.time))
     .slice(0, 24);
 }
 
@@ -1147,17 +1151,19 @@ function TrainWorkflow({
   onStart: (exportOptions: ExportOptions) => Promise<void>;
 }) {
   const runningRuns = runs.filter((r) => r.status === "running");
+  const now = useNow(runningRuns.length > 0 ? 60_000 : null);
   const focused = focusedRunId ? runs.find((r) => r.id === focusedRunId) : undefined;
   const recent = runs.filter((r) => r.status !== "running").slice(0, 6);
   const versionByRunId = useMemo(() => new Map(versions.map((version) => [version.runId, version])), [versions]);
   const isFocusedRunning = focused?.status === "running";
-  const focusedDisplayStatus = focused ? displayRunStatus(focused) : undefined;
+  const focusedDisplayStatus = focused ? displayRunStatus(focused, now) : undefined;
   const showColabHandoff = focusedDisplayStatus === "waiting" || focusedDisplayStatus === "queued";
   const [howOpen, setHowOpen] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<TrainingFieldErrors>({});
   const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
   const [pendingDelete, setPendingDelete] = useState<RegistryRun | null>(null);
+  const pendingDeleteStalled = pendingDelete ? displayRunStatus(pendingDelete, now) === "stalled" : false;
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -1540,6 +1546,7 @@ function TrainWorkflow({
               selectedId={focused?.id ?? null}
               onSelect={(id) => setFocusedRunId(id)}
               onDelete={(run) => setPendingDelete(run)}
+              now={now}
             />
           ) : (
             <EmptyState
@@ -1551,11 +1558,22 @@ function TrainWorkflow({
         </section>
         {detailPanel}
         {pendingDelete && (
-          <Modal title="Delete waiting run" onClose={() => (deleteBusy ? undefined : (setPendingDelete(null), setDeleteError(null)))}>
-            <p>
-              Delete the waiting run <strong>{pendingDelete.name}</strong>? Training has not started yet,
-              so no metrics will be lost. This removes the run row and any queued metric data.
-            </p>
+          <Modal
+            title={pendingDeleteStalled ? "Delete timed-out run" : "Delete waiting run"}
+            onClose={() => (deleteBusy ? undefined : (setPendingDelete(null), setDeleteError(null)))}
+          >
+            {pendingDeleteStalled ? (
+              <p>
+                The run <strong>{pendingDelete.name}</strong> has not logged any activity for over an hour,
+                so its Colab session has likely timed out. Deleting it permanently removes the run row along
+                with any partial metrics and logs collected so far. This does not stop a session that is still alive.
+              </p>
+            ) : (
+              <p>
+                Delete the waiting run <strong>{pendingDelete.name}</strong>? Training has not started yet,
+                so no metrics will be lost. This removes the run row and any queued metric data.
+              </p>
+            )}
             {deleteError && <p className="form-error">{deleteError}</p>}
             <div className="modal-actions">
               <button type="button" className="ghost-button" onClick={() => { setPendingDelete(null); setDeleteError(null); }} disabled={deleteBusy}>
@@ -2581,6 +2599,7 @@ function RunList({
   onDelete,
   versionByRunId,
   onOpenModelVersion,
+  now,
 }: {
   runs: RegistryRun[];
   onSelect?: (runId: string) => void;
@@ -2588,6 +2607,7 @@ function RunList({
   onDelete?: (run: RegistryRun) => void;
   versionByRunId?: Map<string, RegistryVersion>;
   onOpenModelVersion?: (versionId: string) => void;
+  now?: number;
 }) {
   return (
     <div className="run-list">
@@ -2600,6 +2620,7 @@ function RunList({
           onDelete={onDelete}
           modelVersion={versionByRunId?.get(run.id)}
           onOpenModelVersion={onOpenModelVersion}
+          now={now}
         />
       ))}
     </div>
@@ -3013,6 +3034,7 @@ function RunRow({
   onDelete,
   modelVersion,
   onOpenModelVersion,
+  now,
 }: {
   run: RegistryRun;
   onClick?: () => void;
@@ -3020,10 +3042,12 @@ function RunRow({
   onDelete?: (run: RegistryRun) => void;
   modelVersion?: RegistryVersion;
   onOpenModelVersion?: (versionId: string) => void;
+  now?: number;
 }) {
   const cls = ["run-row", onClick ? "clickable" : "", selected ? "selected" : ""].filter(Boolean).join(" ");
-  const status = displayRunStatus(run);
-  const showDelete = status === "waiting" && Boolean(onDelete);
+  const status = displayRunStatus(run, now);
+  const showDelete = isDeletableRunStatus(status) && Boolean(onDelete);
+  const deleteLabel = status === "stalled" ? "timed-out" : "waiting";
   const showModelShortcut = status === "succeeded" && Boolean(modelVersion && onOpenModelVersion);
   const showActions = showDelete || showModelShortcut;
   const inner = (
@@ -3067,8 +3091,8 @@ function RunRow({
               <button
                 type="button"
                 className="icon-action-button danger run-row-delete"
-                aria-label={`Delete waiting run ${run.name}`}
-                title="Delete this waiting run"
+                aria-label={`Delete ${deleteLabel} run ${run.name}`}
+                title={`Delete this ${deleteLabel} run`}
                 onClick={(event) => {
                   event.stopPropagation();
                   onDelete?.(run);
