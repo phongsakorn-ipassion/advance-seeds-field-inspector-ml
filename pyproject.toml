@@ -17,6 +17,9 @@ train = [
   "opencv-python>=4.9.0",
   "numpy>=1.26",
 ]
+dev = [
+  "pytest>=9.0.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
