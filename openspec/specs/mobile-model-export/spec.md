@@ -27,7 +27,7 @@ contract, and acceptance targets.
 #### Scenario: Metadata identifies YOLO26n source model
 - **WHEN** metadata is generated with default arguments
 - **THEN** `source_weights` is `yolo26n-seg.pt`
-- **AND** `output_kind` is `end2end_nms_free`
+- **AND** `output_kind` is `segmentation`
 
 #### Scenario: Metadata exports banana-v4 classes
 - **WHEN** metadata is generated for the active banana-v4 model

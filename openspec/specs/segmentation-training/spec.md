@@ -36,13 +36,17 @@ Training validation SHALL report box mAP and mask mAP separately.
 - **THEN** the report includes at least segmentation mAP and mask mAP values
 
 ### Requirement: Acceptance targets are explicit
-The target acceptance metrics SHALL be segmentation mAP >= 0.85 and mask mAP >=
-0.80 on the agreed gold-standard validation or holdout set.
+The documented acceptance targets SHALL be segmentation mAP >= 0.85 and mask
+mAP >= 0.80 on the agreed gold-standard validation or holdout set. These targets
+are a **manual review reference**, not an automated gate: `scripts/evaluate_model_summary.py`
+emits free-text `acceptance_notes` for an operator to weigh before promotion; it
+does not itself evaluate the thresholds or set a release-ready flag.
 
-#### Scenario: Model below target is not release-ready
+#### Scenario: Model below target is reviewed against documented acceptance targets
 - **GIVEN** a trained model has mask mAP below 0.80
-- **WHEN** export readiness is reviewed
-- **THEN** the model is marked not release-ready for the mobile app
+- **WHEN** an operator reviews the evaluation summary's `acceptance_notes`
+- **THEN** the operator compares the metrics against the documented acceptance
+  targets and decides not to promote the model for the mobile app
 
 ### Requirement: Training outputs remain out of Git
 Heavy training outputs such as run directories and model weights SHALL remain

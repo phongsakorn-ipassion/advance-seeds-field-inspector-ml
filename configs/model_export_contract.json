@@ -9,10 +9,10 @@
     "banana",
     "banana_spot"
   ],
-  "output_kind": "end2end_nms_free",
-  "output_shape": [1, 300, 6],
-  "score_threshold": 0.5,
-  "iou_threshold": 0.75,
+  "output_kind": "segmentation",
+  "output_shape": [1, 300, 38],
+  "score_threshold": 0.35,
+  "iou_threshold": 0.6,
   "calibration": {
     "required": true,
     "supported_sources": ["aruco", "lidar", "manual"],

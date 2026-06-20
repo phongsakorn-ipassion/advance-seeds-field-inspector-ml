@@ -1,7 +1,16 @@
 # model-registry-web-dashboard Specification
 
 ## Purpose
-TBD - created by archiving change add-activity-notifications. Update Purpose after archive.
+Define the React + Vite registry dashboard (`apps/web/`) that operators use to
+browse and manage the model registry. It authenticates against Supabase with an
+admin gate on write operations, lists model lines / runs / versions / channels,
+launches training and tracks live progress and normalized Ultralytics metrics via
+Realtime, surfaces storage quota and registry operating state, and drives channel
+deployment writes (with audited user ids) through Edge Functions. It also presents
+the mobile-facing API handoff (list-deployed-models / resolve-channel endpoints and
+per-platform TF Lite / Core ML readiness), supports dataset-bundle uploads, shows an
+in-app activity notification center, follows the Advance Seeds design system, and
+builds as a static GitHub Pages app published from CI.
 ## Requirements
 ### Requirement: Dashboard surfaces registry activity notifications
 The dashboard SHALL show recent model registry activity in an in-app
