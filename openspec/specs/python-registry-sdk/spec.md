@@ -1,7 +1,14 @@
 # python-registry-sdk Specification
 
 ## Purpose
-TBD - created by archiving change add-python-registry-sdk. Update Purpose after archive.
+Define the Python client (`src/advance_seeds_ml/registry/`) that training scripts
+and the hosted worker use to report to the model registry. It loads the registry
+endpoint and service-role credentials from environment variables (with Supabase
+aliases as fallbacks), creates and finalizes `runs` rows, appends `run_metrics`,
+uploads artifacts via `upload-artifact` signed URLs without ever holding R2
+credentials directly, and registers `versions` rows with metadata, artifact keys
+(including the original PyTorch `.pt`), byte size, and content hash. Registry
+reporting is optional and must never change default local-only training behavior.
 ## Requirements
 ### Requirement: Registry configuration is environment driven
 The SDK SHALL load registry endpoint and service-role credentials from

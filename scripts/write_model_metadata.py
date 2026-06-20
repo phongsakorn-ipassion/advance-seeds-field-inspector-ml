@@ -22,11 +22,11 @@ def main() -> int:
     parser.add_argument(
         "--output-kind",
         choices=["raw", "nms", "end2end_nms_free", "segmentation"],
-        default="end2end_nms_free",
+        default="segmentation",
     )
-    parser.add_argument("--output-shape", nargs="+", type=int, default=[1, 300, 6])
-    parser.add_argument("--score-threshold", type=float, default=0.5)
-    parser.add_argument("--iou-threshold", type=float, default=0.75)
+    parser.add_argument("--output-shape", nargs="+", type=int, default=[1, 300, 38])
+    parser.add_argument("--score-threshold", type=float, default=0.35)
+    parser.add_argument("--iou-threshold", type=float, default=0.6)
     parser.add_argument("--output", default="models/model-metadata.json")
     args = parser.parse_args()
 

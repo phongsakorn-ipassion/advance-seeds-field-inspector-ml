@@ -99,7 +99,7 @@ python scripts/write_model_metadata.py \
   --model-version 0.1.0 \
   --source-weights yolo26n-seg.pt \
   --input-size 640 \
-  --classes apple apple_spot banana banana_spot orange orange_spot \
+  --classes banana banana_spot \
   --output models/model-metadata.json
 ```
 
@@ -159,14 +159,18 @@ openspec init --tools codex --profile core .
 1. Place labeled data in YOLO segmentation layout under `data/`.
 2. Validate labels and class distribution.
 3. Lock train/val/test splits by image.
-4. Train YOLO26n-seg (`yolo26n-seg.pt`) for instance segmentation over the PoC classes:
-   Apple, Apple Spot, Banana, Banana Spot, Orange, and Orange Spot.
+4. Train YOLO26n-seg (`yolo26n-seg.pt`) for instance segmentation. The **active
+   export contract is banana-only** (`banana`, `banana_spot`) — see
+   `configs/model_export_contract.json`. The full PoC superset (Apple, Apple Spot,
+   Banana, Banana Spot, Orange, Orange Spot) remains the canonical future target
+   but is not the current shipped class set.
 5. Evaluate:
    - segmentation mAP >= 0.85
    - mask mAP >= 0.80
    - length/width error <= 0.5 mm against calibrated references
-6. Export YOLO26n-seg TFLite and Core ML artifacts using the end-to-end,
-   NMS-free head unless a later OpenSpec change selects otherwise.
+6. Export YOLO26n-seg TFLite and Core ML artifacts using the segmentation head
+   with NMS applied at export (`nms=True`), so the app does not run external NMS,
+   unless a later OpenSpec change selects otherwise.
 7. Copy the mobile artifacts into the demo app.
 
 ## Calibration Principle

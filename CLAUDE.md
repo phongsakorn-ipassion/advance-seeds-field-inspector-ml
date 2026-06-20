@@ -24,13 +24,13 @@ The contract with the app is the artifact set in `configs/model_export_contract.
 | ---------------- | -------------------------------------------------------------------------------------------- |
 | Training         | Python ≥ 3.10 · Ultralytics 8.3+ (YOLO26n-seg) · OpenCV · NumPy · PyTorch                    |
 | Hosted training  | Modal · FastAPI (callback HTTP) · invoked from a Supabase Edge Function                      |
-| Mobile export    | TFLite (Android) · Core ML / `coremltools` (iOS) · NMS-free end-to-end head                  |
+| Mobile export    | TFLite (Android) · Core ML / `coremltools` (iOS) · segmentation head with NMS applied at export |
 | Calibration      | ArUco markers (`px_per_mm`), LiDAR depth (app-side runtime), known-caliper reference         |
 | Registry DB      | Supabase (Postgres + RLS + Realtime + Auth) — shared with the demo app                       |
 | Registry storage | Cloudflare R2 (S3-compatible) — bucket `advance-seeds-models`, browser-issued presigned URLs |
 | Registry API     | Supabase Edge Functions (Deno) under `supabase/functions/`                                   |
 | Registry web UI  | React 19 + Vite 6 + Vitest + TypeScript, in `apps/web/`                                      |
-| Python SDK       | `packages/registry/` (Python) for talking to the registry from training                      |
+| Python SDK       | `src/advance_seeds_ml/registry/` (Python) for talking to the registry from training          |
 | Tests            | stdlib `unittest` (no pytest) for the Python side; Vitest for the web app                    |
 | Notebooks        | Jupyter — `notebooks/train_run.ipynb` for local Colab-style training                         |
 | Spec workflow    | OpenSpec (`openspec/`) — Codex skills under `.codex/skills/`                                 |
@@ -193,7 +193,7 @@ python scripts/write_model_metadata.py \
   --model-version 0.1.0 \
   --source-weights yolo26n-seg.pt \
   --input-size 640 \
-  --classes apple apple_spot banana banana_spot orange orange_spot \
+  --classes banana banana_spot \
   --output models/model-metadata.json
 
 # 4. Copy into the demo app
@@ -218,9 +218,9 @@ The destination is fixed:
 | `task`                              | `instance-segmentation`                                     | the app's `SeedAnalyzer` is segmentation-shaped                                                                                |
 | `input_size`                        | `640`                                                       | app preprocesses to this size                                                                                                  |
 | `mobile_tflite_filename`            | **`yolo11n-seeds.tflite`**                                  | **frozen alias.** The app loads by this exact filename. Renaming requires touching the app's `TfliteSeedAnalyzer` in lockstep. |
-| `output_kind`                       | `end2end_nms_free`                                          | export with NMS baked in; the app does not run external NMS                                                                    |
-| `output_shape`                      | `[1, 300, 6]`                                               | top-300 detections, 6 features per row                                                                                         |
-| `score_threshold` / `iou_threshold` | `0.5` / `0.75`                                              | defaults; can be overridden in `model-metadata.json`                                                                           |
+| `output_kind`                       | `segmentation`                                              | segmentation head; export runs `nms=True`, so the app does not run external NMS                                               |
+| `output_shape`                      | `[1, 300, 38]`                                              | top-300 detections, 38 features per row (box + score + class + mask coeffs)                                                    |
+| `score_threshold` / `iou_threshold` | `0.35` / `0.6`                                              | defaults; can be overridden in `model-metadata.json`                                                                           |
 | `calibration.supported_sources`     | `aruco`, `lidar`, `manual`                                  | the app supports these three; don't add a fourth without aligning the runtime                                                  |
 | `acceptance_targets`                | seg mAP ≥ 0.85, mask mAP ≥ 0.80, measurement error ≤ 0.5 mm | release gate                                                                                                                   |
 

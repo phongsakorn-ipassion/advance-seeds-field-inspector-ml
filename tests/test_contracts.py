@@ -19,10 +19,10 @@ class ContractTests(unittest.TestCase):
             task="instance-segmentation",
             input_size=640,
             class_names=POC_CLASSES,
-            output_kind="end2end_nms_free",
-            output_shape=[1, 300, 6],
-            score_threshold=0.5,
-            iou_threshold=0.75,
+            output_kind="segmentation",
+            output_shape=[1, 300, 38],
+            score_threshold=0.35,
+            iou_threshold=0.6,
         )
         with tempfile.TemporaryDirectory() as tmp:
             path = write_metadata(metadata, Path(tmp) / "model-metadata.json")
@@ -40,10 +40,10 @@ class ContractTests(unittest.TestCase):
             task="instance-segmentation",
             input_size=640,
             class_names=[],
-            output_kind="end2end_nms_free",
-            output_shape=[1, 300, 6],
-            score_threshold=0.5,
-            iou_threshold=0.75,
+            output_kind="segmentation",
+            output_shape=[1, 300, 38],
+            score_threshold=0.35,
+            iou_threshold=0.6,
         )
         with self.assertRaisesRegex(ValueError, "class_names"):
             metadata.validate()
@@ -55,10 +55,10 @@ class ContractTests(unittest.TestCase):
             task="instance-segmentation",
             input_size=640,
             class_names=POC_CLASSES,
-            output_kind="end2end_nms_free",
-            output_shape=[1, 300, 6],
-            score_threshold=0.5,
-            iou_threshold=0.75,
+            output_kind="segmentation",
+            output_shape=[1, 300, 38],
+            score_threshold=0.35,
+            iou_threshold=0.6,
         )
         with tempfile.TemporaryDirectory() as tmp:
             path = write_metadata(metadata, Path(tmp) / "model-metadata.json")

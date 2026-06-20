@@ -69,7 +69,7 @@ design tokens ให้ route ไป `../advance-seeds-field-inspector-demo/`
   `scripts/train_yolo26n_seg.py`, `scripts/train_for_run.py`
 - mobile export: `scripts/export_mobile_model_candidates.py`,
   `scripts/export_to_demo.py`
-- registry SDK: `packages/registry/`
+- registry SDK: `src/advance_seeds_ml/registry/`
 
 ## คำสั่งหลัก
 

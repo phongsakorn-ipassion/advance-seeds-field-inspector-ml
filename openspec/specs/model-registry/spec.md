@@ -1,7 +1,16 @@
 # model-registry Specification
 
 ## Purpose
-TBD - created by archiving change add-model-registry-backend. Update Purpose after archive.
+Define the backend model registry that stores, versions, and serves on-device
+segmentation models to the mobile app. It owns the Supabase schema (`model_lines`,
+`runs`, `versions`, `channels`, `channel_deployments`) plus RLS, the Cloudflare R2
+artifact storage with admin-gated signed upload/download URLs, the channel pointer
+indirection that decouples promotion from client delivery, the server-computed OTA
+`compat_signature`, and the mobile-facing Edge Functions (`resolve-channel`,
+`list-deployed-models`) that resolve a channel to platform-specific (TF Lite / Core
+ML / PyTorch) artifacts. Each version is one logical segmentation package carrying
+per-platform artifacts, quantization/precision modes, and normalized model-quality
+metrics.
 ## Requirements
 ### Requirement: Channel pointer indirection
 Each `(model_line, channel_name)` pair SHALL be a single row whose
@@ -35,7 +44,12 @@ channel's current version.
 
 ### Requirement: Artifact uploads require admin
 The `upload-artifact` Edge Function SHALL refuse callers whose JWT lacks
-the `admin` role, and SHALL return a one-hour R2 signed PUT URL otherwise.
+the `admin` role, and SHALL return a 15-minute R2 signed PUT URL otherwise.
+
+> **Review TODO:** a 15-minute (900s) PUT TTL may be too short for large
+> artifact uploads on slow connections. Flagged for review; the current code
+> default (`presignPut` `expiresIn = 900` in `supabase/functions/_shared/r2.ts`)
+> is unchanged.
 
 #### Scenario: Anonymous upload is rejected
 - **WHEN** an anonymous client calls `upload-artifact`
