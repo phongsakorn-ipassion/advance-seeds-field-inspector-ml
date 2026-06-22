@@ -33,11 +33,25 @@ canonical: true
   as the frozen example. These diverge for any >2-class model until re-frozen.
 - **Resolution path:** re-freeze the contract example as part of D-V8-CLASSES rollout.
 
-## D1 (referenced, cross-repo) — registry metadata vocabulary
-- Mentioned in `openspec/changes/align-registry-metadata-strings/proposal.md` as the
-  demo repo's `advance-seeds-brain` drift D1 (registry wrote `output_kind:
-  segmentation-mask` / `task: segmentation`, outside the contract vocab). Not in this
-  vault's scope yet — flagged for a future ingest of the registry callback path.
+## D1 — registry metadata vocabulary (in-flight OpenSpec change)
+- **Status:** open (tracked by OpenSpec `align-registry-metadata-strings`)
+- The registry/callback path and some example/test metadata use `output_kind:
+  segmentation-mask` / `task: segmentation`, **outside** the contract vocab
+  (`output_kind: segmentation`, `task: instance-segmentation`; see
+  [[model-export-contract]]). Today nothing breaks only because the app overwrites these
+  with hardcoded values. Feeds [[compat-signature]] — changing these strings changes the
+  signature → `rebuild_required`.
+- **Resolution path:** the `align-registry-metadata-strings` change (emit contract vocab
+  from `training-callback`; remove the app's silent overwrite; coordinate the cutover).
+  See [[edge-functions]].
+
+## D-CHANNEL-DUAL — two ways to track the deployed version
+- **Status:** open (legacy field retained)
+- `channels.current_version_id` (legacy) and `channel_deployments` (current) both encode
+  "what's deployed"; `resolve-channel` still reads the legacy field in places. If they
+  diverge, mobile can resolve a stale version. Read from `channel_deployments`.
+- See [[model-registry-db]], [[web-dashboard]].
 
 ## Related
-- [[model-export-contract]] · [[dataset-pipeline]]
+- [[model-export-contract]] · [[compat-signature]] · [[dataset-pipeline]]
+- [[model-registry-db]] · [[edge-functions]]

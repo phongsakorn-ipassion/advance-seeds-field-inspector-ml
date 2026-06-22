@@ -2,6 +2,33 @@
 
 Prefix entries `## [YYYY-MM-DD] <mode> | <scope>` so `grep "^## \[" log.md | tail` works.
 
+## [2026-06-22] ingest | full ml-repo (registry, edge fns, web, training, worker, SDK, calibration)
+
+**Mode:** ingest (full ml-repo sweep). Dispatched 4 read-only research agents in parallel
+(registry DB+storage; edge functions; web dashboard; training+calibration+worker+SDK),
+each returning a cited fact-sheet; wrote pages from those.
+
+**Pages written:** `ml-repo/architecture` (resolves the prior dangling link);
+`ml-repo/document/{model-registry-db, edge-functions, web-dashboard, training-driver,
+training-worker, python-registry-sdk, calibration}`; `shared/compat-signature` (new
+canonical contract). Updated `shared/drift-register` (D1 detail, new D-CHANNEL-DUAL) and
+`index`. Vault now 23 pages; link lint clean.
+
+**Key findings / non-obvious truths captured:**
+- [[compat-signature]] is computed in TWO places (Postgres trigger + `_shared/compat.ts`)
+  that must produce byte-identical canonical JSON; adding a class flips it → all clients
+  get `rebuild_required`. Made it a canonical page.
+- D1: registry/callback metadata uses `segmentation-mask`/`segmentation` vocab outside the
+  contract; only survives because the app overwrites it. Tracked by in-flight OpenSpec
+  `align-registry-metadata-strings`.
+- D-CHANNEL-DUAL: `channels.current_version_id` (legacy) vs `channel_deployments` (current).
+- Hosted training is a manual Colab hand-off; runs sit `running` until flagged stalled (>1h).
+- Per-platform quantization lives only in the Colab `train_for_run.py` path — the local
+  entry point and the Modal worker use Ultralytics export defaults (FP32).
+- `tflite_r2_key` is nullable; the "min one platform" export constraint was dropped.
+
+**Also this turn:** pushed branch `feat/v8-dataset-and-class-agnostic-export`; opened PR #4.
+
 ## [2026-06-22] init | bootstrap (seed scope) + this session's work
 
 **Mode:** init (seed, not full ingest). Vault created at `brain/` in the ml repo.
