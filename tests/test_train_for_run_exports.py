@@ -168,6 +168,35 @@ class TrainForRunExportTests(unittest.TestCase):
 
         self.assertEqual(target, repo)
 
+    def test_verify_bundle_layout_passes_when_splits_present(self):
+        # type-first archive, type-first YAML splits — should not raise.
+        self.module._verify_bundle_layout(
+            ["images/train/a.jpg", "images/val/b.jpg", "labels/train/a.txt"],
+            {"train": "images/train", "val": "images/val", "test": "images/test"},
+            None,
+        )
+
+    def test_verify_bundle_layout_passes_for_repo_relative_archive(self):
+        self.module._verify_bundle_layout(
+            ["data/processed/images/train/a.jpg", "data/processed/images/val/b.jpg"],
+            {"train": "images/train", "val": "images/val"},
+            Path("data/processed"),
+        )
+
+    def test_verify_bundle_layout_raises_on_split_first_yaml_vs_type_first_bundle(self):
+        # The reported failure: YAML still uses Roboflow split-first paths but the
+        # bundle is the clean type-first layout. Must fail early and clearly.
+        with self.assertRaises(SystemExit) as ctx:
+            self.module._verify_bundle_layout(
+                ["images/train/a.jpg", "images/val/b.jpg", "labels/train/a.txt"],
+                {"train": "train/images", "val": "valid/images", "test": "test/images"},
+                None,
+            )
+        message = str(ctx.exception)
+        # names the offending declared split and surfaces what the bundle holds.
+        self.assertIn("valid/images", message)
+        self.assertIn("images/val", message)
+
     def test_coreml_export_includes_default_nms(self):
         config = {"data": "/tmp/dataset.yaml", "imgsz": 640}
         kwargs = self.module.export_kwargs("coreml", config, True)

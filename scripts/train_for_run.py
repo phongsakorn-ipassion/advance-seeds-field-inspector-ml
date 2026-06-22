@@ -406,6 +406,7 @@ def materialize_dataset_bundle(client: RegistryClient, bundle_ref: str, dataset_
 
     with zipfile.ZipFile(local_zip) as archive:
         names = [name for name in archive.namelist() if name and not name.endswith("/")]
+        _verify_bundle_layout(names, doc, repo_relative_root)
         target = _dataset_bundle_extract_target(names, doc, dataset_root, repo_root, repo_relative_root)
         target.mkdir(parents=True, exist_ok=True)
         print(f"Extracting dataset bundle {local_zip} -> {target}")
@@ -420,6 +421,52 @@ def _relative_to_or_none(path: Path, parent: Path) -> Path | None:
         return None
 
 
+def _bundle_split_paths(dataset: dict) -> list[str]:
+    return [
+        str(value).strip().strip("/")
+        for value in (dataset.get("train"), dataset.get("val") or dataset.get("validation"), dataset.get("test"))
+        if isinstance(value, str) and value.strip()
+    ]
+
+
+def _verify_bundle_layout(names: list[str], dataset: dict, repo_relative_root: Path | None) -> None:
+    """Fail early (and clearly) when the YAML's splits don't match the bundle.
+
+    The dashboard uploads the dataset YAML and the dataset ZIP independently, so
+    a stale YAML (e.g. Roboflow split-first `valid/images`) can be paired with a
+    type-first bundle (`images/val/...`). Ultralytics only discovers this deep in
+    `check_det_dataset` with a cryptic "images not found" error. Catching it here,
+    against the archive contents, points the operator straight at the fix.
+    """
+    normalized = [name.lstrip("./") for name in names]
+    split_paths = _bundle_split_paths(dataset)
+    if not split_paths:
+        return
+
+    prefixes = [split_paths]
+    if repo_relative_root is not None:
+        root_prefix = str(repo_relative_root).strip("/")
+        if root_prefix:
+            prefixes.append([f"{root_prefix}/{split}" for split in split_paths])
+
+    present = any(
+        any(any(name.startswith(f"{candidate}/") for name in normalized) for candidate in group)
+        for group in prefixes
+    )
+    if present:
+        return
+
+    # None of the declared splits exist in the archive — surface both sides.
+    bundle_dirs = sorted({"/".join(name.split("/")[:2]) for name in normalized if "/" in name})
+    raise SystemExit(
+        "Dataset YAML and dataset bundle disagree on layout.\n"
+        f"  YAML declares splits: {split_paths}\n"
+        f"  Bundle top-level dirs: {bundle_dirs}\n"
+        "Upload a data.yaml whose train/val/test paths match the bundle "
+        "(the clean dataset-v4 convention is type-first: images/train, images/val, images/test)."
+    )
+
+
 def _dataset_bundle_extract_target(
     names: list[str],
     dataset: dict,
@@ -428,11 +475,7 @@ def _dataset_bundle_extract_target(
     repo_relative_root: Path | None,
 ) -> Path:
     normalized = [name.lstrip("./") for name in names]
-    split_paths = [
-        str(value).strip().strip("/")
-        for value in (dataset.get("train"), dataset.get("val") or dataset.get("validation"), dataset.get("test"))
-        if isinstance(value, str) and value.strip()
-    ]
+    split_paths = _bundle_split_paths(dataset)
     if split_paths and any(any(name.startswith(f"{split}/") for name in normalized) for split in split_paths):
         return dataset_root
     if repo_relative_root is not None:
