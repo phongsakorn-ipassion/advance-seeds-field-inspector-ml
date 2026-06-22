@@ -16,7 +16,41 @@ from advance_seeds_ml.contracts import ModelMetadata, write_metadata
 from advance_seeds_ml.training import materialize_ultralytics_dataset_config
 
 
+# Fallback only — the real class list is derived from the trained model's
+# `model.names` at export time (see resolve_class_names). Kept so a model that
+# somehow ships without names still produces a valid (if generic) metadata file.
 CLASS_NAMES = ["banana", "banana_spot"]
+
+
+def resolve_class_names(
+    names: dict[int, str] | list[str],
+    fallback: list[str] | None = None,
+) -> list[str]:
+    """Turn a model's class map into the ordered list the metadata contract needs.
+
+    Ultralytics exposes `model.names` as a {class_index: name} dict whose key
+    order is not guaranteed. The exported `model-metadata.json` must list names
+    in class-index order (index 0 first), because the app maps a detection's
+    integer `class_id` straight into this array.
+
+    Args:
+        names: either a {index: name} dict (from `model.names`) or an already
+            ordered list of names.
+        fallback: class names to use when `names` is empty/missing.
+
+    Returns:
+        Class names ordered by class index.
+
+    Raises:
+        ValueError: when no names can be resolved (empty input and no fallback).
+            An empty class list would fail ModelMetadata.validate() downstream.
+    """
+    ordered = list(names) if isinstance(names, list) else [names[i] for i in sorted(names)]
+    if not ordered:
+        ordered = list(fallback) if fallback else []
+    if not ordered:
+        raise ValueError("could not resolve any class names for model metadata")
+    return ordered
 
 
 @dataclass(frozen=True)
@@ -135,7 +169,7 @@ def export_model(
         input_size=imgsz,
         source_weights=str(candidate.weights),
         mobile_tflite_filename=f"{candidate.key}.tflite",
-        class_names=CLASS_NAMES,
+        class_names=resolve_class_names(model.names, fallback=CLASS_NAMES),
         output_kind="segmentation",
         output_shape=[1, 300, 38],
         score_threshold=0.35,
