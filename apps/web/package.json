@@ -11,17 +11,16 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.1",
-    "@vitejs/plugin-react": "^5.1.2",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "typescript": "^5.7.2",
-    "vite": "^6.0.3"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitest/ui": "^4.1.5",
+    "@vitejs/plugin-react": "^5.1.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
     "vitest": "^4.1.5"
   }
 }

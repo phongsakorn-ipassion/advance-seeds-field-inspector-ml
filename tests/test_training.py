@@ -108,6 +108,34 @@ class TrainingConfigTests(unittest.TestCase):
         self.assertIn("2: banana", contents)
         self.assertIn("3: banana_spot", contents)
 
+    def test_materialize_ultralytics_dataset_config_defaults_missing_path_to_yaml_dir(self):
+        # A clean dataset bundle (images/ + labels/ only) ships a YAML whose
+        # splits are relative to the YAML's own location and omits `path:`.
+        # The bundle extractor already tolerates this; materialize must too.
+        with tempfile.TemporaryDirectory() as tmp:
+            config_dir = Path(tmp) / "configs"
+            config_dir.mkdir()
+            for split in ("train", "val"):
+                (config_dir / "images" / split).mkdir(parents=True)
+            data_config = config_dir / "data.yaml"
+            data_config.write_text(
+                "\n".join(
+                    [
+                        "train: images/train",
+                        "val: images/val",
+                        "names:",
+                        "  0: banana",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            resolved = materialize_ultralytics_dataset_config(
+                {"data": str(data_config), "model": "yolo26n-seg.pt"},
+                Path(tmp) / "runs" / "_runtime_datasets",
+            )
+            contents = Path(resolved["data"]).read_text(encoding="utf-8")
+        self.assertIn(f"path: {config_dir.resolve()}", contents)
+
     def test_materialize_ultralytics_dataset_config_recovers_from_nested_colab_clone(self):
         with tempfile.TemporaryDirectory() as tmp:
             outer = Path(tmp) / "advance-seeds-field-inspector-ml"

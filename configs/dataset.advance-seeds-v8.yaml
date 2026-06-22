@@ -1,0 +1,29 @@
+# Advance Seeds Field Inspector — Roboflow export v8 (dataset-v2), YOLO26-seg.
+# Restructured from the split-first Roboflow layout into the repo's canonical
+# type-first layout (images/{train,val,test} + labels/{train,val,test}).
+#
+# Source: roboflow ai-bglnm/advance-seeds-field-inspector v8 (CC BY 4.0)
+#   https://universe.roboflow.com/ai-bglnm/advance-seeds-field-inspector/dataset/8
+# Preprocessing (per export): auto-orient + EXIF strip, resize 640x640 (stretch).
+# Augmentation: 3x per source — hflip 50%, rotate ±10°, brightness ±10%, blur 0-1px.
+
+path: ../data/processed/advance-seeds-v8
+train: images/train
+val: images/val
+test: images/test
+
+# NOTE: data.yaml in the export listed 'banana_ spot' (stray space) — normalized
+# to banana_spot here. Labels carry class ids 0-3.
+names:
+  0: banana
+  1: banana_spot
+  2: pepper
+  3: watermelon
+
+metadata:
+  client: Advance Seeds Co., Ltd.
+  task: instance-segmentation
+  marker_mm: 50.0
+  split_policy: split-by-image
+  source: roboflow:ai-bglnm/advance-seeds-field-inspector@v8
+  input_size: 640

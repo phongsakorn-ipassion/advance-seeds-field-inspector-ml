@@ -150,7 +150,10 @@ def materialize_ultralytics_dataset_config(config: dict[str, Any], runtime_dir: 
     resolved = dict(config)
     data_path = Path(str(resolved["data"])).expanduser().resolve()
     dataset = _read_yaml_mapping(data_path)
-    dataset_root = Path(str(dataset["path"])).expanduser()
+    # A clean dataset bundle (images/ + labels/ only) ships a YAML whose splits
+    # are relative to the YAML's own location and omits `path:`. Default to "."
+    # so it resolves against the YAML dir, matching materialize_dataset_bundle.
+    dataset_root = Path(str(dataset.get("path", "."))).expanduser()
     if not dataset_root.is_absolute():
         dataset_root = (data_path.parent / dataset_root).resolve()
     dataset_root = _resolve_existing_dataset_root(dataset, dataset_root)
