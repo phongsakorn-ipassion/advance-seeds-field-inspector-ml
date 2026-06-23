@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
+from urllib import error as urllib_error
 from urllib import request as urllib_request
 
 
@@ -208,11 +209,27 @@ class RegistryClient:
 
 def urllib_transport(method: str, url: str, headers: dict[str, str], body: bytes | None) -> Any:
     req = urllib_request.Request(url, data=body, headers=headers, method=method)
-    with urllib_request.urlopen(req) as response:
-        data = response.read()
-        if not data:
-            return {}
-        return json.loads(data.decode("utf-8"))
+    try:
+        with urllib_request.urlopen(req) as response:
+            data = response.read()
+            if not data:
+                return {}
+            return json.loads(data.decode("utf-8"))
+    except urllib_error.HTTPError as exc:
+        # PostgREST / Edge Functions put the actual reason in the response body
+        # (constraint name, missing column, etc.). Surface it instead of a bare
+        # "HTTP Error 400: Bad Request" so failures are diagnosable from the log.
+        try:
+            detail = exc.read().decode("utf-8", "replace").strip()
+        except Exception:  # pragma: no cover - body already consumed/closed
+            detail = ""
+        # Strip the host so service-role keys never leak via the path/query.
+        endpoint = url.split("//", 1)[-1].split("/", 1)
+        endpoint = "/" + endpoint[1] if len(endpoint) == 2 else url
+        message = f"registry request failed: {method} {endpoint} -> HTTP {exc.code} {exc.reason}"
+        if detail:
+            message = f"{message}: {detail}"
+        raise RegistryError(message) from exc
 
 
 def _first_row(response: Any) -> dict[str, Any]:

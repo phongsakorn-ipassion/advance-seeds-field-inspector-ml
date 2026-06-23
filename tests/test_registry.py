@@ -1,12 +1,16 @@
+import io
 import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from advance_seeds_ml.registry import RegistryClient, RegistryConfig, RegistryConfigError
+from advance_seeds_ml.registry.client import RegistryError, urllib_transport
 
 
 class RecordingTransport:
@@ -191,6 +195,41 @@ class RegistryClientTests(unittest.TestCase):
         self.assertEqual(body["pytorch_r2_key"], "runs/run-1/1.0.0.pt")
         self.assertEqual(body["size_bytes"], 11)
         self.assertEqual(body["content_hash"], "sha256:abc")
+
+
+class UrllibTransportErrorTests(unittest.TestCase):
+    def test_http_error_surfaces_status_and_response_body(self):
+        body = json.dumps(
+            {
+                "code": "23502",
+                "message": 'null value in column "tflite_r2_key" violates not-null constraint',
+            }
+        ).encode("utf-8")
+
+        def fake_urlopen(req):
+            raise urllib_error.HTTPError(
+                req.full_url, 400, "Bad Request", {}, io.BytesIO(body)
+            )
+
+        original = urllib_request.urlopen
+        urllib_request.urlopen = fake_urlopen
+        try:
+            with self.assertRaises(RegistryError) as ctx:
+                urllib_transport(
+                    "POST",
+                    "http://registry.local/rest/v1/versions?select=*",
+                    {"content-type": "application/json"},
+                    b"{}",
+                )
+        finally:
+            urllib_request.urlopen = original
+
+        message = str(ctx.exception)
+        self.assertIn("400", message)
+        self.assertIn("POST", message)
+        self.assertIn("/rest/v1/versions", message)
+        self.assertIn("tflite_r2_key", message)
+        self.assertIn("23502", message)
 
 
 if __name__ == "__main__":
