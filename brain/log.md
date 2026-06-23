@@ -62,3 +62,32 @@ canonical contract). Updated `shared/drift-register` (D1 detail, new D-CHANNEL-D
 - Training/registry are fully data-driven for classes; export was the only hardcoded spot.
 - Drift: v8 classes vs banana-only contract/app (D-V8-CLASSES, D-EXPORT-CLASSES).
 - The export module keeps `import ultralytics` inside the function so tests run CPU-only.
+
+## [2026-06-23] ingest | registry SDK hardening (NaN-safe JSON, surfaced errors) + Colab Step-5 drift
+
+**Mode:** ingest. Source of truth: code merged to `main` (PR #6 `8e79a4bc`, PR #7 `9af39393`)
++ two Colab Step-5 run logs. Confirmed every claim against `src/advance_seeds_ml/registry/client.py`.
+
+**Pages written:** `ml-repo/document/python-registry-sdk` (two new invariants + a 400-is-a-
+backend-problem footgun); `shared/drift-register` (new D-CLOUD-MIGRATION-DRIFT, D-TFLITE-ONNX2TF);
+`ml-repo/document/model-registry-db` (cloud-lags-repo warning on the nullable migration).
+
+**Work done this session (reflected in pages):**
+- `urllib_transport` now catches `HTTPError` and raises `RegistryError` with the PostgREST
+  body (host stripped so the service-role key can't leak) — `client.py:219`. Previously a
+  bare "HTTP 400" with the body discarded, making registry failures undiagnosable.
+- `_json` now runs `_sanitize_json` (`client.py:190`,`236`): recursively coerces
+  `NaN`/`±Infinity` → `null`. Fixes `log_metrics` `PGRST102 "Empty or invalid json"` caused
+  by NaN training metrics serialized as bare `NaN` tokens (invalid JSON). Suite 79 → 81 green.
+
+**Key findings / non-obvious truths captured:**
+- Two Step-5 failures, one root cause class each: (1) NaN-in-JSON → PGRST102 (fixed in code);
+  (2) `create_version` 400 = cloud DB still enforces `tflite_r2_key NOT NULL` despite repo
+  migration `20260521000002` → **D-CLOUD-MIGRATION-DRIFT** (needs `supabase db push`).
+- The error-surfacing fix paid off immediately: it exposed the PGRST102 reason in one run
+  instead of another GPU cycle of guessing — observability at the boundary compounds.
+- TFLite export keeps failing through `onnx2tf` on the YOLO26-seg end2end head (different
+  error each run) → **D-TFLITE-ONNX2TF**; this is why `tflite_r2_key` is null. CoreML +
+  PyTorch still export fine. Android export deferred by decision.
+- Training itself is healthy: 50-epoch run hit seg mAP50 0.762 (banana 0.962, watermelon
+  0.943, pepper 0.753; banana_spot weak at 0.389 — a data/class problem, not a pipeline bug).

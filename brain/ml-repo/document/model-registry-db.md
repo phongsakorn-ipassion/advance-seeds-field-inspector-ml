@@ -48,6 +48,10 @@ canonical: true
   (`20260521000003`).
 
 ## Gotchas / footguns
+> [!warning] These migrations describe **repo** state. The cloud project can lag — the
+> nullable `tflite_r2_key` migration was not pushed to cloud, so a CoreML-only run 400'd.
+> Apply with `supabase db push`. Tracked in [[drift-register]] (D-CLOUD-MIGRATION-DRIFT).
+
 > [!warning] `channels.current_version_id` (legacy) and `channel_deployments` (current)
 > are **two ways** to track the deployed version. Read from `channel_deployments`; if
 > they diverge, mobile can get a stale version. Tracked in [[drift-register]] (D-CHANNEL-DUAL).

@@ -4,8 +4,8 @@ type: reference
 status: active
 tags: [drift, contract]
 created: 2026-06-22
-updated: 2026-06-22
-sources: [configs/model_export_contract.json, configs/dataset.advance-seeds-v8.yaml, scripts/export_mobile_model_candidates.py]
+updated: 2026-06-23
+sources: [configs/model_export_contract.json, configs/dataset.advance-seeds-v8.yaml, scripts/export_mobile_model_candidates.py, supabase/migrations/20260521000002_versions_tflite_nullable.sql, scripts/train_for_run.py]
 canonical: true
 ---
 
@@ -44,6 +44,39 @@ canonical: true
 - **Resolution path:** the `align-registry-metadata-strings` change (emit contract vocab
   from `training-callback`; remove the app's silent overwrite; coordinate the cutover).
   See [[edge-functions]].
+
+## D-CLOUD-MIGRATION-DRIFT — cloud registry DB lags repo migrations
+- **Status:** open (needs `supabase db push` to the cloud project)
+- The repo migration `20260521000002_versions_tflite_nullable.sql` drops
+  `NOT NULL` from `versions.tflite_r2_key`, and [[model-registry-db]] documents the
+  column as nullable. **Cloud reality diverges:** on 2026-06-23 a Colab run whose TFLite
+  export failed sent `tflite_r2_key=null` and `create_version` got `HTTP 400` — the
+  cloud DB still enforces `NOT NULL` because the migration was never pushed there.
+- **Why it matters:** any CoreML/PyTorch-only run (TFLite disabled or failed) cannot
+  record a version until cloud catches up. Migrations auto-apply only to the *local*
+  `supabase db reset` stack; the cloud project needs an explicit push.
+- **Resolution path:** `supabase db push` to `advance-seeds-model-registry`, or run the
+  idempotent DDL in the SQL editor:
+  `alter table public.versions alter column tflite_r2_key drop not null;`
+  Then re-verify with `information_schema.columns`. After a 400, check the touched column
+  in cloud before assuming an SDK bug ([[python-registry-sdk]] now surfaces the PostgREST
+  reason in the error).
+
+## D-TFLITE-ONNX2TF — YOLO26-seg end2end export to TFLite is unstable
+- **Status:** open (Android export deferred; CoreML + PyTorch still ship)
+- The Colab/worker export path repeatedly fails converting the YOLO26-seg **end2end**
+  head through `onnx2tf` (1.28.8), with a *different* error each run (e.g.
+  `UnboundLocalError: dummy_tensor` on `model.23/Mul_3`; `CUDA_ERROR_INVALID_HANDLE` on
+  `model.2/Slice`). `nms=True` is forced off for end2end models. CoreML and PyTorch
+  exports from the same `best.pt` succeed.
+- **Why it matters:** the frozen [[model-export-contract]] still lists
+  `yolo11n-seeds.tflite` as required for the Android app, but runs currently produce no
+  `.tflite`. This is the upstream cause of the null `tflite_r2_key` in
+  D-CLOUD-MIGRATION-DRIFT. `train_for_run.py` tolerates a failed export (records
+  `precision: "failed"`, still creates the version) — see [[training-driver]].
+- **Resolution path:** pin a known-good `onnx2tf`, try static-shape (`-b`/`-ois`) or
+  `-onwdt` flags, or export TFLite from a non-end2end variant; then reconcile the
+  contract. Tracked as a separate task.
 
 ## D-CHANNEL-DUAL — two ways to track the deployed version
 - **Status:** open (legacy field retained)
