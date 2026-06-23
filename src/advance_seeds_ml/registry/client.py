@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import mimetypes
 import os
 import shutil
@@ -186,7 +187,7 @@ class RegistryClient:
         }
         if prefer_return:
             headers["prefer"] = "return=representation"
-        body = json.dumps(payload).encode("utf-8")
+        body = json.dumps(_sanitize_json(payload)).encode("utf-8")
         response = self._request(method, path, headers, body)
         return response
 
@@ -230,6 +231,25 @@ def urllib_transport(method: str, url: str, headers: dict[str, str], body: bytes
         if detail:
             message = f"{message}: {detail}"
         raise RegistryError(message) from exc
+
+
+def _sanitize_json(value: Any) -> Any:
+    """Recursively replace non-finite floats (NaN/Infinity) with None.
+
+    Python's ``json.dumps`` emits bare ``NaN``/``Infinity`` tokens by default,
+    which are valid Python-json output but invalid JSON per spec. PostgREST
+    rejects such bodies with PGRST102 ("Empty or invalid json"), and Postgres
+    JSON columns cannot store them anyway. Training metrics (losses, mAP) are
+    routinely NaN early in a run, so sanitize at the serialization boundary
+    once for every payload instead of at each call site.
+    """
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: _sanitize_json(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_sanitize_json(item) for item in value]
+    return value
 
 
 def _first_row(response: Any) -> dict[str, Any]:

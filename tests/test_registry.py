@@ -197,6 +197,53 @@ class RegistryClientTests(unittest.TestCase):
         self.assertEqual(body["content_hash"], "sha256:abc")
 
 
+class JsonSanitizationTests(unittest.TestCase):
+    def test_log_metrics_replaces_non_finite_values_with_null(self):
+        transport = RecordingTransport([[]])
+        client = RegistryClient(RegistryConfig("http://registry.local", "service-key"), transport=transport)
+
+        client.log_metrics(
+            "run-1",
+            [
+                {"step": 1, "epoch": 1, "name": "train/loss", "value": float("nan")},
+                {"step": 1, "epoch": 1, "name": "metrics/mAP50", "value": float("inf")},
+                {"step": 1, "epoch": 1, "name": "lr", "value": -float("inf")},
+                {"step": 1, "epoch": 1, "name": "progress", "value": 2.0},
+            ],
+        )
+
+        raw_body = transport.requests[0]["body"].decode("utf-8")
+        # PostgREST rejects bare NaN/Infinity tokens (PGRST102). The wire body
+        # must be strict, parseable JSON.
+        self.assertNotIn("NaN", raw_body)
+        self.assertNotIn("Infinity", raw_body)
+        body = json.loads(raw_body)  # would raise on bare NaN/Infinity
+        self.assertIsNone(body[0]["value"])
+        self.assertIsNone(body[1]["value"])
+        self.assertIsNone(body[2]["value"])
+        self.assertEqual(body[3]["value"], 2.0)
+
+    def test_create_version_sanitizes_non_finite_in_nested_metadata(self):
+        transport = RecordingTransport([[{"id": "version-1"}]])
+        client = RegistryClient(RegistryConfig("http://registry.local", "service-key"), transport=transport)
+
+        client.create_version(
+            run_id="run-1",
+            model_line_id="line-1",
+            semver="1.0.0",
+            metadata={"metrics": {"raw": {"map50": float("nan"), "recall": 0.5}}},
+            tflite_r2_key="runs/run-1/1.0.0.tflite",
+            size_bytes=11,
+            content_hash="sha256:abc",
+        )
+
+        raw_body = transport.requests[0]["body"].decode("utf-8")
+        self.assertNotIn("NaN", raw_body)
+        body = json.loads(raw_body)
+        self.assertIsNone(body["metadata"]["metrics"]["raw"]["map50"])
+        self.assertEqual(body["metadata"]["metrics"]["raw"]["recall"], 0.5)
+
+
 class UrllibTransportErrorTests(unittest.TestCase):
     def test_http_error_surfaces_status_and_response_body(self):
         body = json.dumps(
