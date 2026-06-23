@@ -4,7 +4,7 @@ type: reference
 status: active
 tags: [sdk, registry, python, http]
 created: 2026-06-22
-updated: 2026-06-22
+updated: 2026-06-23
 sources: [src/advance_seeds_ml/registry/client.py, src/advance_seeds_ml/registry/__init__.py]
 canonical: false
 ---
@@ -33,6 +33,16 @@ canonical: false
   uses `1.0.0-{run_id[:8]}`, the worker `0.1.{run_id[:8]}`).
 - `tflite_r2_key`/`mlmodel_r2_key` may be None (failed export); the SDK passes metadata
   through without schema validation (backend is authoritative).
+- **Non-finite JSON is sanitized at the wire boundary.** `_json` runs `_sanitize_json`
+  (`client.py:190`,`236`) which recursively coerces `NaN`/`±Infinity` floats → `null`
+  before `json.dumps`. Training metrics (losses, mAP) are routinely NaN early in a run;
+  `json.dumps` would otherwise emit bare `NaN` tokens — invalid JSON that PostgREST
+  rejects with `PGRST102 "Empty or invalid json"`. Applies to *every* payload
+  (`log_metrics`, `create_version`, …). Added 2026-06-23 (PR #7).
+- **HTTP errors surface the response body.** `urllib_transport` catches `HTTPError`
+  (`client.py:219`) and raises `RegistryError` with method, host-stripped endpoint,
+  status, and the PostgREST detail (the host is stripped so the service-role key can't
+  leak into logs). Added 2026-06-23 (PR #6).
 
 ## Gotchas / footguns
 > [!warning] No retries — a transient registry outage fails training immediately.
@@ -40,6 +50,10 @@ canonical: false
 
 > [!warning] urllib transport reads the full response into memory; no pagination, no
 > version-query API (read versions via Supabase REST directly if needed).
+
+> [!warning] A `create_version` `HTTP 400` is usually a **backend/schema** problem, not
+> an SDK bug — e.g. the cloud DB rejecting a null `tflite_r2_key` (see [[drift-register]]
+> D-CLOUD-MIGRATION-DRIFT). The error message now carries the PostgREST reason; read it.
 
 ## Related
 - [[edge-functions]] · [[model-registry-db]] · [[training-driver]] · [[training-worker]]
