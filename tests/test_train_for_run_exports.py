@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import os
 import tempfile
 import unittest
@@ -205,32 +206,27 @@ class TrainForRunExportTests(unittest.TestCase):
         self.assertAlmostEqual(kwargs["iou"], 0.7)
         self.assertAlmostEqual(kwargs["conf"], 0.25)
 
-    def test_cpu_only_for_conversion_hides_gpu_then_restores(self):
-        # onnx2tf graph conversion must run on CPU: TF lacks sm_120 kernels for
-        # Blackwell GPUs (cc 12.0), so a visible GPU makes the Cast op fail with
-        # CUDA_ERROR_INVALID_HANDLE at model.2/Slice. See drift D-TFLITE-ONNX2TF.
-        prior = os.environ.get("CUDA_VISIBLE_DEVICES")
-        try:
-            os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-            with self.module.cpu_only_for_conversion():
-                self.assertEqual(os.environ["CUDA_VISIBLE_DEVICES"], "")
-            # restored to whatever it was before the context
-            self.assertEqual(os.environ.get("CUDA_VISIBLE_DEVICES"), "0")
-        finally:
-            if prior is None:
-                os.environ.pop("CUDA_VISIBLE_DEVICES", None)
-            else:
-                os.environ["CUDA_VISIBLE_DEVICES"] = prior
+    def test_tflite_subprocess_cmd_hides_gpu_and_passes_kwargs(self):
+        # The onnx2tf conversion must run in a fresh subprocess with the GPU
+        # hidden from the start: in-process CUDA_VISIBLE_DEVICES changes are
+        # ignored once PyTorch has initialized CUDA during training, so TF still
+        # grabs the GPU and dies on Blackwell (cc 12.0). See drift D-TFLITE-ONNX2TF.
+        kwargs = {"format": "tflite", "imgsz": 640, "end2end": False, "nms": True}
+        argv, env = self.module.build_tflite_subprocess_cmd(Path("/runs/best.pt"), kwargs)
+        self.assertEqual(env["CUDA_VISIBLE_DEVICES"], "")
+        self.assertIn("/runs/best.pt", argv)
+        # kwargs are JSON-round-tripped through the subprocess argv
+        self.assertIn(json.dumps(kwargs), argv)
 
-    def test_cpu_only_for_conversion_restores_absent_var(self):
-        prior = os.environ.pop("CUDA_VISIBLE_DEVICES", None)
-        try:
-            with self.module.cpu_only_for_conversion():
-                self.assertEqual(os.environ["CUDA_VISIBLE_DEVICES"], "")
-            self.assertNotIn("CUDA_VISIBLE_DEVICES", os.environ)
-        finally:
-            if prior is not None:
-                os.environ["CUDA_VISIBLE_DEVICES"] = prior
+    def test_parse_tflite_artifact_reads_marker_line(self):
+        stdout = "noise\nTFLITE_ARTIFACT::/runs/best_saved_model/best_int8.tflite\nmore noise\n"
+        self.assertEqual(
+            self.module.parse_tflite_artifact(stdout),
+            Path("/runs/best_saved_model/best_int8.tflite"),
+        )
+
+    def test_parse_tflite_artifact_returns_none_without_marker(self):
+        self.assertIsNone(self.module.parse_tflite_artifact("just logs\nno artifact\n"))
 
     def test_export_forces_one_to_many_head_so_onnx2tf_can_convert(self):
         # YOLO26's default one-to-one (end2end) head bakes NMS into model.23 and

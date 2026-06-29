@@ -11,7 +11,6 @@ row, the notebook calls this script with --run-id.
 from __future__ import annotations
 
 import argparse
-import contextlib
 import json
 import os
 import platform
@@ -106,29 +105,59 @@ def load_export_options(run_config: dict) -> dict:
     return result
 
 
-@contextlib.contextmanager
-def cpu_only_for_conversion():
-    """Hide CUDA devices for the duration of the block, then restore.
+TFLITE_ARTIFACT_MARKER = "TFLITE_ARTIFACT::"
 
-    The TFLite path runs ONNX->TF via onnx2tf, which is a pure graph rewrite that
-    does not need a GPU. On newer GPUs (e.g. Blackwell, compute capability 12.0)
-    the bundled TensorFlow has no matching CUDA kernels, so its conversion ops
-    (Cast at model.2/Slice) die with CUDA_ERROR_INVALID_HANDLE. Forcing the
-    conversion onto CPU sidesteps the hardware mismatch entirely. PyTorch's
-    training CUDA context (already initialized) is unaffected; TensorFlow reads
-    CUDA_VISIBLE_DEVICES lazily at its first device init, which happens here.
-    See drift-register D-TFLITE-ONNX2TF.
+# Standalone runner executed in a fresh subprocess so the GPU is hidden from
+# TensorFlow at its own CUDA init (see build_tflite_subprocess_cmd).
+_TFLITE_SUBPROCESS_RUNNER = (
+    "import json, sys\n"
+    "from ultralytics import YOLO\n"
+    "kwargs = json.loads(sys.argv[2])\n"
+    "out = YOLO(sys.argv[1]).export(**kwargs)\n"
+    "out = out[0] if isinstance(out, (list, tuple)) else out\n"
+    "print('TFLITE_ARTIFACT::' + str(out))\n"
+)
+
+
+def build_tflite_subprocess_cmd(weights: Path, kwargs: dict) -> tuple[list[str], dict]:
+    """Build the (argv, env) for a CPU-only TFLite export subprocess.
+
+    In-process CUDA_VISIBLE_DEVICES changes do NOT work once PyTorch has
+    initialized a CUDA context during training: the driver has already
+    enumerated the GPU, so TensorFlow (loaded later by onnx2tf) still sees it and
+    dies on GPUs whose kernels it lacks (Blackwell cc 12.0 -> CUDA_ERROR_INVALID_HANDLE
+    at model.2/Slice). A fresh subprocess reads CUDA_VISIBLE_DEVICES="" at its own
+    CUDA init, so the onnx2tf conversion runs on CPU. See drift D-TFLITE-ONNX2TF.
     """
-    sentinel = object()
-    prior = os.environ.get("CUDA_VISIBLE_DEVICES", sentinel)
-    os.environ["CUDA_VISIBLE_DEVICES"] = ""
-    try:
-        yield
-    finally:
-        if prior is sentinel:
-            os.environ.pop("CUDA_VISIBLE_DEVICES", None)
-        else:
-            os.environ["CUDA_VISIBLE_DEVICES"] = prior
+    env = dict(os.environ)
+    env["CUDA_VISIBLE_DEVICES"] = ""
+    argv = [sys.executable, "-c", _TFLITE_SUBPROCESS_RUNNER, str(weights), json.dumps(kwargs)]
+    return argv, env
+
+
+def parse_tflite_artifact(stdout: str) -> Path | None:
+    """Pull the exported artifact path out of the subprocess stdout."""
+    for line in reversed(stdout.splitlines()):
+        if line.startswith(TFLITE_ARTIFACT_MARKER):
+            value = line[len(TFLITE_ARTIFACT_MARKER):].strip()
+            return Path(value) if value else None
+    return None
+
+
+def export_tflite_on_cpu(weights: Path, kwargs: dict) -> Path:
+    """Export TFLite in a clean, GPU-free subprocess and return the artifact path."""
+    argv, env = build_tflite_subprocess_cmd(weights, kwargs)
+    proc = subprocess.run(argv, env=env, capture_output=True, text=True)
+    if proc.stdout:
+        sys.stdout.write(proc.stdout)
+    if proc.stderr:
+        sys.stderr.write(proc.stderr)
+    if proc.returncode != 0:
+        raise RuntimeError(f"TFLite export subprocess failed (exit {proc.returncode})")
+    artifact = parse_tflite_artifact(proc.stdout)
+    if artifact is None:
+        raise RuntimeError("TFLite export subprocess did not report an artifact path")
+    return artifact
 
 
 def export_kwargs(kind: str, config: dict, quantize: bool, nms: dict | None = None) -> dict:
@@ -746,11 +775,11 @@ def main(argv: list[str] | None = None) -> int:
              f"TFLite {precision_label} export starting"
              + (f" (fraction={tflite_export_kwargs.get('fraction')})" if android_quantize else " (no quantization)"))
     try:
-        # Run the ONNX->TF (onnx2tf) conversion on CPU so it can't hit missing
-        # CUDA kernels on newer GPUs (Blackwell cc 12.0). See cpu_only_for_conversion.
-        with cpu_only_for_conversion():
-            export_path = model.export(**tflite_export_kwargs)
-        export_path = export_path[0] if isinstance(export_path, (list, tuple)) else export_path
+        # Export in a fresh subprocess with the GPU hidden: the ONNX->TF (onnx2tf)
+        # conversion must run on CPU to avoid missing CUDA kernels on newer GPUs
+        # (Blackwell cc 12.0). In-process env changes don't work post-training
+        # because PyTorch already initialized CUDA. See export_tflite_on_cpu.
+        export_path = export_tflite_on_cpu(best, tflite_export_kwargs)
         tflite_path = Path(export_path) if export_path else None
         if not tflite_path or not tflite_path.exists():
             raise FileNotFoundError("TFLite export returned no artifact")
