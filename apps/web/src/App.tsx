@@ -2042,15 +2042,15 @@ function ModelDetail({
       run: () => store.undeployChannel(channel, version.id),
     });
   }
-  function askArchive() {
-    if (!isAdmin || isActive || isArchived) return;
+  function askDelete() {
+    if (!isAdmin || isActive) return;
     setActionError(null);
     setPending({
-      title: "Archive model",
-      message: `Archive ${version.semver}. This permanently deletes the stored Android, iOS, and Local QA artifacts, keeps the model metadata as history, and blocks future deployment.`,
-      confirmLabel: "Archive model",
+      title: "Delete model",
+      message: `Permanently delete ${version.semver}. This removes the stored Android, iOS, and Local QA artifacts, deletes this version from Model versions, and deletes its training run (unless another version shares it). This cannot be undone.`,
+      confirmLabel: "Delete model",
       danger: true,
-      run: () => store.archiveVersion(version.id),
+      run: () => store.deleteVersion(version.id),
     });
   }
   async function confirmPending() {
@@ -2247,17 +2247,15 @@ function ModelDetail({
             <ShieldCheck size={14} aria-hidden="true" /> Set {deployment.channel} default
           </button>
         ))}
-        {!isArchived && (
-          <button
-            className="danger-button compact"
-            type="button"
-            disabled={!isAdmin || isActive}
-            title={!isAdmin ? writeTitle : isActive ? "Undeploy this model before archiving it" : "Archive this model, delete stored artifacts, and keep a history record"}
-            onClick={askArchive}
-          >
-            <Archive size={14} aria-hidden="true" /> Archive model
-          </button>
-        )}
+        <button
+          className="danger-button compact"
+          type="button"
+          disabled={!isAdmin || isActive}
+          title={!isAdmin ? writeTitle : isActive ? "Undeploy this model before deleting it" : "Permanently delete this model: artifacts, version, and its training run"}
+          onClick={askDelete}
+        >
+          <Trash2 size={14} aria-hidden="true" /> Delete model
+        </button>
       </div>
     </div>
   );

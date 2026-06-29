@@ -58,7 +58,7 @@ async function handleDelete(versionId: string): Promise<Response> {
   const sb = serviceClient();
   const { data: version, error } = await sb
     .from("versions")
-    .select("id, tflite_r2_key, mlmodel_r2_key, pytorch_r2_key")
+    .select("id, run_id, tflite_r2_key, mlmodel_r2_key, pytorch_r2_key")
     .eq("id", versionId)
     .single();
   if (error || !version) return json({ error: "version not found" }, 404);
@@ -105,7 +105,26 @@ async function handleDelete(versionId: string): Promise<Response> {
 
   const { error: delErr } = await sb.from("versions").delete().eq("id", versionId);
   if (delErr) return json({ error: delErr.message }, 500);
-  return json({ deleted: versionId });
+
+  // Delete the parent training run too, but only when this was its last version.
+  // versions.run_id is ON DELETE SET NULL, so a run shared by sibling versions
+  // must be left intact; deleting it would strip the siblings' run link.
+  // run_metrics cascades from runs, so it is removed with the run.
+  let deletedRunId: string | null = null;
+  if (version.run_id) {
+    const { count, error: sibErr } = await sb
+      .from("versions")
+      .select("id", { count: "exact", head: true })
+      .eq("run_id", version.run_id);
+    if (sibErr) return json({ error: sibErr.message }, 500);
+    if ((count ?? 0) === 0) {
+      const { error: runErr } = await sb.from("runs").delete().eq("id", version.run_id);
+      if (runErr) return json({ error: runErr.message }, 500);
+      deletedRunId = version.run_id;
+    }
+  }
+
+  return json({ deleted: versionId, deleted_run: deletedRunId });
 }
 
 async function handleArchive(versionId: string, archivedBy: string | null): Promise<Response> {

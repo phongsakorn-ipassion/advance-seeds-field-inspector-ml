@@ -42,3 +42,24 @@ Deno.test("POST /delete returns 404 for unknown version (service role)", async (
   await r.body?.cancel();
   assertEquals(r.status, 404);
 });
+
+// Full hard-delete path including parent-run cleanup. Requires a running local
+// stack with a seeded, undeployed version whose run is referenced only by it.
+// Set DELETE_VERSION_ID (and optionally DELETE_RUN_ID) to enable; skipped otherwise.
+Deno.test({
+  name: "POST /delete removes the version and its sole-owner run",
+  ignore: !Deno.env.get("DELETE_VERSION_ID"),
+  fn: async () => {
+    const versionId = Deno.env.get("DELETE_VERSION_ID")!;
+    const expectedRun = Deno.env.get("DELETE_RUN_ID") ?? null;
+    const r = await post("/delete", { version_id: versionId }, SERVICE);
+    assertEquals(r.status, 200);
+    const body = await r.json();
+    assertEquals(body.deleted, versionId);
+    if (expectedRun) assertEquals(body.deleted_run, expectedRun);
+    // The version must be gone from the listing the dashboard reads.
+    const list = await get("", SERVICE);
+    await list.body?.cancel();
+    assertEquals(list.status, 200);
+  },
+});

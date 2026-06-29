@@ -605,12 +605,21 @@ export function createDemoStore(): RegistryStore {
     async downloadArtifact(r2Key) {
       return { downloadUrl: `https://example.invalid/demo-r2/${encodeURIComponent(r2Key)}` };
     },
-    async archiveVersion(versionId) {
+    async deleteVersion(versionId) {
+      // Guard: refuse to delete a version still attached to a channel or actively
+      // deployed (mirrors the backend's 409). Caller must undeploy first.
       if (snapshot.channels.some((channel) => channel.versionId === versionId) || snapshot.deployments.some((d) => d.versionId === versionId)) return;
+      const target = snapshot.versions.find((version) => version.id === versionId);
+      const runId = target?.runId ?? null;
+      const remainingVersions = snapshot.versions.filter((version) => version.id !== versionId);
+      // Drop the parent run only when this was its last version (run_id is
+      // SET NULL on delete server-side, so a shared run must be kept).
+      const runStillUsed = runId !== null && remainingVersions.some((version) => version.runId === runId);
       setSnapshot({
         ...snapshot,
-        versions: snapshot.versions.map((version) => (version.id === versionId ? { ...version, state: "archived" } : version)),
+        versions: remainingVersions,
         storage: snapshot.storage.filter((artifact) => artifact.versionId !== versionId),
+        runs: runId && !runStillUsed ? snapshot.runs.filter((run) => run.id !== runId) : snapshot.runs,
       });
     },
     async uploadDataset(file, modelLineSlug) {
