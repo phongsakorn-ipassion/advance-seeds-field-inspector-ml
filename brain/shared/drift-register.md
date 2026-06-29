@@ -82,11 +82,25 @@ canonical: true
   (`end2end=False`) makes `nms=True` apply at export, producing the *classic* seg head
   `onnx2tf` already handles — while keeping the `[1,300,38]` NMS-applied output, so the
   contract is unchanged and the app still runs no NMS.
-- **Fix applied:** `export_kwargs` (train_for_run.py) and `export_mobile_model_candidates.py`
-  now pass `end2end=False` alongside `nms=True` for both tflite and coreml. Belt-and-
-  suspenders: `pyproject.toml` `[train]` pins `onnx2tf>=1.26.3,<1.28.8` so AutoUpdate
-  can't pull the broken 1.28.8. Verify on the next Colab/Modal run that a `.tflite`
-  artifact lands and `tflite_r2_key` is non-null.
+- **Second root cause (2026-06-29, Blackwell GPU):** on an RTX PRO 6000 (compute
+  capability 12.0) the conversion dies *earlier*, at `model.2/Slice`, with
+  `CUDA_ERROR_INVALID_HANDLE [Op:Cast]` — the bundled TensorFlow has no `sm_120`
+  CUDA kernels (`TensorFlow was not built with CUDA kernel binaries compatible with
+  compute capability 12.0`). onnx2tf conversion is a pure graph rewrite that needs no
+  GPU; it only touched the GPU because one was visible. This is independent of the
+  end2end-head bug and stacks on top of it (A100/cc 8.0 runs skip it and reach the
+  Concat error instead).
+- **Fix applied:** (1) `export_kwargs` (train_for_run.py) and
+  `export_mobile_model_candidates.py` pass `end2end=False` + `nms=True` (tflite & coreml).
+  (2) The TFLite export now runs inside `cpu_only_for_conversion()` (sets
+  `CUDA_VISIBLE_DEVICES=""` for the onnx2tf hop only; PyTorch's training CUDA context is
+  untouched). (3) `pyproject.toml` `[train]` pins `onnx2tf>=1.26.3,<1.28.8`.
+- **Operational note:** the dashboard/Modal worker runs whatever is on `main`, so the
+  fix only takes effect once the PR is **merged** (a run that still logs `Forcing
+  'nms=False'` is running pre-fix code). Verify on the next post-merge run that a
+  `.tflite` artifact lands and `tflite_r2_key` is non-null. If forcing CPU in-process
+  proves unreliable, fall back to running the TFLite export in a subprocess with
+  `CUDA_VISIBLE_DEVICES=""` in its env.
 
 ## D-CHANNEL-DUAL — two ways to track the deployed version
 - **Status:** open (legacy field retained)
