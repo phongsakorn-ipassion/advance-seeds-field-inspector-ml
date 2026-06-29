@@ -784,9 +784,9 @@ export function createSupabaseStore(env: Env): RegistryStore {
       }
       return { downloadUrl: body.download_url };
     },
-    async archiveVersion(versionId) {
+    async deleteVersion(versionId) {
       await adminWrite(async () => {
-        await archiveVersionById(versionId, "archive");
+        await archiveVersionById(versionId, "delete");
         await refresh();
       });
     },

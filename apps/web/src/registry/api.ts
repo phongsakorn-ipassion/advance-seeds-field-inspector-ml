@@ -25,7 +25,7 @@ export type RegistryStore = {
   deployVersion(versionId: string, channel: ChannelName, options?: { setDefault?: boolean }): Promise<void>;
   setChannelDefault(channel: ChannelName, versionId: string): Promise<void>;
   undeployChannel(channel: ChannelName, versionId?: string): Promise<void>;
-  archiveVersion(versionId: string): Promise<void>;
+  deleteVersion(versionId: string): Promise<void>;
   deleteInactiveArtifact(storageId: string): Promise<void>;
   downloadArtifact(r2Key: string): Promise<{ downloadUrl: string }>;
   renameVersion(versionId: string, semver: string): Promise<void>;

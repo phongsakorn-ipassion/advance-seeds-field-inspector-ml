@@ -27,6 +27,29 @@ describe("deployment defaults", () => {
   });
 });
 
+describe("deleteVersion", () => {
+  it("hard-deletes a non-deployed version and its artifacts", async () => {
+    const store = createDemoStore();
+    const before = store.getSnapshot();
+    expect(before.versions.some((v) => v.id === "version-old-v1-070")).toBe(true);
+
+    await store.deleteVersion("version-old-v1-070");
+
+    const after = store.getSnapshot();
+    expect(after.versions.some((v) => v.id === "version-old-v1-070")).toBe(false);
+    expect(after.storage.some((s) => s.versionId === "version-old-v1-070")).toBe(false);
+  });
+
+  it("refuses to delete a version still deployed to a channel", async () => {
+    const store = createDemoStore();
+    // version-seeds-v2-100 is the staging channel version in the demo seed.
+    await store.deleteVersion("version-seeds-v2-100");
+
+    const after = store.getSnapshot();
+    expect(after.versions.some((v) => v.id === "version-seeds-v2-100")).toBe(true);
+  });
+});
+
 describe("startTraining with NMS options", () => {
   it("records ios nms.maxDet=200 in the new run snapshot", async () => {
     const store = createDemoStore();
