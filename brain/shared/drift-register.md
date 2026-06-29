@@ -63,20 +63,30 @@ canonical: true
   reason in the error).
 
 ## D-TFLITE-ONNX2TF — YOLO26-seg end2end export to TFLite is unstable
-- **Status:** open (Android export deferred; CoreML + PyTorch still ship)
+- **Status:** fix applied, pending GPU/Colab verification (was: open)
 - The Colab/worker export path repeatedly fails converting the YOLO26-seg **end2end**
   head through `onnx2tf` (1.28.8), with a *different* error each run (e.g.
   `UnboundLocalError: dummy_tensor` on `model.23/Mul_3`; `CUDA_ERROR_INVALID_HANDLE` on
-  `model.2/Slice`). `nms=True` is forced off for end2end models. CoreML and PyTorch
-  exports from the same `best.pt` succeed.
+  `model.2/Slice`; `ValueError: Dimension 1 ... 300 and 32` on `model.23/Concat_6`,
+  the mask-coeff branch laid out as `[1,32,300]` instead of `[1,300,32]`). `nms=True`
+  is forced off for end2end models. CoreML and PyTorch exports from the same `best.pt`
+  succeed.
 - **Why it matters:** the frozen [[model-export-contract]] still lists
   `yolo11n-seeds.tflite` as required for the Android app, but runs currently produce no
   `.tflite`. This is the upstream cause of the null `tflite_r2_key` in
   D-CLOUD-MIGRATION-DRIFT. `train_for_run.py` tolerates a failed export (records
   `precision: "failed"`, still creates the version) — see [[training-driver]].
-- **Resolution path:** pin a known-good `onnx2tf`, try static-shape (`-b`/`-ois`) or
-  `-onwdt` flags, or export TFLite from a non-end2end variant; then reconcile the
-  contract. Tracked as a separate task.
+- **Root cause (2026-06-29):** YOLO26 ships a dual-head architecture. The default
+  **one-to-one (end2end) head** is NMS-free and bakes post-processing into `model.23`;
+  `onnx2tf` cannot convert that graph. Switching to the **one-to-many head**
+  (`end2end=False`) makes `nms=True` apply at export, producing the *classic* seg head
+  `onnx2tf` already handles — while keeping the `[1,300,38]` NMS-applied output, so the
+  contract is unchanged and the app still runs no NMS.
+- **Fix applied:** `export_kwargs` (train_for_run.py) and `export_mobile_model_candidates.py`
+  now pass `end2end=False` alongside `nms=True` for both tflite and coreml. Belt-and-
+  suspenders: `pyproject.toml` `[train]` pins `onnx2tf>=1.26.3,<1.28.8` so AutoUpdate
+  can't pull the broken 1.28.8. Verify on the next Colab/Modal run that a `.tflite`
+  artifact lands and `tflite_r2_key` is non-null.
 
 ## D-CHANNEL-DUAL — two ways to track the deployed version
 - **Status:** open (legacy field retained)

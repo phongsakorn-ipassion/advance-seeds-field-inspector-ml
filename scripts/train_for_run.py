@@ -110,6 +110,14 @@ def export_kwargs(kind: str, config: dict, quantize: bool, nms: dict | None = No
     imgsz = int(config.get("imgsz", 640))
     nms_block = nms if nms is not None else dict(DEFAULT_EXPORT_NMS)
     common_nms = {
+        # YOLO26 defaults to its one-to-one (end2end) head, which bakes NMS into
+        # model.23 and forces nms=False on export. That end2end seg graph cannot
+        # be converted by onnx2tf (the TFLite path fails at model.23/Concat_6).
+        # end2end=False selects the one-to-many head where nms=True actually
+        # applies, so NMS is still baked at export (app runs none, [1,300,38]
+        # contract preserved) but the graph is the classic seg head onnx2tf
+        # converts cleanly. See drift-register D-TFLITE-ONNX2TF.
+        "end2end": False,
         "nms": True,
         "max_det": int(nms_block["maxDet"]),
         "iou": float(nms_block["iouThreshold"]),

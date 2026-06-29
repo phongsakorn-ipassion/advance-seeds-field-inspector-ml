@@ -143,7 +143,11 @@ def export_model(
                 "size_bytes": file_size(destination),
             }
             continue
-        common_nms: dict[str, Any] = {"nms": True, "max_det": max_det, "iou": iou, "conf": conf}
+        # end2end=False selects YOLO26's one-to-many head so nms=True actually
+        # applies and the exported graph is the classic seg head onnx2tf can
+        # convert to TFLite. The default one-to-one (end2end) head bakes NMS in
+        # and breaks the ONNX->TF hop. See drift-register D-TFLITE-ONNX2TF.
+        common_nms: dict[str, Any] = {"end2end": False, "nms": True, "max_det": max_det, "iou": iou, "conf": conf}
         export_args: dict[str, Any] = {
             "imgsz": imgsz,
             "optimize": False,

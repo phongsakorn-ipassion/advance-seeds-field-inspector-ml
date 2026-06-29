@@ -16,6 +16,12 @@ train = [
   "ultralytics>=8.3.0",
   "opencv-python>=4.9.0",
   "numpy>=1.26",
+  # Fallback pin for the TFLite (ONNX->TF) hop. Ultralytics AutoUpdate otherwise
+  # resolves onnx2tf to 1.28.8, which mis-lays-out the seg mask-coeff branch and
+  # fails at model.23/Concat_6. The primary fix is end2end=False at export
+  # (see train_for_run.export_kwargs); this pin is belt-and-suspenders for the
+  # Android path. See drift-register D-TFLITE-ONNX2TF.
+  "onnx2tf>=1.26.3,<1.28.8",
 ]
 dev = [
   "pytest>=9.0.0",

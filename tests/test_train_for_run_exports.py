@@ -205,6 +205,18 @@ class TrainForRunExportTests(unittest.TestCase):
         self.assertAlmostEqual(kwargs["iou"], 0.7)
         self.assertAlmostEqual(kwargs["conf"], 0.25)
 
+    def test_export_forces_one_to_many_head_so_onnx2tf_can_convert(self):
+        # YOLO26's default one-to-one (end2end) head bakes NMS into model.23 and
+        # cannot be converted by onnx2tf. end2end=False selects the one-to-many
+        # head where nms=True actually applies, keeping the [1,300,38] contract
+        # while producing the classic seg graph onnx2tf handles.
+        config = {"data": "/tmp/dataset.yaml", "imgsz": 640}
+        for kind in ("tflite", "coreml"):
+            kwargs = self.module.export_kwargs(kind, config, True)
+            self.assertIn("end2end", kwargs, f"{kind} missing end2end")
+            self.assertFalse(kwargs["end2end"], f"{kind} must use one-to-many head")
+            self.assertTrue(kwargs["nms"], f"{kind} must apply NMS at export")
+
     def test_coreml_export_honours_run_overrides(self):
         config = {
             "data": "/tmp/dataset.yaml",
