@@ -114,6 +114,12 @@ def export_model(
     iou: float = 0.7,
     conf: float = 0.25,
 ) -> dict[str, Any]:
+    # Hide the GPU before importing Ultralytics/torch: exports need no GPU, and
+    # the TFLite onnx2tf conversion fails on newer GPUs whose CUDA kernels the
+    # bundled TensorFlow lacks (Blackwell cc 12.0). Setting this before any CUDA
+    # init keeps the whole export on CPU. See drift-register D-TFLITE-ONNX2TF.
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
     from ultralytics import YOLO
 
     model = YOLO(str(candidate.weights))
@@ -158,21 +164,7 @@ def export_model(
             export_args["half"] = True
         if fmt == "coreml" and candidate.quantized:
             export_args["half"] = True
-        if fmt == "tflite":
-            # ONNX->TF (onnx2tf) is a CPU-friendly graph rewrite; force it onto
-            # CPU so it can't hit missing CUDA kernels on newer GPUs (Blackwell
-            # cc 12.0 -> CUDA_ERROR_INVALID_HANDLE). See drift D-TFLITE-ONNX2TF.
-            prior_cuda = os.environ.get("CUDA_VISIBLE_DEVICES")
-            os.environ["CUDA_VISIBLE_DEVICES"] = ""
-            try:
-                exported = Path(model.export(format=fmt, **export_args))
-            finally:
-                if prior_cuda is None:
-                    os.environ.pop("CUDA_VISIBLE_DEVICES", None)
-                else:
-                    os.environ["CUDA_VISIBLE_DEVICES"] = prior_cuda
-        else:
-            exported = Path(model.export(format=fmt, **export_args))
+        exported = Path(model.export(format=fmt, **export_args))
         destination = copy_artifact(exported, destination)
         artifacts[fmt] = {
             "path": str(destination),

@@ -90,17 +90,22 @@ canonical: true
   GPU; it only touched the GPU because one was visible. This is independent of the
   end2end-head bug and stacks on top of it (A100/cc 8.0 runs skip it and reach the
   Concat error instead).
-- **Fix applied:** (1) `export_kwargs` (train_for_run.py) and
-  `export_mobile_model_candidates.py` pass `end2end=False` + `nms=True` (tflite & coreml).
-  (2) The TFLite export now runs inside `cpu_only_for_conversion()` (sets
-  `CUDA_VISIBLE_DEVICES=""` for the onnx2tf hop only; PyTorch's training CUDA context is
-  untouched). (3) `pyproject.toml` `[train]` pins `onnx2tf>=1.26.3,<1.28.8`.
-- **Operational note:** the dashboard/Modal worker runs whatever is on `main`, so the
-  fix only takes effect once the PR is **merged** (a run that still logs `Forcing
-  'nms=False'` is running pre-fix code). Verify on the next post-merge run that a
-  `.tflite` artifact lands and `tflite_r2_key` is non-null. If forcing CPU in-process
-  proves unreliable, fall back to running the TFLite export in a subprocess with
-  `CUDA_VISIBLE_DEVICES=""` in its env.
+- **Fix, attempt 1 (insufficient):** passed `end2end=False` + `nms=True` AND set
+  `CUDA_VISIBLE_DEVICES=""` *in-process* around the export. The `end2end=False` part
+  worked (post-merge run `data-20260629112229` exported the one-to-many head — output
+  `(1,41,8400)`, `175 layers/11.4M params`, no more `Forcing 'nms=False'`). But the
+  in-process env change was **ignored**: PyTorch had already initialized a CUDA context
+  during training, so the driver enumerated the GPU before the var was set, and TF still
+  grabbed `GPU:0` and died at `model.2/Slice` with the same CUDA error.
+- **Fix, attempt 2 (current):** run the TFLite export in a **fresh subprocess**
+  (`export_tflite_on_cpu` / `build_tflite_subprocess_cmd` in train_for_run.py) with
+  `CUDA_VISIBLE_DEVICES=""` in its env from process start, so TF reads it at its own
+  (first) CUDA init and stays on CPU. `export_mobile_model_candidates.py` sets the same
+  var before importing Ultralytics (that script never trains, so no prior CUDA init).
+  `end2end=False` + `nms=True` and the `onnx2tf<1.28.8` pin remain.
+- **Operational note:** the dashboard/Modal worker runs whatever is on `main`, so each
+  fix only takes effect once merged. Verify on the next post-merge run that a `.tflite`
+  artifact lands, the CUDA error is gone, and `tflite_r2_key` is non-null.
 
 ## D-CHANNEL-DUAL — two ways to track the deployed version
 - **Status:** open (legacy field retained)
