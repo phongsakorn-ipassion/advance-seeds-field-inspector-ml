@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import sys
 from dataclasses import dataclass
@@ -143,7 +144,11 @@ def export_model(
                 "size_bytes": file_size(destination),
             }
             continue
-        common_nms: dict[str, Any] = {"nms": True, "max_det": max_det, "iou": iou, "conf": conf}
+        # end2end=False selects YOLO26's one-to-many head so nms=True actually
+        # applies and the exported graph is the classic seg head onnx2tf can
+        # convert to TFLite. The default one-to-one (end2end) head bakes NMS in
+        # and breaks the ONNX->TF hop. See drift-register D-TFLITE-ONNX2TF.
+        common_nms: dict[str, Any] = {"end2end": False, "nms": True, "max_det": max_det, "iou": iou, "conf": conf}
         export_args: dict[str, Any] = {
             "imgsz": imgsz,
             "optimize": False,
@@ -153,7 +158,21 @@ def export_model(
             export_args["half"] = True
         if fmt == "coreml" and candidate.quantized:
             export_args["half"] = True
-        exported = Path(model.export(format=fmt, **export_args))
+        if fmt == "tflite":
+            # ONNX->TF (onnx2tf) is a CPU-friendly graph rewrite; force it onto
+            # CPU so it can't hit missing CUDA kernels on newer GPUs (Blackwell
+            # cc 12.0 -> CUDA_ERROR_INVALID_HANDLE). See drift D-TFLITE-ONNX2TF.
+            prior_cuda = os.environ.get("CUDA_VISIBLE_DEVICES")
+            os.environ["CUDA_VISIBLE_DEVICES"] = ""
+            try:
+                exported = Path(model.export(format=fmt, **export_args))
+            finally:
+                if prior_cuda is None:
+                    os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+                else:
+                    os.environ["CUDA_VISIBLE_DEVICES"] = prior_cuda
+        else:
+            exported = Path(model.export(format=fmt, **export_args))
         destination = copy_artifact(exported, destination)
         artifacts[fmt] = {
             "path": str(destination),

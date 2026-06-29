@@ -11,6 +11,7 @@ row, the notebook calls this script with --run-id.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import platform
@@ -105,11 +106,44 @@ def load_export_options(run_config: dict) -> dict:
     return result
 
 
+@contextlib.contextmanager
+def cpu_only_for_conversion():
+    """Hide CUDA devices for the duration of the block, then restore.
+
+    The TFLite path runs ONNX->TF via onnx2tf, which is a pure graph rewrite that
+    does not need a GPU. On newer GPUs (e.g. Blackwell, compute capability 12.0)
+    the bundled TensorFlow has no matching CUDA kernels, so its conversion ops
+    (Cast at model.2/Slice) die with CUDA_ERROR_INVALID_HANDLE. Forcing the
+    conversion onto CPU sidesteps the hardware mismatch entirely. PyTorch's
+    training CUDA context (already initialized) is unaffected; TensorFlow reads
+    CUDA_VISIBLE_DEVICES lazily at its first device init, which happens here.
+    See drift-register D-TFLITE-ONNX2TF.
+    """
+    sentinel = object()
+    prior = os.environ.get("CUDA_VISIBLE_DEVICES", sentinel)
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+    try:
+        yield
+    finally:
+        if prior is sentinel:
+            os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+        else:
+            os.environ["CUDA_VISIBLE_DEVICES"] = prior
+
+
 def export_kwargs(kind: str, config: dict, quantize: bool, nms: dict | None = None) -> dict:
     """Return Ultralytics export kwargs for mobile artifacts."""
     imgsz = int(config.get("imgsz", 640))
     nms_block = nms if nms is not None else dict(DEFAULT_EXPORT_NMS)
     common_nms = {
+        # YOLO26 defaults to its one-to-one (end2end) head, which bakes NMS into
+        # model.23 and forces nms=False on export. That end2end seg graph cannot
+        # be converted by onnx2tf (the TFLite path fails at model.23/Concat_6).
+        # end2end=False selects the one-to-many head where nms=True actually
+        # applies, so NMS is still baked at export (app runs none, [1,300,38]
+        # contract preserved) but the graph is the classic seg head onnx2tf
+        # converts cleanly. See drift-register D-TFLITE-ONNX2TF.
+        "end2end": False,
         "nms": True,
         "max_det": int(nms_block["maxDet"]),
         "iou": float(nms_block["iouThreshold"]),
@@ -712,7 +746,10 @@ def main(argv: list[str] | None = None) -> int:
              f"TFLite {precision_label} export starting"
              + (f" (fraction={tflite_export_kwargs.get('fraction')})" if android_quantize else " (no quantization)"))
     try:
-        export_path = model.export(**tflite_export_kwargs)
+        # Run the ONNX->TF (onnx2tf) conversion on CPU so it can't hit missing
+        # CUDA kernels on newer GPUs (Blackwell cc 12.0). See cpu_only_for_conversion.
+        with cpu_only_for_conversion():
+            export_path = model.export(**tflite_export_kwargs)
         export_path = export_path[0] if isinstance(export_path, (list, tuple)) else export_path
         tflite_path = Path(export_path) if export_path else None
         if not tflite_path or not tflite_path.exists():

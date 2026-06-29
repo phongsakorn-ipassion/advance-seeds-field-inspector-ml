@@ -205,6 +205,45 @@ class TrainForRunExportTests(unittest.TestCase):
         self.assertAlmostEqual(kwargs["iou"], 0.7)
         self.assertAlmostEqual(kwargs["conf"], 0.25)
 
+    def test_cpu_only_for_conversion_hides_gpu_then_restores(self):
+        # onnx2tf graph conversion must run on CPU: TF lacks sm_120 kernels for
+        # Blackwell GPUs (cc 12.0), so a visible GPU makes the Cast op fail with
+        # CUDA_ERROR_INVALID_HANDLE at model.2/Slice. See drift D-TFLITE-ONNX2TF.
+        prior = os.environ.get("CUDA_VISIBLE_DEVICES")
+        try:
+            os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+            with self.module.cpu_only_for_conversion():
+                self.assertEqual(os.environ["CUDA_VISIBLE_DEVICES"], "")
+            # restored to whatever it was before the context
+            self.assertEqual(os.environ.get("CUDA_VISIBLE_DEVICES"), "0")
+        finally:
+            if prior is None:
+                os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+            else:
+                os.environ["CUDA_VISIBLE_DEVICES"] = prior
+
+    def test_cpu_only_for_conversion_restores_absent_var(self):
+        prior = os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+        try:
+            with self.module.cpu_only_for_conversion():
+                self.assertEqual(os.environ["CUDA_VISIBLE_DEVICES"], "")
+            self.assertNotIn("CUDA_VISIBLE_DEVICES", os.environ)
+        finally:
+            if prior is not None:
+                os.environ["CUDA_VISIBLE_DEVICES"] = prior
+
+    def test_export_forces_one_to_many_head_so_onnx2tf_can_convert(self):
+        # YOLO26's default one-to-one (end2end) head bakes NMS into model.23 and
+        # cannot be converted by onnx2tf. end2end=False selects the one-to-many
+        # head where nms=True actually applies, keeping the [1,300,38] contract
+        # while producing the classic seg graph onnx2tf handles.
+        config = {"data": "/tmp/dataset.yaml", "imgsz": 640}
+        for kind in ("tflite", "coreml"):
+            kwargs = self.module.export_kwargs(kind, config, True)
+            self.assertIn("end2end", kwargs, f"{kind} missing end2end")
+            self.assertFalse(kwargs["end2end"], f"{kind} must use one-to-many head")
+            self.assertTrue(kwargs["nms"], f"{kind} must apply NMS at export")
+
     def test_coreml_export_honours_run_overrides(self):
         config = {
             "data": "/tmp/dataset.yaml",
