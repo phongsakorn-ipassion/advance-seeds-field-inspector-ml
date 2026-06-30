@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import Any, Literal
 
 
-OutputKind = Literal["raw", "nms", "end2end_nms_free", "segmentation"]
+# "segmentation"     -> NMS already applied at export; app runs no NMS (legacy/end2end).
+# "segmentation_raw" -> raw one-to-many head: [1, 4+nc+32, 8400] detections + mask
+#                       prototypes; the app MUST run NMS + mask assembly. This is the
+#                       only convertible YOLO26-seg TFLite (see drift D-TFLITE-ONNX2TF).
+OutputKind = Literal["raw", "nms", "end2end_nms_free", "segmentation", "segmentation_raw"]
 
 
 @dataclass(frozen=True)
@@ -36,6 +40,14 @@ class ModelMetadata:
     iou_threshold: float
     source_weights: str = "yolo26n-seg.pt"
     mobile_tflite_filename: str = "yolo11n-seeds.tflite"
+    # Whether NMS is baked into the exported graph. False for "segmentation_raw":
+    # the app runs NMS itself. Defaults True for backward compatibility with
+    # metadata written before raw seg export existed.
+    nms_applied: bool = True
+    # Shape of the mask-prototype tensor for segmentation models, e.g.
+    # [1, 32, 160, 160] (logical/PyTorch order; onnx2tf may transpose at runtime,
+    # so the app detects the actual orientation). None for non-seg models.
+    mask_proto_shape: list[int] | None = None
     calibration: CalibrationContract = field(default_factory=CalibrationContract)
     acceptance_targets: AcceptanceTargets = field(default_factory=AcceptanceTargets)
 
@@ -58,6 +70,10 @@ class ModelMetadata:
             raise ValueError("mobile_tflite_filename is required")
         if not self.output_shape or any(dim <= 0 for dim in self.output_shape):
             raise ValueError("output_shape dimensions must be > 0")
+        if self.mask_proto_shape is not None and (
+            not self.mask_proto_shape or any(dim <= 0 for dim in self.mask_proto_shape)
+        ):
+            raise ValueError("mask_proto_shape dimensions must be > 0")
         if not 0 <= self.score_threshold <= 1:
             raise ValueError("score_threshold must be between 0 and 1")
         if not 0 <= self.iou_threshold <= 1:
@@ -68,6 +84,21 @@ class ModelMetadata:
     def to_dict(self) -> dict[str, Any]:
         self.validate()
         return asdict(self)
+
+
+def raw_seg_output_shape(num_classes: int, imgsz: int = 640) -> list[int]:
+    """Logical shape of the raw one-to-many YOLO seg detection tensor.
+
+    Feature dim = 4 (box) + num_classes + 32 (mask coefficients). Anchors are the
+    sum of the P3/P4/P5 grid cells (strides 8/16/32) for the input size, i.e.
+    8400 for imgsz=640. onnx2tf/litert may transpose to [1, anchors, features] at
+    runtime; the app detects orientation. See drift-register D-TFLITE-ONNX2TF.
+    """
+    anchors = sum((int(imgsz) // stride) ** 2 for stride in (8, 16, 32))
+    return [1, 4 + int(num_classes) + 32, anchors]
+
+
+MASK_PROTO_SHAPE = [1, 32, 160, 160]
 
 
 def write_metadata(metadata: ModelMetadata, output_path: str | Path) -> Path:

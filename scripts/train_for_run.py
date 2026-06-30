@@ -23,6 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from advance_seeds_ml.contracts import MASK_PROTO_SHAPE, raw_seg_output_shape
 from advance_seeds_ml.registry import RegistryClient, RegistryConfig
 from advance_seeds_ml.training import (
     apply_hardware_profile,
@@ -348,12 +349,20 @@ def build_version_metadata(
     metrics_dict = getattr(results, "results_dict", {}) or {}
     run_config = run_row.get("config_yaml", {}) if isinstance(run_row, dict) else {}
     export_options = load_export_options(run_config)
+    class_names = run_config.get("classes", []) or []
+    imgsz = int(config.get("imgsz", 640))
     metadata = {
         "dataset": run_config.get("dataset"),
         "source_weights": run_config.get("source_weights"),
-        "class_names": run_config.get("classes", []),
-        "input_size": int(config.get("imgsz", 640)),
-        "output_kind": "segmentation-mask",
+        "class_names": class_names,
+        "input_size": imgsz,
+        # Raw one-to-many YOLO26-seg head (the only onnx2tf-convertible export):
+        # the app runs NMS + mask assembly on these tensors. output_shape is
+        # derived from the trained class count. See drift D-TFLITE-ONNX2TF.
+        "output_kind": "segmentation_raw",
+        "output_shape": raw_seg_output_shape(len(class_names), imgsz),
+        "mask_proto_shape": list(MASK_PROTO_SHAPE),
+        "nms_applied": False,
         "task": "segmentation",
         "hyperparameters": run_config.get("hyperparameters", {}),
         "export_options": export_options,
