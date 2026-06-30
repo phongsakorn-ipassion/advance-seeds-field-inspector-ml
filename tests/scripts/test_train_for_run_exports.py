@@ -110,7 +110,7 @@ def test_export_kwargs_tflite_quantized():
 def test_export_kwargs_tflite_unquantized():
     kw = export_kwargs("tflite", {"imgsz": 640, "data": "/x.yaml"}, quantize=False)
     assert "int8" not in kw
-    assert kw == {"format": "tflite", "imgsz": 640}
+    assert kw == {"format": "tflite", "imgsz": 640, "end2end": False}
 
 
 def test_export_kwargs_coreml_quantized():
@@ -121,4 +121,4 @@ def test_export_kwargs_coreml_quantized():
 def test_export_kwargs_coreml_unquantized():
     kw = export_kwargs("coreml", {"imgsz": 640}, quantize=False)
     assert "half" not in kw
-    assert kw == {"format": "coreml", "imgsz": 640}
+    assert kw == {"format": "coreml", "imgsz": 640, "end2end": False}
