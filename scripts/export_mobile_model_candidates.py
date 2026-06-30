@@ -13,7 +13,12 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from advance_seeds_ml.contracts import ModelMetadata, write_metadata
+from advance_seeds_ml.contracts import (
+    MASK_PROTO_SHAPE,
+    ModelMetadata,
+    raw_seg_output_shape,
+    write_metadata,
+)
 from advance_seeds_ml.training import materialize_ultralytics_dataset_config
 
 
@@ -175,6 +180,7 @@ def export_model(
         }
 
     metadata_path = target_dir / "model-metadata.json"
+    class_names = resolve_class_names(model.names, fallback=CLASS_NAMES)
     metadata = ModelMetadata(
         model_name="yolo26n-seg",
         model_version=candidate.key,
@@ -182,9 +188,14 @@ def export_model(
         input_size=imgsz,
         source_weights=str(candidate.weights),
         mobile_tflite_filename=f"{candidate.key}.tflite",
-        class_names=resolve_class_names(model.names, fallback=CLASS_NAMES),
-        output_kind="segmentation",
-        output_shape=[1, 300, 38],
+        class_names=class_names,
+        # Raw one-to-many seg head (the only onnx2tf-convertible YOLO26-seg
+        # export): [1, 4+nc+32, 8400] detections + [1,32,160,160] mask protos,
+        # with NMS + mask assembly done app-side. See drift D-TFLITE-ONNX2TF.
+        output_kind="segmentation_raw",
+        output_shape=raw_seg_output_shape(len(class_names), imgsz),
+        mask_proto_shape=list(MASK_PROTO_SHAPE),
+        nms_applied=False,
         score_threshold=0.35,
         iou_threshold=0.6,
     )

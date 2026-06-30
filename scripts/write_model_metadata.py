@@ -7,7 +7,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from advance_seeds_ml.contracts import ModelMetadata, write_metadata
+from advance_seeds_ml.contracts import (
+    MASK_PROTO_SHAPE,
+    ModelMetadata,
+    raw_seg_output_shape,
+    write_metadata,
+)
 
 
 def main() -> int:
@@ -21,14 +26,35 @@ def main() -> int:
     parser.add_argument("--classes", nargs="+", required=True)
     parser.add_argument(
         "--output-kind",
-        choices=["raw", "nms", "end2end_nms_free", "segmentation"],
-        default="segmentation",
+        choices=["raw", "nms", "end2end_nms_free", "segmentation", "segmentation_raw"],
+        default="segmentation_raw",
     )
-    parser.add_argument("--output-shape", nargs="+", type=int, default=[1, 300, 38])
+    # Default derived from the class count for raw seg ([1, 4+nc+32, anchors]).
+    parser.add_argument("--output-shape", nargs="+", type=int, default=None)
+    parser.add_argument(
+        "--nms-applied",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Whether NMS is baked into the graph. Defaults False for segmentation_raw.",
+    )
+    parser.add_argument("--mask-proto-shape", nargs="+", type=int, default=None)
     parser.add_argument("--score-threshold", type=float, default=0.35)
     parser.add_argument("--iou-threshold", type=float, default=0.6)
     parser.add_argument("--output", default="models/model-metadata.json")
     args = parser.parse_args()
+
+    is_raw_seg = args.output_kind == "segmentation_raw"
+    output_shape = args.output_shape
+    if output_shape is None:
+        output_shape = (
+            raw_seg_output_shape(len(args.classes), args.input_size)
+            if is_raw_seg
+            else [1, 300, 38]
+        )
+    nms_applied = args.nms_applied if args.nms_applied is not None else (not is_raw_seg)
+    mask_proto_shape = args.mask_proto_shape
+    if mask_proto_shape is None and is_raw_seg:
+        mask_proto_shape = list(MASK_PROTO_SHAPE)
 
     metadata = ModelMetadata(
         model_name=args.model_name,
@@ -39,7 +65,9 @@ def main() -> int:
         mobile_tflite_filename=args.mobile_tflite_filename,
         class_names=args.classes,
         output_kind=args.output_kind,
-        output_shape=args.output_shape,
+        output_shape=output_shape,
+        nms_applied=nms_applied,
+        mask_proto_shape=mask_proto_shape,
         score_threshold=args.score_threshold,
         iou_threshold=args.iou_threshold,
     )

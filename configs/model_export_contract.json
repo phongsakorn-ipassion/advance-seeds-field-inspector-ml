@@ -9,8 +9,11 @@
     "banana",
     "banana_spot"
   ],
-  "output_kind": "segmentation",
-  "output_shape": [1, 300, 38],
+  "output_kind": "segmentation_raw",
+  "output_shape": [1, 38, 8400],
+  "mask_proto_shape": [1, 32, 160, 160],
+  "nms_applied": false,
+  "output_layout_note": "Raw one-to-many YOLO26-seg head. Detection feature dim = 4 (box) + num_classes + 32 (mask coefficients); here 4 + 2 + 32 = 38, over 8400 anchors. Per-run model-metadata.json carries the real output_shape from the trained class count (e.g. 5 classes -> [1, 41, 8400]). onnx2tf/litert may transpose tensors at runtime ([1,38,8400] <-> [1,8400,38]; protos [1,32,160,160] <-> [1,160,160,32]); the app detects orientation. NMS + mask assembly run on-device.",
   "score_threshold": 0.35,
   "iou_threshold": 0.6,
   "calibration": {
