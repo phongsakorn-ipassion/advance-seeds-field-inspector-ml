@@ -15,7 +15,11 @@ jobs:
       - uses: denoland/setup-deno@v1
         with: { deno-version: v1.x }
       - uses: supabase/setup-cli@v1
-        with: { version: latest }
+        # Pinned: CLI >= 2.108 migrated local keys to the sb_secret_/publishable
+        # format, which breaks the edge functions' service-role REST queries
+        # (createClient still sends the key as a JWT). 2.101.0 was the latest at
+        # our last green run (2026-05-23). Bump deliberately, not via `latest`.
+        with: { version: 2.101.0 }
       - name: Install PostgreSQL client
         run: sudo apt-get install -y postgresql-client
       - name: Start Supabase
