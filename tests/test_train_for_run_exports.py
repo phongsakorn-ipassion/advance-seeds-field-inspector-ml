@@ -198,13 +198,15 @@ class TrainForRunExportTests(unittest.TestCase):
         self.assertIn("valid/images", message)
         self.assertIn("images/val", message)
 
-    def test_coreml_export_includes_default_nms(self):
+    def test_coreml_export_omits_detect_only_nms_args(self):
+        # nms/max_det/iou/conf are Detect-only in Ultralytics >=8.4.83 and are
+        # rejected by the litert exporter for segmentation; they must not appear
+        # in export kwargs. end2end=False is still required. See D-TFLITE-ONNX2TF.
         config = {"data": "/tmp/dataset.yaml", "imgsz": 640}
         kwargs = self.module.export_kwargs("coreml", config, True)
-        self.assertTrue(kwargs["nms"])
-        self.assertEqual(kwargs["max_det"], 300)
-        self.assertAlmostEqual(kwargs["iou"], 0.7)
-        self.assertAlmostEqual(kwargs["conf"], 0.25)
+        self.assertIs(kwargs["end2end"], False)
+        for arg in ("nms", "max_det", "iou", "conf"):
+            self.assertNotIn(arg, kwargs)
 
     def test_tflite_subprocess_cmd_hides_gpu_and_passes_kwargs(self):
         # The onnx2tf conversion must run in a fresh subprocess with the GPU
@@ -229,16 +231,15 @@ class TrainForRunExportTests(unittest.TestCase):
         self.assertIsNone(self.module.parse_tflite_artifact("just logs\nno artifact\n"))
 
     def test_export_forces_one_to_many_head_so_onnx2tf_can_convert(self):
-        # YOLO26's default one-to-one (end2end) head bakes NMS into model.23 and
-        # cannot be converted by onnx2tf. end2end=False selects the one-to-many
-        # head where nms=True actually applies, keeping the [1,300,38] contract
-        # while producing the classic seg graph onnx2tf handles.
+        # YOLO26's default one-to-one (end2end) head cannot be converted by
+        # onnx2tf. end2end=False selects the one-to-many head (raw 1x41x8400
+        # output) that converts cleanly; the app runs NMS downstream.
         config = {"data": "/tmp/dataset.yaml", "imgsz": 640}
         for kind in ("tflite", "coreml"):
             kwargs = self.module.export_kwargs(kind, config, True)
             self.assertIn("end2end", kwargs, f"{kind} missing end2end")
             self.assertFalse(kwargs["end2end"], f"{kind} must use one-to-many head")
-            self.assertTrue(kwargs["nms"], f"{kind} must apply NMS at export")
+            self.assertNotIn("nms", kwargs, f"{kind} must not pass Detect-only nms")
 
     def test_coreml_export_honours_run_overrides(self):
         config = {
@@ -249,18 +250,22 @@ class TrainForRunExportTests(unittest.TestCase):
                 "android": {"quantize": True},
             },
         }
+        # Operator NMS overrides are still resolved (and recorded in metadata),
+        # but are no longer forwarded to the (Detect-only) export args.
         resolved = self.module.load_export_options(config)
+        self.assertEqual(resolved["ios"]["nms"]["maxDet"], 150)
+        self.assertAlmostEqual(resolved["ios"]["nms"]["iouThreshold"], 0.55)
         kwargs = self.module.export_kwargs("coreml", config, resolved["ios"]["quantize"], resolved["ios"]["nms"])
-        self.assertEqual(kwargs["max_det"], 150)
-        self.assertAlmostEqual(kwargs["iou"], 0.55)
-        self.assertAlmostEqual(kwargs["conf"], 0.3)
+        for arg in ("nms", "max_det", "iou", "conf"):
+            self.assertNotIn(arg, kwargs)
         self.assertNotIn("half", kwargs)
 
-    def test_tflite_export_includes_nms(self):
+    def test_tflite_export_omits_detect_only_nms(self):
         config = {"data": "/tmp/dataset.yaml", "imgsz": 640}
         kwargs = self.module.export_kwargs("tflite", config, False)
-        self.assertTrue(kwargs["nms"])
-        self.assertEqual(kwargs["max_det"], 300)
+        self.assertIs(kwargs["end2end"], False)
+        for arg in ("nms", "max_det", "iou", "conf"):
+            self.assertNotIn(arg, kwargs)
 
     def test_load_export_options_clamps_out_of_range(self):
         config = {"exportOptions": {"ios": {"quantize": True, "nms": {"maxDet": 9999, "iouThreshold": 2, "confThreshold": -1}}, "android": {"quantize": True}}}

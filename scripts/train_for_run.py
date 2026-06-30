@@ -161,23 +161,25 @@ def export_tflite_on_cpu(weights: Path, kwargs: dict) -> Path:
 
 
 def export_kwargs(kind: str, config: dict, quantize: bool, nms: dict | None = None) -> dict:
-    """Return Ultralytics export kwargs for mobile artifacts."""
+    """Return Ultralytics export kwargs for mobile artifacts.
+
+    YOLO26-seg must export with ``end2end=False`` (the one-to-many head): the
+    default one-to-one/end2end seg head cannot be converted by onnx2tf (the
+    TFLite path dies at model.23/Concat_6). The one-to-many head emits raw
+    detections (1x41x8400) plus mask protos, which the app post-processes
+    (NMS + mask assembly) at runtime.
+
+    The NMS-family args (``nms``/``max_det``/``iou``/``conf``) are NOT passed:
+    Ultralytics >=8.4.83 made them Detect-only, and the new ``litert`` exporter
+    (which ``format="tflite"`` now redirects to) rejects ``nms`` with a hard
+    error. They were already silently ignored for segmentation before that.
+    Operator NMS preferences are still recorded in run/version metadata; the
+    ``nms`` parameter is retained for that bookkeeping and signature stability.
+    See drift-register D-TFLITE-ONNX2TF.
+    """
     imgsz = int(config.get("imgsz", 640))
-    nms_block = nms if nms is not None else dict(DEFAULT_EXPORT_NMS)
-    common_nms = {
-        # YOLO26 defaults to its one-to-one (end2end) head, which bakes NMS into
-        # model.23 and forces nms=False on export. That end2end seg graph cannot
-        # be converted by onnx2tf (the TFLite path fails at model.23/Concat_6).
-        # end2end=False selects the one-to-many head where nms=True actually
-        # applies, so NMS is still baked at export (app runs none, [1,300,38]
-        # contract preserved) but the graph is the classic seg head onnx2tf
-        # converts cleanly. See drift-register D-TFLITE-ONNX2TF.
-        "end2end": False,
-        "nms": True,
-        "max_det": int(nms_block["maxDet"]),
-        "iou": float(nms_block["iouThreshold"]),
-        "conf": float(nms_block["confThreshold"]),
-    }
+    _ = nms  # operator NMS config is recorded in metadata, not passed to export
+    common = {"end2end": False}
     if kind == "tflite":
         if quantize:
             return {
@@ -187,13 +189,13 @@ def export_kwargs(kind: str, config: dict, quantize: bool, nms: dict | None = No
                 "imgsz": imgsz,
                 "batch": 1,
                 "fraction": _quant_fraction(os.environ),
-                **common_nms,
+                **common,
             }
-        return {"format": "tflite", "imgsz": imgsz, **common_nms}
+        return {"format": "tflite", "imgsz": imgsz, **common}
     if kind == "coreml":
         if quantize:
-            return {"format": "coreml", "half": True, "imgsz": imgsz, **common_nms}
-        return {"format": "coreml", "imgsz": imgsz, **common_nms}
+            return {"format": "coreml", "half": True, "imgsz": imgsz, **common}
+        return {"format": "coreml", "imgsz": imgsz, **common}
     raise ValueError(f"unsupported export kind: {kind}")
 
 

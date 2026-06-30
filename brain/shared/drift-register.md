@@ -106,6 +106,25 @@ canonical: true
 - **Operational note:** the dashboard/Modal worker runs whatever is on `main`, so each
   fix only takes effect once merged. Verify on the next post-merge run that a `.tflite`
   artifact lands, the CUDA error is gone, and `tflite_r2_key` is non-null.
+- **Third root cause (2026-06-30, Ultralytics 8.4.83 + correction to the attempt-1 claim):**
+  the export still failed — `format='tflite'` now auto-redirects to the new unified
+  `litert` format, whose `validate_args` **rejects `nms`** with a hard
+  `AssertionError: argument 'nms' is not supported for format='litert'`. More importantly
+  this exposed that the earlier "`nms=True` keeps the `[1,300,38]` contract" claim was
+  **wrong**: `nms` is Detect-only and was *silently ignored* for segmentation all along
+  (8.4.82 already emitted raw `(1,41,8400)`; CoreML logs `'nms=True' is only available
+  for Detect models`). So a *convertible* YOLO26-seg TFLite (one-to-many head) can only
+  emit **raw `(1x41x8400)` detections + `(1x32x160x160)` mask protos**; NMS + mask
+  assembly must run app-side. The `[1,300,38]` "app runs no NMS" line in
+  [[model-export-contract]] is **not achievable** for a convertible seg export.
+- **Fix, attempt 3 (current):** `export_kwargs` and `export_mobile_model_candidates.py`
+  no longer pass `nms`/`max_det`/`iou`/`conf` (Detect-only); they keep `end2end=False`
+  (still required for onnx2tf) and the CPU subprocess. Operator NMS prefs are still
+  recorded in run/version metadata but not forwarded to export. **Open follow-up:** the
+  app's `TfliteSeedAnalyzer` must run NMS+mask on raw output, and the export contract +
+  `model-metadata.json` `output_shape` must be updated (cross-repo) — currently still
+  says `[1,300,38]`. `int8`/`half` export args are also deprecated (→ `quantize=8/16`);
+  not yet migrated.
 
 ## D-CHANNEL-DUAL — two ways to track the deployed version
 - **Status:** open (legacy field retained)

@@ -150,15 +150,17 @@ def export_model(
                 "size_bytes": file_size(destination),
             }
             continue
-        # end2end=False selects YOLO26's one-to-many head so nms=True actually
-        # applies and the exported graph is the classic seg head onnx2tf can
-        # convert to TFLite. The default one-to-one (end2end) head bakes NMS in
-        # and breaks the ONNX->TF hop. See drift-register D-TFLITE-ONNX2TF.
-        common_nms: dict[str, Any] = {"end2end": False, "nms": True, "max_det": max_det, "iou": iou, "conf": conf}
+        # end2end=False selects YOLO26's one-to-many head, the classic seg graph
+        # onnx2tf can convert to TFLite (the default end2end head breaks the
+        # ONNX->TF hop). NMS-family args (nms/max_det/iou/conf) are Detect-only
+        # in Ultralytics >=8.4.83 and rejected by the litert exporter, so they
+        # are not passed; the app runs NMS on the raw (1x41x8400) output.
+        # See drift-register D-TFLITE-ONNX2TF.
+        _ = (max_det, iou, conf)  # operator NMS config recorded in metadata, not exported
         export_args: dict[str, Any] = {
             "imgsz": imgsz,
             "optimize": False,
-            **common_nms,
+            "end2end": False,
         }
         if fmt == "tflite" and candidate.quantized:
             export_args["half"] = True
