@@ -1,0 +1,68 @@
+# Advance Seeds v10 (10-class) YOLO26n-seg — copy-paste imbalance trial.
+#
+# v10 is extreme long-tail: corn ~99k instances vs watermelon 193
+# (ratio ~0.002, far below the repo's 5% class-balance floor). Ultralytics
+# exposes NO per-class loss weighting, so the lever here is data-level
+# augmentation.
+#
+# IMPORTANT caveats before promoting this profile:
+#   * `copy_paste` is CLASS-AGNOSTIC — it pastes instances of ALL classes, not
+#     just the rare ones, so it lifts the tail only partially.
+#   * Judge promotion on PER-CLASS mAP (watermelon/eggplant/wax_gourd), NOT the
+#     corn-dominated mean, which will look deceptively high.
+#   * watermelon at 193 instances is too few to learn robustly from
+#     augmentation alone — collect more real watermelon images.
+# Compare against a plain baseline (copy_paste: 0.0) before adopting.
+
+model: yolo26n-seg.pt
+data: configs/dataset.advance-seeds-v10.yaml
+project: runs/advance-seeds-v10
+name: v10-copy-paste-trial
+
+epochs: 80
+patience: 25
+imgsz: 640
+batch: auto
+workers: auto
+device: auto
+seed: 42
+deterministic: true
+pretrained: true
+cache: auto
+amp: auto
+
+optimizer: auto
+lr0: 0.001
+lrf: 0.0495
+momentum: 0.947
+weight_decay: 0.00064
+warmup_epochs: 1.0
+cos_lr: true
+close_mosaic: 10
+
+# Augmentation tuned for the long tail. copy_paste raised well above the
+# banana-v4 trial (0.1) to multiply rare-class instances; mixup on to further
+# diversify co-occurrence.
+mosaic: 1.0
+mixup: 0.1
+copy_paste: 0.3
+scale: 0.5
+translate: 0.1
+fliplr: 0.5
+flipud: 0.0
+degrees: 5.0
+shear: 0.0
+hsv_h: 0.015
+hsv_s: 0.7
+hsv_v: 0.4
+
+mask_ratio: 4
+overlap_mask: true
+box: 7.5
+cls: 0.5
+multi_scale: 0.0
+
+save: true
+save_period: 10
+plots: true
+val: true

@@ -86,6 +86,26 @@ class ModelMetadata:
         return asdict(self)
 
 
+def load_class_names(yaml_path: str | Path) -> list[str]:
+    """Ordered class-name list from a dataset config YAML's ``names:`` block.
+
+    Accepts both dict-form (``{0: banana, 1: banana_spot}``) and list-form
+    (``[banana, banana_spot]``) ``names:``, returning names ordered by class
+    index. Raises ``ValueError`` when ``names:`` is missing or empty, so callers
+    never build a ``ModelMetadata`` with an empty ``class_names`` (which would
+    fail validation). Reuses the dataset reader/normalizer — the same source of
+    truth Ultralytics reads at train time.
+    """
+    from advance_seeds_ml.dataset import _normalize_names, _read_yaml_mapping
+
+    config = _read_yaml_mapping(Path(yaml_path))
+    names = config.get("names")
+    if not names:
+        raise ValueError(f"dataset config {yaml_path} has no 'names'")
+    normalized = _normalize_names(names)
+    return [normalized[index] for index in sorted(normalized)]
+
+
 def raw_seg_output_shape(num_classes: int, imgsz: int = 640) -> list[int]:
     """Logical shape of the raw one-to-many YOLO seg detection tensor.
 
