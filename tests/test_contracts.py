@@ -8,12 +8,49 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from advance_seeds_ml.contracts import (
     ModelMetadata,
+    load_class_names,
     load_metadata,
     raw_seg_output_shape,
     write_metadata,
 )
 
 POC_CLASSES = ["banana", "banana_spot"]
+
+
+class LoadClassNamesTests(unittest.TestCase):
+    def _write_yaml(self, tmp: str, body: str) -> Path:
+        path = Path(tmp) / "dataset.yaml"
+        path.write_text(body, encoding="utf-8")
+        return path
+
+    def test_reads_dict_form_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._write_yaml(
+                tmp,
+                "names:\n  0: banana\n  1: banana_spot\n  2: pepper\n  3: watermelon\n",
+            )
+            self.assertEqual(
+                load_class_names(path),
+                ["banana", "banana_spot", "pepper", "watermelon"],
+            )
+
+    def test_reads_list_form_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._write_yaml(tmp, "names: ['banana', 'corn', 'cucumber']\n")
+            self.assertEqual(load_class_names(path), ["banana", "corn", "cucumber"])
+
+    def test_orders_by_index_regardless_of_key_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._write_yaml(
+                tmp, "names:\n  2: pepper\n  0: banana\n  1: corn\n"
+            )
+            self.assertEqual(load_class_names(path), ["banana", "corn", "pepper"])
+
+    def test_empty_or_missing_names_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._write_yaml(tmp, "train: images/train\n")
+            with self.assertRaisesRegex(ValueError, "names"):
+                load_class_names(path)
 
 
 class ContractTests(unittest.TestCase):

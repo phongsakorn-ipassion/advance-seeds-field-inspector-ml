@@ -1,0 +1,38 @@
+# Advance Seeds Field Inspector — Roboflow export v10 (dataset-v1.1), YOLO26-seg.
+# Restructured from the split-first Roboflow layout into the repo's canonical
+# type-first layout (images/{train,val,test} + labels/{train,val,test}).
+#
+# Source: roboflow ai-bglnm/advance-seeds-field-inspector v10 (CC BY 4.0)
+#   https://universe.roboflow.com/ai-bglnm/advance-seeds-field-inspector/dataset/10
+#
+# `path:` points at the prepared bundle in Downloads (kept out of the repo /
+# data/ tree by choice). Splits resolve relative to it. Move the bundle under
+# data/processed/ and update `path:` if you want it inside the repo convention.
+path: "/Users/ppungpong/Downloads/Advance Seeds/advance-seeds-field-inspector.v10-dataset-v1.1.yolo26"
+train: images/train
+val: images/val
+test: images/test
+
+# 10 classes. Labels carry class ids 0-9 in this order. Some train labels are
+# intentionally empty (background / negative samples with no objects).
+names:
+  0: banana
+  1: bitter_gourd
+  2: cantaloupe
+  3: corn
+  4: cucumber
+  5: eggplant
+  6: pepper
+  7: pumpkin
+  8: watermelon
+  9: wax_gourd
+
+metadata:
+  client: Advance Seeds Co., Ltd.
+  task: instance-segmentation
+  marker_mm: 50.0
+  split_policy: split-by-image
+  source: roboflow:ai-bglnm/advance-seeds-field-inspector@v10
+  input_size: 640
+  # Heavy long-tail: corn ~99k instances vs watermelon 193 (ratio ~0.002).
+  # See configs/train.advance-seeds-v10.copy-paste.yaml for mitigation.
