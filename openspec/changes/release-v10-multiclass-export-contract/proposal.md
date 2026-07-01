@@ -13,11 +13,14 @@ task 4.1 ("releasing a >2-class model to the app"):
 
 The new Roboflow **v10 (dataset-v1.1)** export trains **10 classes**
 (`banana, bitter_gourd, cantaloupe, corn, cucumber, eggplant, pepper, pumpkin, watermelon,
-wax_gourd`). Under the current **raw segmentation** contract (`nms_applied: false`) the
-detection feature dim is `4 + nc + 32`, so 10 classes changes the frozen `output_shape` from
-`[1, 38, 8400]` to `[1, 46, 8400]`. Both the contract and the demo app's analyzer must move
-in lockstep, or the app slices the raw tensor with the wrong class-column count and silently
-mislabels every detection.
+wax_gourd`). Under the **raw segmentation** contract (`nms_applied: false`) the detection
+feature dim is `4 + nc + 32`, so class count changes the middle tensor dimension.
+
+Because the class set keeps growing (v8=4, v9=5, v10=10, …), freezing a concrete
+`output_shape` literal in the contract is the wrong model — it would need re-freezing every
+release. Instead the contract expresses the **rule** (`[1, 4 + num_classes + 32, anchors]`)
+and the app reads `num_classes` from each model's `model-metadata.json`. The class-count-
+dependent literal lives only in per-model metadata, never in the frozen contract.
 
 ## What Changes
 
@@ -27,11 +30,13 @@ mislabels every detection.
   `class_names` from the YAML instead of manual `--classes`. `--classes` and
   `--dataset-config` are mutually exclusive; exactly one is required. `output_shape` continues
   to derive from the class count.
-- **Regenerable frozen contract.** Add `scripts/write_export_contract.py` that emits
-  `configs/model_export_contract.json` with `class_names` + raw-seg `output_shape` derived
-  from a dataset config YAML, preserving all other frozen fields (thresholds, calibration,
-  acceptance targets, the `yolo11n-seeds.tflite` alias). Regenerate the contract for the v10
-  10-class release.
+- **Rule-based contract + regenerable class snapshot.** Restructure
+  `configs/model_export_contract.json` to replace the frozen `output_shape` literal with an
+  `output_shape_rule` (`[1, 4 + num_classes + 32, anchors]`, `num_classes` from
+  `model-metadata.json`). Add `scripts/write_export_contract.py` that refreshes the
+  `class_names` snapshot from a dataset config YAML, preserving all frozen fields
+  (thresholds, calibration, acceptance targets, the `yolo11n-seeds.tflite` alias) and adding
+  no class-count literal. Refresh the snapshot for the v10 10-class release.
 - **Imbalance mitigation configs (non-code).** Add `configs/dataset.advance-seeds-v10.yaml`
   and `configs/train.advance-seeds-v10.copy-paste.yaml` (copy-paste augmentation raised for
   the heavily long-tailed v10 class distribution).
@@ -56,8 +61,8 @@ change lands and a real v10 model is trained + exported.**
 
 - `src/advance_seeds_ml/contracts.py` — new `load_class_names()` helper.
 - `scripts/write_model_metadata.py` — new `--dataset-config` option (mutually exclusive with `--classes`).
-- `scripts/write_export_contract.py` — new contract generator.
-- `configs/model_export_contract.json` — regenerated to the v10 10-class set, `output_shape: [1, 46, 8400]`.
+- `scripts/write_export_contract.py` — new contract class-snapshot refresher.
+- `configs/model_export_contract.json` — rule-based: `output_shape` literal replaced by `output_shape_rule`; `class_names` snapshot refreshed to the v10 10-class set.
 - `configs/dataset.advance-seeds-v10.yaml`, `configs/train.advance-seeds-v10.copy-paste.yaml` — new.
 - `tests/` — new unit tests for `load_class_names`, the `--dataset-config` path, and contract generation.
 - **Gated:** a multi-class app release still requires the lockstep demo-app change and a trained v10 model.

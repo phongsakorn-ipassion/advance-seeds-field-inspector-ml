@@ -19,19 +19,21 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from advance_seeds_ml.contracts import load_class_names, raw_seg_output_shape
+from advance_seeds_ml.contracts import load_class_names
 
 DEFAULT_CONTRACT = "configs/model_export_contract.json"
 
 
 def build_contract(base: dict, class_names: list[str]) -> dict:
+    """Refresh only the class-name snapshot; everything else is preserved.
+
+    The contract is rule-based: the class-count-dependent detection shape is
+    expressed as `output_shape_rule` (layout `[1, 4 + num_classes + 32,
+    anchors]`), not a frozen literal — so class growth needs no contract edit.
+    The concrete per-model shape lives in each model's `model-metadata.json`.
+    """
     contract = dict(base)
     contract["class_names"] = class_names
-    # Only the raw one-to-many seg head has a class-count-dependent shape.
-    if contract.get("output_kind") == "segmentation_raw":
-        contract["output_shape"] = raw_seg_output_shape(
-            len(class_names), int(contract.get("input_size", 640))
-        )
     return contract
 
 

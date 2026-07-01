@@ -22,19 +22,35 @@ time), so all three converge. `load_class_names()` normalizes both dict-form (`{
 and list-form (`[banana, ...]`) `names:` into an index-ordered list, reusing the existing
 `_normalize_names` / `_read_yaml_mapping` in `dataset.py`.
 
-## Raw-seg output shape is class-count-dependent
+## Rule, not value: the contract must not freeze a class count
 
-The contract is currently `output_kind: segmentation_raw`, `nms_applied: false`. The raw
-one-to-many head feature dim is `4 (box) + nc + 32 (mask coeffs)`:
+The contract is `output_kind: segmentation_raw`, `nms_applied: false`; the raw one-to-many
+head feature dim is `4 (box) + nc + 32 (mask coeffs)`:
 
-| classes | output_shape |
+| classes | concrete shape (per-model metadata only) |
 | --- | --- |
 | 2 (banana PoC) | `[1, 38, 8400]` |
 | 5 (v9) | `[1, 41, 8400]` |
-| **10 (v10)** | **`[1, 46, 8400]`** |
+| 10 (v10) | `[1, 46, 8400]` |
 
-`raw_seg_output_shape(nc, imgsz)` already computes this; the generator just calls it with
-`len(class_names)`.
+The class set grows every release, so freezing any one of these literals in the contract is
+wrong — it would force a re-freeze each time. The contract therefore carries a **rule**:
+
+```
+output_shape_rule = { layout: "[1, 4 + num_classes + 32, anchors]",
+                      num_classes_source: "model-metadata.json class_names length",
+                      anchors: 8400 }
+```
+
+Only two layers hold a concrete number, and both derive it — never hardcode it:
+
+- **Per-model `model-metadata.json`** — `raw_seg_output_shape(len(class_names))` stamps the
+  real `[1, 4+N+32, anchors]` for that specific model. This is what the app reads.
+- **The app analyzer** — reads `num_classes = class_names.length` from that metadata and
+  computes the mask-coefficient offset `4 + num_classes` at load time.
+
+`scripts/write_export_contract.py` only refreshes the contract's `class_names` snapshot from
+a dataset YAML; it adds no `output_shape` literal.
 
 ## Cross-repo: required demo-app change (drafted, applied in the other repo)
 

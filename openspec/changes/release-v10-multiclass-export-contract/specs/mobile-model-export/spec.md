@@ -25,19 +25,36 @@ from the resulting class count (`4 + nc + 32` features).
 - **WHEN** class names are loaded from it
 - **THEN** the resulting list SHALL be ordered by class index, index 0 first
 
-### Requirement: Frozen export contract reflects the released class set
+### Requirement: Export contract is class-count rule-based, not value-frozen
 
-`configs/model_export_contract.json` SHALL be regenerable from a dataset config YAML so its
-`class_names` and raw-segmentation `output_shape` reflect the class set being released,
-while preserving the frozen `mobile_tflite_filename` alias, thresholds, calibration
-contract, and acceptance targets. Shipping a class set wider than the demo app currently
-handles SHALL remain gated on a lockstep demo-app change.
+`configs/model_export_contract.json` SHALL express the class-count-dependent detection
+tensor as a rule — layout `[1, 4 + num_classes + 32, anchors]` with `num_classes` sourced
+from each model's `model-metadata.json` — rather than a frozen `output_shape` literal, so
+the class set can grow release to release without editing the contract. `class_names` in
+the contract SHALL be a regenerable snapshot of the current released set (kept in sync from
+the dataset YAML), not the source of truth for class count. The `mobile_tflite_filename`
+alias, thresholds, calibration contract, and acceptance targets SHALL remain frozen.
+Shipping a class set wider than the demo app currently handles SHALL remain gated on a
+lockstep demo-app change.
 
-#### Scenario: Contract regenerated for the v10 class set
+#### Scenario: Contract does not freeze a class-count-dependent shape
+
+- **WHEN** the export contract is inspected
+- **THEN** it SHALL NOT contain a class-count-dependent `output_shape` literal
+- **AND** it SHALL contain an `output_shape_rule` with layout `[1, 4 + num_classes + 32, anchors]`
+- **AND** it SHALL state that `num_classes` comes from `model-metadata.json`, not the contract
+
+#### Scenario: Class snapshot regenerated from a dataset config
 
 - **GIVEN** the v10 dataset config with 10 `names:` (`banana … wax_gourd`)
 - **WHEN** `scripts/write_export_contract.py --dataset-config <v10 yaml>` runs
-- **THEN** the emitted contract `class_names` SHALL be the 10 names in index order
-- **AND** `output_shape` SHALL be `[1, 46, 8400]` (`4 + 10 + 32` features over 8400 anchors)
-- **AND** `mobile_tflite_filename` SHALL remain `yolo11n-seeds.tflite`
-- **AND** `calibration.supported_sources` and `acceptance_targets` SHALL be unchanged
+- **THEN** the contract `class_names` snapshot SHALL be the 10 names in index order
+- **AND** no `output_shape` literal SHALL be added
+- **AND** `mobile_tflite_filename`, `calibration.supported_sources`, and `acceptance_targets` SHALL be unchanged
+
+#### Scenario: Per-model metadata still carries the concrete shape
+
+- **GIVEN** a model trained on N classes
+- **WHEN** its `model-metadata.json` is written
+- **THEN** its `output_shape` SHALL be the concrete `[1, 4 + N + 32, anchors]` for that model
+- **AND** the app SHALL read `num_classes` from that metadata, never from the contract

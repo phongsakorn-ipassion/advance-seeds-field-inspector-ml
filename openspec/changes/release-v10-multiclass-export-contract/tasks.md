@@ -4,11 +4,12 @@
 - [x] 1.2 Add `--dataset-config PATH` to `scripts/write_model_metadata.py`, mutually exclusive with `--classes`; exactly one required. When given, `class_names = load_class_names(path)`.
 - [x] 1.3 Tests: dict-form names, list-form names, index ordering with unsorted keys, empty/missing raises, mutual-exclusivity of the two options.
 
-## 2. Regenerable frozen contract (Part B)
+## 2. Rule-based contract + class snapshot (Part B)
 
-- [x] 2.1 Add `scripts/write_export_contract.py --dataset-config PATH [--output configs/model_export_contract.json]`: derive `class_names` (via `load_class_names`) and raw-seg `output_shape` (via `raw_seg_output_shape`), preserve all other frozen fields.
-- [x] 2.2 Test: given a 10-name YAML, the emitted contract has 10 `class_names` in index order and `output_shape == [1, 46, 8400]`; frozen fields (`mobile_tflite_filename`, thresholds, calibration, acceptance_targets) unchanged.
-- [x] 2.3 Regenerate `configs/model_export_contract.json` from `configs/dataset.advance-seeds-v10.yaml`.
+- [x] 2.1 Restructure `configs/model_export_contract.json`: replace the `output_shape` literal with `output_shape_rule` (`[1, 4 + num_classes + 32, anchors]`, num_classes from metadata); add `class_names_note` marking `class_names` as a snapshot, not the class-count source of truth.
+- [x] 2.2 Add `scripts/write_export_contract.py --dataset-config PATH [--base ...] [--output ...]`: refresh only the `class_names` snapshot (via `load_class_names`), preserve all other fields, add no `output_shape` literal.
+- [x] 2.3 Test: given a 10-name YAML the contract has 10 `class_names` in index order, NO `output_shape` literal, `output_shape_rule` preserved; frozen fields unchanged.
+- [x] 2.4 Refresh `configs/model_export_contract.json` class snapshot from `configs/dataset.advance-seeds-v10.yaml`.
 
 ## 3. Imbalance mitigation configs (Part D)
 

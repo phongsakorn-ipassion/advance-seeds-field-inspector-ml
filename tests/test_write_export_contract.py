@@ -18,7 +18,11 @@ BASE_CONTRACT = {
     "mobile_tflite_filename": "yolo11n-seeds.tflite",
     "class_names": ["banana", "banana_spot"],
     "output_kind": "segmentation_raw",
-    "output_shape": [1, 38, 8400],
+    "output_shape_rule": {
+        "layout": "[1, 4 + num_classes + 32, anchors]",
+        "num_classes_source": "model-metadata.json class_names length",
+        "anchors": 8400,
+    },
     "mask_proto_shape": [1, 32, 160, 160],
     "nms_applied": False,
     "score_threshold": 0.35,
@@ -59,11 +63,17 @@ class WriteExportContractTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             data = json.loads(out.read_text())
 
-        # derived from the YAML
+        # class_names snapshot is derived from the YAML
         self.assertEqual(len(data["class_names"]), 10)
         self.assertEqual(data["class_names"][0], "banana")
         self.assertEqual(data["class_names"][9], "wax_gourd")
-        self.assertEqual(data["output_shape"], [1, 46, 8400])  # 4 + 10 + 32
+
+        # rule-based: the contract does NOT freeze a class-count-dependent
+        # output_shape literal; it keeps the layout rule instead. The concrete
+        # shape lives in each model's model-metadata.json.
+        self.assertNotIn("output_shape", data)
+        self.assertEqual(data["output_shape_rule"]["anchors"], 8400)
+        self.assertIn("4 + num_classes + 32", data["output_shape_rule"]["layout"])
 
         # frozen fields preserved from the base
         self.assertEqual(data["mobile_tflite_filename"], "yolo11n-seeds.tflite")
