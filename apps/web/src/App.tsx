@@ -157,7 +157,7 @@ function parseYoloClasses(yaml: string): string[] | null {
   if (inline) {
     return inline[1].split(",").map((s) => s.trim().replace(/^['"]|['"]$/g, "")).filter(Boolean);
   }
-  const block = yaml.match(/^\s*names\s*:\s*\n((?:\s+.+\n?)+)/m);
+  const block = yaml.match(/^\s*names\s*:\s*\n((?:[ \t]+\S.*\n?)+)/m);
   if (block) {
     const lines = block[1].split("\n").map((l) => l.trim()).filter(Boolean);
     const dict = lines.map((line) => line.match(/^\d+\s*:\s*(.+)$/)).filter(Boolean) as RegExpMatchArray[];
