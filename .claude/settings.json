@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pytest *)",
+      "Bash(python3 -m pytest *)",
+      "Bash(playwright *)",
+      "Bash(npx playwright *)",
+      "Bash(python3 -m playwright *)"
+    ]
+  }
+}

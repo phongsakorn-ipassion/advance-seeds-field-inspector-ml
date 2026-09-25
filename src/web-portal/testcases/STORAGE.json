@@ -1,0 +1,188 @@
+{
+  "meta": {
+    "schema_version": "2.0",
+    "project": "advance-seeds-model-registry",
+    "series": "STORAGE",
+    "platform": "web",
+    "system_summary_ref": "sys_summary.md",
+    "analyzed_commit": "5cd779a210215869f95b1ebd5ad6361198060ff9",
+    "application": "Model Registry web dashboard",
+    "function_module": "STORAGE",
+    "cycle": "#01",
+    "doc_name": "",
+    "cover_subtitle": "",
+    "doc_status": "In Progress",
+    "designer": "",
+    "created_by": "",
+    "version": 0.1,
+    "executed_by": "",
+    "start_date": "",
+    "created": "",
+    "last_run": "2026-09-25T22:56:35"
+  },
+  "test_cases": {
+    "STORAGE-0001": {
+      "title": "The quota banner reflects current R2 usage",
+      "module": "web-portal",
+      "objective": "Confirm the storage screen's usage banner shows the actual used space and percentage of quota, and flags an over-quota state distinctly.",
+      "type": "Positive",
+      "priority": "medium",
+      "viewport": "desktop",
+      "precondition": "User is signed in as admin and is on the Storage screen.",
+      "test_context": {},
+      "test_data": {},
+      "status": "pass",
+      "remark": "",
+      "steps": [
+        {
+          "no": 1,
+          "name": "Open the Storage screen",
+          "action": "navigate",
+          "expected": "The banner shows a used-space figure and a percentage of the configured quota.",
+          "test_data": "-",
+          "actual": "Quota banner shows '179.3 MB used / 35% of 512 MB demo quota' with a progress bar.",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "open_the_storage_screen.1"
+        }
+      ],
+      "engine": "playwright",
+      "script_ref": "tests/test_storage.py::test_quota_banner_reflects_usage[STORAGE-0001]"
+    },
+    "STORAGE-0002": {
+      "title": "Deleting an artifact that is still active is blocked",
+      "module": "web-portal",
+      "objective": "Confirm an artifact belonging to a version currently deployed to a channel cannot be deleted from Storage, and explains why.",
+      "type": "Negative",
+      "priority": "high",
+      "viewport": "desktop",
+      "precondition": "A listed artifact belongs to a version that is currently deployed to a channel (shown as active).",
+      "test_context": {},
+      "test_data": {
+        "r2_key": "runs/run-seeds-v2-041/1.0.0-seeds-v2.tflite"
+      },
+      "status": "pass",
+      "remark": "",
+      "steps": [
+        {
+          "no": 1,
+          "name": "Locate the active artifact's row and its delete action",
+          "action": "navigate",
+          "expected": "The delete action is disabled, with an explanation that the model must be undeployed first.",
+          "test_data": "-",
+          "actual": "Active artifact's row located; Delete model button present but disabled (verified disabled=true, title='Undeploy this model before deleting it').",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "locate_the_active_artifact_s_row_and_its_delete_action.1"
+        }
+      ],
+      "engine": "playwright",
+      "script_ref": "tests/test_storage.py::test_delete_blocked_for_active_artifact[STORAGE-0002]"
+    },
+    "STORAGE-0003": {
+      "title": "Deleting an inactive artifact succeeds",
+      "module": "web-portal",
+      "objective": "Confirm an artifact belonging to a version with no active deployment can be permanently deleted after confirmation.",
+      "type": "Positive",
+      "priority": "medium",
+      "viewport": "desktop",
+      "precondition": "A listed artifact belongs to a version that is not deployed to any channel (shown as inactive).",
+      "test_context": {},
+      "test_data": {
+        "r2_key": "runs/run-old-070/0.7.0-archive.tflite"
+      },
+      "status": "pass",
+      "remark": "",
+      "steps": [
+        {
+          "no": 1,
+          "name": "Locate the inactive artifact's row and choose to delete it",
+          "action": "click",
+          "expected": "A confirmation dialog warns the deletion is permanent.",
+          "test_data": "-",
+          "actual": "Screenshot missed the transient modal (evidence-timing gap, verified live: dialog 'Delete model storage' reads 'permanently removes the model version and cannot be undone'); underlying action worked correctly per step 2.",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "locate_the_inactive_artifact_s_row_and_choose_to_delete_it.1"
+        },
+        {
+          "no": 2,
+          "name": "Confirm the deletion",
+          "action": "click",
+          "expected": "The artifact's row no longer appears in the storage list and the used-space figure decreases.",
+          "test_data": "-",
+          "actual": "Confirmed: both 0.7.0-archive rows gone from the list, used-space dropped 179.3 MB -> 127.7 MB.",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "confirm_the_deletion.1"
+        }
+      ],
+      "engine": "playwright",
+      "script_ref": "tests/test_storage.py::test_delete_inactive_artifact[STORAGE-0003]"
+    },
+    "STORAGE-0004": {
+      "title": "Opening a model from Storage navigates to its Models detail",
+      "module": "web-portal",
+      "objective": "Confirm the storage row's shortcut opens the corresponding version in the Models screen, saving the user from re-finding it manually.",
+      "type": "Positive",
+      "priority": "low",
+      "viewport": "desktop",
+      "precondition": "User is signed in as admin and is on the Storage screen.",
+      "test_context": {},
+      "test_data": {
+        "r2_key": "runs/run-old-070/0.7.0-archive.tflite"
+      },
+      "status": "pass",
+      "remark": "",
+      "steps": [
+        {
+          "no": 1,
+          "name": "Choose the open-model shortcut on any artifact row",
+          "action": "click",
+          "expected": "The Models screen is shown with that artifact's version already selected and its detail visible.",
+          "test_data": "-",
+          "actual": "Open-model shortcut navigated to Models screen with 0.7.0-archive already selected and its detail panel visible.",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "choose_the_open_model_shortcut_on_any_artifact_row.1"
+        }
+      ],
+      "engine": "playwright",
+      "script_ref": "tests/test_storage.py::test_open_model_shortcut[STORAGE-0004]"
+    }
+  },
+  "shots_map": {
+    "STORAGE-0001": {
+      "1": "001_quota_banner.png"
+    },
+    "STORAGE-0002": {
+      "1": "001_delete_disabled.png"
+    },
+    "STORAGE-0003": {
+      "1": "001_delete_confirm.png",
+      "2": "002_deleted.png"
+    },
+    "STORAGE-0004": {
+      "1": "001_model_opened.png"
+    }
+  },
+  "missing_reasons": [],
+  "known_bugs": [],
+  "extra_issues": [],
+  "mocks": {},
+  "bo_config": {},
+  "design": {
+    "pdf": "",
+    "pages": {}
+  }
+}

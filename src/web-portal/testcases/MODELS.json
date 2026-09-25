@@ -1,0 +1,400 @@
+{
+  "meta": {
+    "schema_version": "2.0",
+    "project": "advance-seeds-model-registry",
+    "series": "MODELS",
+    "platform": "web",
+    "system_summary_ref": "sys_summary.md",
+    "analyzed_commit": "5cd779a210215869f95b1ebd5ad6361198060ff9",
+    "application": "Model Registry web dashboard",
+    "function_module": "MODELS",
+    "cycle": "#01",
+    "doc_name": "",
+    "cover_subtitle": "",
+    "doc_status": "In Progress",
+    "designer": "",
+    "created_by": "",
+    "version": 0.1,
+    "executed_by": "",
+    "start_date": "",
+    "created": "",
+    "last_run": "2026-09-25T22:56:20"
+  },
+  "test_cases": {
+    "MODELS-0001": {
+      "title": "Filtering by channel narrows the version list",
+      "module": "web-portal",
+      "objective": "Confirm choosing a channel filter shows only versions currently in that state.",
+      "type": "Positive",
+      "priority": "medium",
+      "viewport": "desktop",
+      "precondition": "User is signed in as admin and is on the Models screen.",
+      "test_context": {},
+      "test_data": {
+        "channels": [
+          "staging",
+          "archived"
+        ]
+      },
+      "status": "pass",
+      "remark": "",
+      "steps": [
+        {
+          "no": 1,
+          "name": "Choose the Staging filter",
+          "action": "select",
+          "expected": "Only versions currently deployed to staging are listed.",
+          "test_data": "channel = staging",
+          "actual": "Staging filter selected; only 1.0.0-seeds-v2 (deployed to staging) is listed.",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "choose_the_staging_filter.1"
+        },
+        {
+          "no": 2,
+          "name": "Choose the Archived filter",
+          "action": "select",
+          "expected": "Only archived versions are listed (or an empty-state message if none exist).",
+          "test_data": "channel = archived",
+          "actual": "Archived filter selected; empty state 'No matching versions' shown (no archived versions exist).",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "choose_the_archived_filter.1"
+        }
+      ],
+      "engine": "playwright",
+      "script_ref": "tests/test_models.py::test_filter_by_channel[MODELS-0001]"
+    },
+    "MODELS-0002": {
+      "title": "Deploying a candidate version to a channel succeeds",
+      "module": "web-portal",
+      "objective": "Confirm a version not yet deployed anywhere can be deployed to staging or production as a selectable (non-default) version, after confirmation.",
+      "type": "Positive",
+      "priority": "high",
+      "viewport": "desktop",
+      "precondition": "A version exists that is not currently deployed to any channel.",
+      "test_context": {},
+      "test_data": {
+        "version": "0.7.0-archive",
+        "channel": "staging"
+      },
+      "status": "pass",
+      "remark": "",
+      "steps": [
+        {
+          "no": 1,
+          "name": "Select the undeployed version",
+          "action": "click",
+          "expected": "Its detail panel shows deploy actions for both staging and production.",
+          "test_data": "-",
+          "actual": "0.7.0-archive selected (Inactive); detail panel confirms both Deploy to Prod / Deploy to Staging actions exist (visible in next step's pre-shot).",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "select_the_undeployed_version.1"
+        },
+        {
+          "no": 2,
+          "name": "Choose to deploy it to a channel",
+          "action": "click",
+          "expected": "A confirmation dialog explains the version will become a selectable deployment on that channel without replacing the current default.",
+          "test_data": "target channel",
+          "actual": "Deploy-to-staging modal explains the version becomes a selectable model without changing the current default.",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "choose_to_deploy_it_to_a_channel.1"
+        },
+        {
+          "no": 3,
+          "name": "Confirm the deployment",
+          "action": "click",
+          "expected": "The version's lifecycle status shows it is now deployed to that channel (not yet default).",
+          "test_data": "-",
+          "actual": "Deployed: Staging deployment banner now shows for 0.7.0-archive with no Default badge; toast confirms 'Model version ready 0.7.0-archive'.",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "confirm_the_deployment.1"
+        }
+      ],
+      "engine": "playwright",
+      "script_ref": "tests/test_models.py::test_deploy_candidate_version[MODELS-0002]"
+    },
+    "MODELS-0003": {
+      "title": "Making a deployed version the channel default succeeds",
+      "module": "web-portal",
+      "objective": "Confirm a version already deployed to a channel, but not yet its default, can be promoted to the default that mobile clients resolve.",
+      "type": "Positive",
+      "priority": "high",
+      "viewport": "desktop",
+      "precondition": "A version is deployed to a channel but is not that channel's current default.",
+      "test_context": {},
+      "test_data": {
+        "version": "0.7.0-archive",
+        "channel": "staging"
+      },
+      "status": "pass",
+      "remark": "",
+      "steps": [
+        {
+          "no": 1,
+          "name": "Select the non-default deployed version",
+          "action": "click",
+          "expected": "A \"make default\" action is available for that channel.",
+          "test_data": "-",
+          "actual": "0.7.0-archive selected; shown deployed to Staging (not yet default).",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "select_the_non_default_deployed_version.1"
+        },
+        {
+          "no": 2,
+          "name": "Choose to make it the channel default",
+          "action": "click",
+          "expected": "The version's lifecycle status now shows it as the default for that channel, and the previous default no longer shows as default.",
+          "test_data": "-",
+          "actual": "Made default: toast 'Default staging model changed - 0.7.0-archive is default'; Deploy to Prod / Undeploy actions now shown for it.",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "choose_to_make_it_the_channel_default.1"
+        }
+      ],
+      "engine": "playwright",
+      "script_ref": "tests/test_models.py::test_make_deployed_version_default[MODELS-0003]"
+    },
+    "MODELS-0004": {
+      "title": "Undeploying a version from a channel succeeds",
+      "module": "web-portal",
+      "objective": "Confirm a deployed version can be removed from a channel after confirmation.",
+      "type": "Positive",
+      "priority": "medium",
+      "viewport": "desktop",
+      "precondition": "A version is currently deployed to a channel.",
+      "test_context": {},
+      "test_data": {
+        "version": "1.0.0-seeds-v2",
+        "channel": "staging"
+      },
+      "status": "pass",
+      "remark": "",
+      "steps": [
+        {
+          "no": 1,
+          "name": "Select the deployed version",
+          "action": "click",
+          "expected": "An undeploy action is available for that channel.",
+          "test_data": "-",
+          "actual": "1.0.0-seeds-v2 selected; shown deployed+default on Staging.",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "select_the_deployed_version.1"
+        },
+        {
+          "no": 2,
+          "name": "Choose to undeploy from the channel",
+          "action": "click",
+          "expected": "A confirmation dialog appears naming the channel.",
+          "test_data": "-",
+          "actual": "Undeploy-from-staging modal confirms removal, naming the channel and noting other deployed models remain.",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "choose_to_undeploy_from_the_channel.1"
+        },
+        {
+          "no": 3,
+          "name": "Confirm the undeploy",
+          "action": "click",
+          "expected": "The version's lifecycle status no longer shows it deployed to that channel.",
+          "test_data": "-",
+          "actual": "Undeployed: detail now shows 'Not deployed to staging or production'; toast 'staging undeployed - No default model is assigned to staging'.",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "confirm_the_undeploy.1"
+        }
+      ],
+      "engine": "playwright",
+      "script_ref": "tests/test_models.py::test_undeploy_version[MODELS-0004]"
+    },
+    "MODELS-0005": {
+      "title": "Deleting a version that is still deployed is blocked",
+      "module": "web-portal",
+      "objective": "Confirm the app refuses to delete a model version while it remains deployed to any channel, and explains why.",
+      "type": "Negative",
+      "priority": "high",
+      "viewport": "desktop",
+      "precondition": "A version is currently deployed to at least one channel.",
+      "test_context": {},
+      "test_data": {
+        "version": "1.0.0-seeds-v2"
+      },
+      "status": "pass",
+      "remark": "",
+      "steps": [
+        {
+          "no": 1,
+          "name": "Select the deployed version and locate the delete action",
+          "action": "click",
+          "expected": "The delete action is disabled, with an explanation that the version must be undeployed first.",
+          "test_data": "-",
+          "actual": "1.0.0-seeds-v2 selected; Delete model button present but disabled (verified disabled=true, title='Undeploy this model before deleting it').",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "select_the_deployed_version_and_locate_the_delete_action.1"
+        }
+      ],
+      "engine": "playwright",
+      "script_ref": "tests/test_models.py::test_delete_blocked_while_deployed[MODELS-0005]"
+    },
+    "MODELS-0006": {
+      "title": "Deleting a version that is not deployed anywhere succeeds",
+      "module": "web-portal",
+      "objective": "Confirm a version with no active deployments can be permanently deleted after confirmation.",
+      "type": "Positive",
+      "priority": "medium",
+      "viewport": "desktop",
+      "precondition": "A version exists that is not deployed to any channel.",
+      "test_context": {},
+      "test_data": {
+        "version": "0.7.0-archive"
+      },
+      "status": "pass",
+      "remark": "",
+      "steps": [
+        {
+          "no": 1,
+          "name": "Select the undeployed version and choose to delete it",
+          "action": "click",
+          "expected": "A confirmation dialog warns the deletion is permanent, covering the version, its artifacts, and its training run.",
+          "test_data": "-",
+          "actual": "0.7.0-archive selected (undeployed); delete confirmation dialog warns deletion is permanent, covering the version, its artifacts, and its training run.",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "select_the_undeployed_version_and_choose_to_delete_it.1"
+        },
+        {
+          "no": 2,
+          "name": "Confirm the deletion",
+          "action": "click",
+          "expected": "The version no longer appears in the version list.",
+          "test_data": "-",
+          "actual": "Confirmed deletion: 0.7.0-archive no longer appears anywhere in the version list (verified live).",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "confirm_the_deletion.1"
+        }
+      ],
+      "engine": "playwright",
+      "script_ref": "tests/test_models.py::test_delete_undeployed_version[MODELS-0006]"
+    },
+    "MODELS-0007": {
+      "title": "Renaming a version to one that already exists is rejected",
+      "module": "web-portal",
+      "objective": "Confirm the app enforces unique version names and shows an error rather than silently overwriting or duplicating.",
+      "type": "Negative",
+      "priority": "medium",
+      "viewport": "desktop",
+      "precondition": "At least two model versions exist.",
+      "test_context": {},
+      "test_data": {
+        "version": "0.7.0-archive",
+        "duplicate_name": "1.0.0-seeds-v2"
+      },
+      "status": "pass",
+      "remark": "",
+      "steps": [
+        {
+          "no": 1,
+          "name": "Select a version and start renaming it",
+          "action": "click",
+          "expected": "An inline rename field is shown, pre-filled with the current name.",
+          "test_data": "-",
+          "actual": "Rename field shown, pre-filled with '0.7.0-archive'.",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "select_a_version_and_start_renaming_it.1"
+        },
+        {
+          "no": 2,
+          "name": "Enter the exact name of a different, existing version and save",
+          "action": "submit",
+          "expected": "The rename is rejected with an error stating that name already exists; the version keeps its original name.",
+          "test_data": "name of another existing version",
+          "actual": "Renaming to '1.0.0-seeds-v2' rejected with error 'Version \"1.0.0-seeds-v2\" already exists.'",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "enter_the_exact_name_of_a_different_existing_version_and_save.1"
+        }
+      ],
+      "engine": "playwright",
+      "script_ref": "tests/test_models.py::test_rename_to_duplicate_name_rejected[MODELS-0007]"
+    }
+  },
+  "shots_map": {
+    "MODELS-0001": {
+      "1": "001_staging_filtered.png",
+      "2": "002_archived_filtered.png"
+    },
+    "MODELS-0002": {
+      "1": "001_version_selected.png",
+      "2": "002_deploy_confirm.png",
+      "3": "003_deployed.png"
+    },
+    "MODELS-0003": {
+      "1": "001_version_selected.png",
+      "2": "002_made_default.png"
+    },
+    "MODELS-0004": {
+      "1": "001_version_selected.png",
+      "2": "002_undeploy_confirm.png",
+      "3": "003_undeployed.png"
+    },
+    "MODELS-0005": {
+      "1": "001_delete_disabled.png"
+    },
+    "MODELS-0006": {
+      "1": "001_delete_confirm.png",
+      "2": "002_deleted.png"
+    },
+    "MODELS-0007": {
+      "1": "001_rename_form.png",
+      "2": "002_rename_rejected.png"
+    }
+  },
+  "missing_reasons": [],
+  "known_bugs": [],
+  "extra_issues": [],
+  "mocks": {},
+  "bo_config": {},
+  "design": {
+    "pdf": "",
+    "pages": {}
+  }
+}

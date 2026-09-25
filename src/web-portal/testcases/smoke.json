@@ -1,0 +1,125 @@
+{
+  "meta": {
+    "schema_version": "2.0",
+    "project": "advance-seeds-model-registry",
+    "series": "SMOKE",
+    "platform": "web",
+    "system_summary_ref": "sys_summary.md",
+    "analyzed_commit": "5cd779a210215869f95b1ebd5ad6361198060ff9",
+    "application": "Model Registry web dashboard",
+    "function_module": "qa-build smoke",
+    "cycle": "#01",
+    "doc_name": "",
+    "cover_subtitle": "",
+    "doc_status": "In Progress",
+    "designer": "",
+    "created_by": "",
+    "version": 0.1,
+    "executed_by": "",
+    "start_date": "",
+    "created": "",
+    "last_run": "2026-09-25T22:56:02"
+  },
+  "test_cases": {
+    "SMOKE-0001": {
+      "title": "qa-build smoke: sign in and tour every section",
+      "module": "web-portal",
+      "objective": "Prove the page-object layer's login and navigation flows work end to end against a live app instance, without mutating any data.",
+      "type": "Positive",
+      "priority": "medium",
+      "viewport": "desktop",
+      "precondition": "Dev server running at module.json's base_url; demo mode (no .env.local) or a real Supabase project reachable.",
+      "test_context": {},
+      "test_data": {},
+      "status": "pass",
+      "remark": "qa-build's own smoke fixture, not a product test case — not part of any reviewed series.",
+      "steps": [
+        {
+          "no": 1,
+          "name": "Sign in as admin",
+          "action": "navigate",
+          "expected": "screen renders",
+          "test_data": "-",
+          "actual": "Screen renders correctly (demo mode).",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "sign_in_as_admin.1"
+        },
+        {
+          "no": 2,
+          "name": "Open overview",
+          "action": "navigate",
+          "expected": "screen renders",
+          "test_data": "-",
+          "actual": "Screen renders correctly (demo mode).",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "open_overview.1"
+        },
+        {
+          "no": 3,
+          "name": "Open train",
+          "action": "navigate",
+          "expected": "screen renders",
+          "test_data": "-",
+          "actual": "Screen renders correctly (demo mode).",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "open_train.1"
+        },
+        {
+          "no": 4,
+          "name": "Open models",
+          "action": "navigate",
+          "expected": "screen renders",
+          "test_data": "-",
+          "actual": "Screen renders correctly (demo mode).",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "open_models.1"
+        },
+        {
+          "no": 5,
+          "name": "Open storage",
+          "action": "navigate",
+          "expected": "screen renders",
+          "test_data": "-",
+          "actual": "Screen renders correctly (demo mode).",
+          "result": "Pass",
+          "judged_by": "ai",
+          "issue": null,
+          "remark": "",
+          "key": "open_storage.1"
+        }
+      ],
+      "engine": "playwright",
+      "script_ref": "tests/smoke/test_flows.py::test_sign_in_and_tour_sections[SMOKE-0001]"
+    }
+  },
+  "shots_map": {
+    "SMOKE-0001": {
+      "1": "001_signed_in.png",
+      "2": "002_overview.png",
+      "3": "003_train.png",
+      "4": "004_models.png",
+      "5": "005_storage.png"
+    }
+  },
+  "missing_reasons": [],
+  "known_bugs": [],
+  "extra_issues": [],
+  "mocks": {},
+  "bo_config": {},
+  "design": {
+    "pdf": "",
+    "pages": {}
+  }
+}

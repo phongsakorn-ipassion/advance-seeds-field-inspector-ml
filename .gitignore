@@ -44,3 +44,14 @@ apps/web/.env.*.local
 apps/web/dist/
 *.tsbuildinfo
 .playwright-mcp/
+
+# QA automation workspace (ipassion-qa-automation)
+**/evidence/
+**/results/
+**/output/
+**/.env.qa
+*.bak
+
+# Claude Code local-only settings (machine-specific paths, runtime locks)
+.claude/settings.local.json
+.claude/*.lock

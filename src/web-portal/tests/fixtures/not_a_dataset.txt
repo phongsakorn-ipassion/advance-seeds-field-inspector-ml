@@ -1,0 +1,2 @@
+This is a plain text file used by TRAIN-0002 to verify the dataset image
+bundle upload rejects any file that is not a .zip.

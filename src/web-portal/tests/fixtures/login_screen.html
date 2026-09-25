@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<!--
+  Static capture of the real rendered LoginScreen DOM (demo mode, manual-form
+  expanded), taken 2026-09-25 against commit 5cd779a2 via the live dev server.
+  Used only by tests/smoke/test_components.py to prove LoginPage's locators
+  resolve against real markup, without needing a running dev server. Re-capture
+  whenever qa-build --update finds this screen's markup has drifted.
+-->
+<html lang="en">
+<head><meta charset="utf-8"><title>fixture: login screen</title></head>
+<body>
+<div id="root"><main class="login-shell"><div class="login-panel"><div class="brand large"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sprout brand-icon" aria-hidden="true"><path d="M7 20h10"></path><path d="M10 20c5.5-2.5.8-6.4 3-10"></path><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"></path><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"></path></svg><div><strong>Advance Seeds</strong><span>Model Registry</span></div></div><div><h1>Admin console</h1><p>One-click sign-in as the pre-created admin. Grants deploy, undeploy, train, and storage cleanup.</p></div><button class="admin-card" type="button"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-shield-check"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="m9 12 2 2 4-4"></path></svg><div><strong>Sign in as Admin</strong><span>admin@advance-seeds.demo</span></div></button><form class="manual-login"><label><span class="label-text">Email</span><input placeholder="you@advanceseeds.com" autocomplete="email" type="email" value=""></label><label><span class="label-text">Password</span><input placeholder="••••••••" autocomplete="current-password" type="password" value=""></label><div class="button-row"><button class="primary-button" type="submit" disabled="">Sign in</button><button class="ghost-button" type="button">Cancel</button></div></form></div></main></div>
+</body>
+</html>

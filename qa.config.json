@@ -1,0 +1,9 @@
+{
+  "language": "en",
+  "browser_path": null,
+  "viewports": {
+    "mobile": { "width": 390, "height": 844 },
+    "desktop": { "width": 1440, "height": 900 }
+  },
+  "session_ttl_minutes": 15
+}

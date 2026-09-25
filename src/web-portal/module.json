@@ -1,0 +1,7 @@
+{
+  "base_url": "http://127.0.0.1:5173",
+  "platform": "web",
+  "system_repo": "apps/web",
+  "secrets_env": ".env.qa",
+  "partner_code": "ASML"
+}
