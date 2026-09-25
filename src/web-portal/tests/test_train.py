@@ -135,13 +135,16 @@ async def test_delete_stalled_or_waiting_run(tc, step, browser, qa_config):
 
     # No focus, and no click on the Live tracking tab: the app's own submit
     # handler already switches to that tab on success (confirmed live via
-    # _create_run's own final wait), and clicking a sub-nav tab that is
-    # *already* active reproducibly breaks the view (the run list disappears
-    # entirely) — confirmed with a throwaway script reproducing exactly this
-    # double click (recorded as a known bug on this TC). Checking the tab's
-    # "active" class immediately after submit and conditionally clicking
-    # still race-loses sometimes (the class can lag the click that already
-    # landed), so this trusts the navigation rather than re-driving it.
+    # _create_run's own final wait). Clicking the tab again looked like it
+    # broke the view (run list went empty) in earlier manual testing, but
+    # root-caused with console instrumentation: it's a Playwright click()
+    # artifact, not an app bug — the sub-nav badge (`{runningRuns.length}`)
+    # re-renders every ~1.5s from the demo ticker, so click()'s stability
+    # check never settles and the click stays pending for as long as
+    # anything is still "running"; by the time it finally fires, the ticker
+    # has long since finished every run, so of course the list is empty by
+    # then. Simplest fix: don't click a target whose content is being
+    # live-updated when we already know we're on the right tab.
     async with step("open_live_tracking_and_locate_the_waiting_stalled_run", 1,
                      shot="run_listed"):
         await train_page.run_row_by_index(0).wait_for()
