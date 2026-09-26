@@ -4,8 +4,7 @@
 ## Summary
 - **Test cases:** 6 TC / 11 steps
 - 🚫 `blocked` — 1 TC
-- ❌ `fail` — 1 TC
-- ✅ `pass` — 4 TC
+- ✅ `pass` — 5 TC
 
 ---
 
@@ -51,7 +50,7 @@
 ---
 
 ## TRAIN-0003 — Uploading a dataset YAML populates the class list
-> **Status:** ❌ `fail` | **Type:** Positive | **Viewport:** desktop | **Engine:** playwright | **Priority:** medium
+> **Status:** ✅ `pass` | **Type:** Positive | **Viewport:** desktop | **Engine:** playwright | **Priority:** medium
 
 **Objective:** Confirm uploading a valid YOLO dataset YAML reads its class names and shows them in the form's read-only Classes list.
 
@@ -59,14 +58,13 @@
 
 **Test data:** `upload_file=tests/fixtures/dataset_sample.yaml`
 
-### Step 1 ❌ — Upload a valid dataset YAML that declares a set of class names
+### Step 1 ✅ — Upload a valid dataset YAML that declares a set of class names
 - **Action:** upload
 - **Expected:** The Classes list updates to show exactly the class names declared in the YAML's names block.
 - **Test data:** a YAML with a known names: list
-- **Result:** Fail _(judged by ai)_
-- **Actual:** Upload rejected: 'could not parse names: block, classes left untouched' - Classes list stayed empty instead of showing apple/apple_spot/banana/banana_spot/orange/orange_spot from the YAML's names: dict block.
+- **Result:** Pass _(judged by ai)_
+- **Actual:** Fix verified: uploading dataset_sample.yaml now correctly parses all 6 classes (apple, apple_spot, banana, banana_spot, orange, orange_spot) into the Classes list. Regression check against commit 67b83ef3 (fix(web): stop parseYoloClasses from swallowing content after names: block), which resolved the bug this TC originally found.
 - **Remark:** Root cause traced in apps/web/src/App.tsx parseYoloClasses(): its names: block regex /^\s*names\s*:\s*\n((?:\s+.+\n?)+)/m keeps matching past the blank line that follows the names: block into the next top-level key (here metadata:) and its children, since a blank line + unindented line still satisfies \s+.+ . This inflates lines.length so the dict.length === lines.length check fails even though the names: block itself is valid dict syntax. Reproduced standalone with node -e against the exact fixture (tests/fixtures/dataset_sample.yaml). Any dataset YAML with content after names: (extremely common - e.g. a trailing metadata: block, or just train/val paths listed after) triggers this.
-- **Issue:** `behavior_changed`
 
 ---
 
@@ -142,7 +140,4 @@
 ## Steps not capturable
 - **TRAIN-0006** step 1 — `NEEDS_ELIGIBLE_ACCOUNT` needs an account that No read-only/non-admin test account exists for this app (sys_summary.md §7 — none is hardcoded in source). Provision a Supabase Auth user without app_metadata.role=admin and thread its credentials through .env.qa before this TC can be scripted. → waiting for access link from user
 - **TRAIN-0006** step 2 — `NEEDS_ELIGIBLE_ACCOUNT` needs an account that Same blocker as step 1: no read-only/non-admin test account exists for this app, so the actual submit-attempt cannot be exercised either. → waiting for access link from user
-
-## Known bugs
-- **TRAIN-0003** step 1 — parseYoloClasses() in apps/web/src/App.tsx fails to parse a valid names: dict block whenever another top-level YAML key follows it after a blank line (e.g. a metadata: section) - the block-capture regex greedily swallows the next key's lines too, which then breaks the dict.length === lines.length equality check. Confirmed via standalone node repro. Affects tests/fixtures/dataset_sample.yaml as shipped.
 

@@ -18,7 +18,7 @@
     "executed_by": "",
     "start_date": "",
     "created": "",
-    "last_run": "2026-09-25T22:57:26"
+    "last_run": "2026-09-26T08:58:34"
   },
   "test_cases": {
     "TRAIN-0001": {
@@ -111,7 +111,7 @@
       "test_data": {
         "upload_file": "tests/fixtures/dataset_sample.yaml"
       },
-      "status": "fail",
+      "status": "pass",
       "remark": "",
       "steps": [
         {
@@ -120,10 +120,10 @@
           "action": "upload",
           "expected": "The Classes list updates to show exactly the class names declared in the YAML's names block.",
           "test_data": "a YAML with a known names: list",
-          "actual": "Upload rejected: 'could not parse names: block, classes left untouched' - Classes list stayed empty instead of showing apple/apple_spot/banana/banana_spot/orange/orange_spot from the YAML's names: dict block.",
-          "result": "Fail",
+          "actual": "Fix verified: uploading dataset_sample.yaml now correctly parses all 6 classes (apple, apple_spot, banana, banana_spot, orange, orange_spot) into the Classes list. Regression check against commit 67b83ef3 (fix(web): stop parseYoloClasses from swallowing content after names: block), which resolved the bug this TC originally found.",
+          "result": "Pass",
           "judged_by": "ai",
-          "issue": "behavior_changed",
+          "issue": null,
           "remark": "Root cause traced in apps/web/src/App.tsx parseYoloClasses(): its names: block regex /^\\s*names\\s*:\\s*\\n((?:\\s+.+\\n?)+)/m keeps matching past the blank line that follows the names: block into the next top-level key (here metadata:) and its children, since a blank line + unindented line still satisfies \\s+.+ . This inflates lines.length so the dict.length === lines.length check fails even though the names: block itself is valid dict syntax. Reproduced standalone with node -e against the exact fixture (tests/fixtures/dataset_sample.yaml). Any dataset YAML with content after names: (extremely common - e.g. a trailing metadata: block, or just train/val paths listed after) triggers this.",
           "key": "upload_a_valid_dataset_yaml_that_declares_a_set_of_class_names.1"
         }
@@ -318,13 +318,7 @@
       "text": ""
     }
   ],
-  "known_bugs": [
-    {
-      "tc": "TRAIN-0003",
-      "step": 1,
-      "text": "parseYoloClasses() in apps/web/src/App.tsx fails to parse a valid names: dict block whenever another top-level YAML key follows it after a blank line (e.g. a metadata: section) - the block-capture regex greedily swallows the next key's lines too, which then breaks the dict.length === lines.length equality check. Confirmed via standalone node repro. Affects tests/fixtures/dataset_sample.yaml as shipped."
-    }
-  ],
+  "known_bugs": [],
   "extra_issues": [],
   "mocks": {},
   "bo_config": {},
