@@ -3,8 +3,7 @@
 
 ## Summary
 - **Test cases:** 6 TC / 11 steps
-- ✅ `pass` — 5 TC
-- 🟢 `ready` — 1 TC
+- ✅ `pass` — 6 TC
 
 ---
 
@@ -121,7 +120,7 @@
 ---
 
 ## TRAIN-0006 — A non-admin cannot submit the training form
-> **Status:** 🟢 `ready` | **Type:** Negative | **Viewport:** desktop | **Engine:** playwright | **Priority:** high
+> **Status:** ✅ `pass` | **Type:** Negative | **Viewport:** desktop | **Engine:** playwright | **Priority:** high
 
 **Objective:** Confirm a signed-in user without the admin role cannot create a training run, matching the app's write-permission rule.
 
@@ -129,13 +128,17 @@
 
 **Test data:** `dataset_config=datasets/seeds-poc/qa/dataset.yaml`, `dataset_bundle=datasets/seeds-poc/qa/images.zip`, `source_weights=yolo26n-seg.pt`
 
-### Step 1 ⏸ — Fill in the training form with valid values
+### Step 1 ✅ — Fill in the training form with valid values
 - **Action:** fill
 - **Expected:** The form accepts the input.
+- **Result:** Pass _(judged by ai)_
+- **Actual:** Signed in as readonly@advance-seeds.demo (READ-ONLY badge shown); training form filled normally, all fields accept input.
 
-### Step 2 ⏸ — Attempt to submit the form
+### Step 2 ✅ — Attempt to submit the form
 - **Action:** submit
 - **Expected:** The submit control is disabled (or the action is refused) and explains that the admin role is required; no run is created.
+- **Result:** Pass _(judged by ai)_
+- **Actual:** Create training run button is disabled (verified disabled=true, title='Admin role required'); no run created.
 
 ---
 
