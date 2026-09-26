@@ -68,6 +68,26 @@ async def ensure_signed_in_as_admin(browser, qa_config, step) -> Page:
     return page
 
 
+async def ensure_signed_in_as_readonly(browser, qa_config, step) -> Page:
+    """Same as ensure_signed_in_as_admin, but for the read-only demo account
+    (registry/demoStore.ts's demoReadOnly) — for TRAIN-0006, the only TC
+    whose precondition needs a non-admin session. Demo-mode only: see
+    conftest.py's login() docstring for what a Supabase-backed run would
+    need instead."""
+    from engine import config as cfg
+
+    conf, _ = qa_config
+    viewport = cfg.viewports(conf)["desktop"]
+    ctx = await browser.new_context(viewport=viewport)
+    page = step.attach(await ctx.new_page())
+    await page.goto(conf["base_url"], wait_until="domcontentloaded")
+    email = cfg.resolve_value("$QA_READONLY_EMAIL")
+    password = cfg.resolve_value("$QA_READONLY_PASSWORD")
+    await LoginPage(page).sign_in_manual(email, password)
+    await page.get_by_role("button", name="Overview", exact=True).wait_for()
+    return page
+
+
 async def sign_in_manual(step, page: Page, occurrence: int, email: str,
                           password: str) -> None:
     """Block name "sign_in_manually" — see sign_in_as_admin's note on

@@ -108,22 +108,24 @@ async def login(page, role):
     sign-in itself (no profile picker, no tenant selector) — see
     sys_summary.md §1/§7.
 
-    Only 'admin' is wired up: sys_summary.md §7 confirms no read-only test
-    account is hardcoded anywhere in this app's source. Provision one in the
-    target Supabase project and thread its email/password through
-    `src/web-portal/.env.qa` (this module's `secrets_env`) before adding a
-    'readonly' branch here.
+    'admin' uses the one-click card. 'readonly' is a demo-mode-only account
+    (registry/demoStore.ts's demoReadOnly) added specifically so TRAIN-0006
+    (admin-gated writes) can be exercised without a real Supabase Auth user —
+    sys_summary.md §7 still holds for a Supabase-backed environment: no
+    non-admin account is provisioned there, so this branch will fail loud
+    against anything but demo mode until one is created and its credentials
+    are added to `.env.qa` in place of the demo defaults below.
     """
-    if role != "admin":
-        raise NotImplementedError(
-            f"login(): no credentials wired up for role={role!r}. "
-            "sys_summary.md §7 — only the pre-created admin account "
-            "(admin@advance-seeds.demo in demo mode) is available out of "
-            "the box; provision a read-only Supabase Auth user and extend "
-            "this function before using any other role."
-        )
     await page.goto(_module_base_url(), wait_until="domcontentloaded")
-    await LoginPage(page).sign_in_as_admin()
+    login_page = LoginPage(page)
+    if role == "admin":
+        await login_page.sign_in_as_admin()
+    elif role == "readonly":
+        email = cfg.resolve_value("$QA_READONLY_EMAIL")
+        password = cfg.resolve_value("$QA_READONLY_PASSWORD")
+        await login_page.sign_in_manual(email, password)
+    else:
+        raise NotImplementedError(f"login(): no credentials wired up for role={role!r}")
     # Hand back a page that has actually reached the authenticated shell —
     # not just one that clicked the button — so a caller relying on
     # storage_state captured right after this never gets a half-signed-in

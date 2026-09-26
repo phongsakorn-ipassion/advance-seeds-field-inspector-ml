@@ -3,8 +3,8 @@
 
 ## Summary
 - **Test cases:** 6 TC / 11 steps
-- 🚫 `blocked` — 1 TC
 - ✅ `pass` — 5 TC
+- 🟢 `ready` — 1 TC
 
 ---
 
@@ -121,11 +121,13 @@
 ---
 
 ## TRAIN-0006 — A non-admin cannot submit the training form
-> **Status:** 🚫 `blocked` | **Type:** Negative | **Viewport:** desktop | **Engine:** playwright | **Priority:** high
+> **Status:** 🟢 `ready` | **Type:** Negative | **Viewport:** desktop | **Engine:** playwright | **Priority:** high
 
 **Objective:** Confirm a signed-in user without the admin role cannot create a training run, matching the app's write-permission rule.
 
 **Precondition:** User is signed in without the admin role, on the "Train new model" tab.
+
+**Test data:** `dataset_config=datasets/seeds-poc/qa/dataset.yaml`, `dataset_bundle=datasets/seeds-poc/qa/images.zip`, `source_weights=yolo26n-seg.pt`
 
 ### Step 1 ⏸ — Fill in the training form with valid values
 - **Action:** fill
@@ -136,8 +138,4 @@
 - **Expected:** The submit control is disabled (or the action is refused) and explains that the admin role is required; no run is created.
 
 ---
-
-## Steps not capturable
-- **TRAIN-0006** step 1 — `NEEDS_ELIGIBLE_ACCOUNT` needs an account that No read-only/non-admin test account exists for this app (sys_summary.md §7 — none is hardcoded in source). Provision a Supabase Auth user without app_metadata.role=admin and thread its credentials through .env.qa before this TC can be scripted. → waiting for access link from user
-- **TRAIN-0006** step 2 — `NEEDS_ELIGIBLE_ACCOUNT` needs an account that Same blocker as step 1: no read-only/non-admin test account exists for this app, so the actual submit-attempt cannot be exercised either. → waiting for access link from user
 

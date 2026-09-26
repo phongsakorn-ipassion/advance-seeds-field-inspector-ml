@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from flows.auth_flow import ensure_signed_in_as_admin
+from flows.auth_flow import ensure_signed_in_as_admin, ensure_signed_in_as_readonly
 from pages.train_page import TrainPage
 
 pytestmark = pytest.mark.browser
@@ -155,3 +155,28 @@ async def test_delete_stalled_or_waiting_run(tc, step, browser, qa_config):
 
     async with step("confirm_the_deletion", 1, shot="run_deleted"):
         await modal.confirm(button_name="Delete run")
+
+
+@pytest.mark.qa_series("TRAIN-0006")
+async def test_non_admin_cannot_submit_training_form(tc, step, browser, qa_config):
+    page = await ensure_signed_in_as_readonly(browser, qa_config, step)
+    await page.get_by_role("button", name="Train", exact=True).click()
+    train_page = TrainPage(page)
+    await train_page.open_train_new_model()
+
+    data = tc.test_data
+    async with step("fill_in_the_training_form_with_valid_values", 1,
+                     shot="form_filled", focus=train_page.source_weights_select()):
+        await train_page.fill_dataset_config(data["dataset_config"])
+        await train_page.fill_dataset_bundle_path(data["dataset_bundle"])
+        await train_page.select_source_weights(data["source_weights"])
+
+    # The submit button carries `disabled` + a `title="Admin role required"`
+    # tooltip (confirmed in App.tsx) — page objects never assert, and this
+    # doesn't call .click() either (Playwright's actionability check treats a
+    # disabled button as non-actionable and would just hang waiting for it to
+    # become enabled, which it never will here). The greyed-out disabled
+    # state visible in the post-shot is what the AI judge works from.
+    async with step("attempt_to_submit_the_form", 1, shot="submit_blocked",
+                     focus=train_page.create_run_button()):
+        await train_page.create_run_button().wait_for()

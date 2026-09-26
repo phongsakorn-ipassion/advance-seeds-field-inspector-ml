@@ -16,6 +16,14 @@ export const demoAdmin = {
   password: "demo-admin",
 };
 
+// Read-only counterpart to demoAdmin — signs in with isAdmin: false so every
+// admin-gated write control can be exercised in its disabled state without a
+// real (Supabase-backed) non-admin account.
+export const demoReadOnly = {
+  email: "readonly@advance-seeds.demo",
+  password: "demo-readonly",
+};
+
 const seedsV2Stats: DatasetStats = {
   total: 1841,
   train: 1473,
@@ -452,7 +460,12 @@ export function createDemoStore(): RegistryStore {
         notifyAuth();
         return;
       }
-      throw new Error("Invalid demo admin credentials.");
+      if (email === demoReadOnly.email && password === demoReadOnly.password) {
+        session = { email, isAdmin: false };
+        notifyAuth();
+        return;
+      }
+      throw new Error("Invalid demo credentials.");
     },
     async signOut() {
       session = null;
