@@ -108,6 +108,14 @@ and SHALL only render write controls when the active session carries
   submitted
 - **THEN** the dashboard shows the operator workflow against the demo store
 
+#### Scenario: Demo mode has a read-only account
+- **WHEN** `VITE_SUPABASE_URL` is empty and the demo read-only credentials
+  (`readonly@advance-seeds.demo`) are submitted
+- **THEN** the dashboard signs the session in with the admin role unset
+- **AND** every admin-gated write control (training-run submit, deploy,
+  undeploy, rename, delete) is disabled with an "Admin role required" hint
+- **AND** no write action is performed
+
 ### Requirement: Model records support CRUD-style operations
 The dashboard SHALL allow operators to inspect, create through training, update
 deployment state, and delete inactive stored model artifacts.
@@ -158,6 +166,15 @@ job from the browser.
 - **AND** the operator is told to confirm a git SHA appears before export starts
 - **AND** artifact review mentions Android TF Lite, iOS Core ML, and Local QA
   `.pt` artifacts
+
+#### Scenario: Dataset YAML classes parse regardless of trailing content
+- **GIVEN** a dataset YAML whose `names:` block is followed by a blank line and
+  another top-level key (e.g. `metadata:`)
+- **WHEN** an admin uploads that YAML as the dataset config
+- **THEN** the Classes list SHALL show exactly the class names declared in the
+  `names:` block, in index order
+- **AND** the parser SHALL NOT reject the block merely because content follows
+  it later in the file
 
 ### Requirement: Deployment controls update channels
 The dashboard SHALL provide deploy and undeploy controls for staging and
@@ -478,3 +495,4 @@ Model detail Performance SHALL include a derived F1-score and per-platform infer
 #### Scenario: Inference time missing for a platform
 - **WHEN** a platform inference_ms field is absent from version metadata
 - **THEN** the corresponding card SHALL render `--`
+
